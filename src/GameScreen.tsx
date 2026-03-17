@@ -48,157 +48,188 @@ export function GameScreen({
   const pendingOwnerId = extractPendingOwner(game.pendingAction);
   const pendingOwnerName = pendingOwnerId === null
     ? null
-    : game.players.find((player) => player.id === pendingOwnerId)?.name ?? null;
+    : game.players.find((p) => p.id === pendingOwnerId)?.name ?? null;
 
+  /* ── GAME OVER ─────────────────────────────────────────────── */
   if (game.phase === 'game_over') {
     return (
       <main className="game-screen">
         <TopBar lang={lang} room={room} onCopy={onCopy} onLeave={onLeave} />
-        <section className="panel game-over-panel">
-          <h1 className="hero-title small">{text(lang, 'Партия завершена', 'Match finished')}</h1>
-          <p className={`winner-line ${game.winner === 'humans' ? 'human-win' : 'thing-win'}`}>
-            {game.winner === 'humans'
-              ? text(lang, 'Люди победили', 'Humans win')
-              : game.winner === 'thing_solo'
-                ? text(lang, 'Нечто победило в одиночку', 'The Thing wins alone')
-                : text(lang, 'Нечто победило', 'The Thing wins')}
-          </p>
-
-          <div className="results-grid">
-            {game.players.map((player) => (
-              <div className={`result-card ${game.winnerPlayerIds.includes(player.id) ? 'winner' : ''}`} key={player.id}>
-                <strong>{player.name}</strong>
-                <span>{roleLabel(player.role, lang)}</span>
-                <span>{player.isAlive ? text(lang, 'Жив', 'Alive') : text(lang, 'Уничтожен', 'Eliminated')}</span>
-              </div>
-            ))}
+        <div className="game-over-body">
+          <div className="game-over-inner panel">
+            <h2 className="hero-title small">{text(lang, 'Партия завершена', 'Match finished')}</h2>
+            <p className={`winner-line ${game.winner === 'humans' ? 'human-win' : 'thing-win'}`}>
+              {game.winner === 'humans'
+                ? text(lang, '🧍 Люди победили', '🧍 Humans win')
+                : game.winner === 'thing_solo'
+                  ? text(lang, '☣ Нечто победило в одиночку', '☣ The Thing wins alone')
+                  : text(lang, '☣ Нечто победило', '☣ The Thing wins')}
+            </p>
+            <div className="results-grid">
+              {game.players.map((player) => (
+                <div className={`result-card ${game.winnerPlayerIds.includes(player.id) ? 'winner' : ''}`} key={player.id}>
+                  <strong>{player.name}</strong>
+                  <span style={{ color: 'var(--muted)', fontSize: '.8rem' }}>{roleLabel(player.role, lang)}</span>
+                  <span style={{ fontSize: '.76rem', color: player.isAlive ? 'var(--accent-strong)' : 'var(--danger-strong)' }}>
+                    {player.isAlive ? text(lang, '✓ Жив', '✓ Alive') : text(lang, '✗ Уничтожен', '✗ Eliminated')}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="stack-actions">
+              {room.me.isHost && (
+                <button className="btn primary" disabled={loading} onClick={() => void onReset()} type="button">
+                  {text(lang, 'Новая партия', 'New match')}
+                </button>
+              )}
+              {!room.me.isHost && (
+                <p className="helper-text">{text(lang, 'Хост может вернуть всех в лобби.', 'The host can return everyone to lobby.')}</p>
+              )}
+              {error && <p className="error-text">{error}</p>}
+            </div>
           </div>
-
-          <div className="stack-actions">
-            {room.me.isHost && (
-              <button className="btn primary" disabled={loading} onClick={() => void onReset()} type="button">
-                {text(lang, 'Новая партия', 'New match')}
-              </button>
-            )}
-            {!room.me.isHost && (
-              <p className="helper-text">{text(lang, 'Хост может вернуть всех в лобби для новой партии.', 'The host can return everyone to the lobby for a new match.')}</p>
-            )}
-            {error && <p className="error-text">{error}</p>}
-          </div>
-        </section>
+        </div>
       </main>
     );
   }
 
+  /* ── IN GAME ───────────────────────────────────────────────── */
   return (
     <main className="game-screen">
+      {/* ── Top bar ── */}
       <TopBar lang={lang} room={room} onCopy={onCopy} onLeave={onLeave} />
 
-      <section className="status-strip">
-        <div className="status-card">
-          <span>{text(lang, 'Вы', 'You')}</span>
-          <strong>{me.name}</strong>
-          <small>{roleLabel(me.role, lang)}</small>
-        </div>
-        <div className="status-card">
-          <span>{text(lang, 'Этап', 'Step')}</span>
-          <strong>{stepLabel(game.step, lang)}</strong>
-          <small>{game.direction === 1 ? text(lang, 'По часовой', 'Clockwise') : text(lang, 'Против часовой', 'Counter-clockwise')}</small>
-        </div>
-        <div className={`status-card ${myTurn ? 'active' : ''}`}>
-          <span>{text(lang, 'Состояние', 'Status')}</span>
-          <strong>{myTurn ? text(lang, 'Ваш ход', 'Your turn') : text(lang, 'Ожидание', 'Waiting')}</strong>
-          <small>
-            {myTurn
-              ? text(lang, 'Вы можете действовать.', 'You can act now.')
-              : summary ?? text(lang, 'Следите за столом и журналом событий.', 'Watch the table and the event log.')}
-          </small>
-        </div>
-      </section>
-
-      {/* Panic announcement banner — visible to ALL players */}
+      {/* ── Panic announcement ── */}
       {game.panicAnnouncement && (
-        <section className="panic-banner">
+        <div className="panic-banner">
           <div className="panic-banner-icon">⚠</div>
           <div className="panic-banner-content">
             <strong>{text(lang, 'Паника!', 'Panic!')}</strong>
             <span className="panic-banner-name">{getCardName(game.panicAnnouncement, lang)}</span>
             <p className="panic-banner-desc">{getCardDescription(game.panicAnnouncement, lang)}</p>
           </div>
-        </section>
+        </div>
       )}
 
-      <section className="table-layout">
-        <div className="table-main">
-          <div className="panel board-panel">
-            <div className="panel-header">
-              <h3>{text(lang, 'Стол', 'Table')}</h3>
-              <span className="helper-text">{text(lang, `Ходит ${current.name}`, `${current.name}'s turn`)}</span>
+      {/* ── 3-column body ── */}
+      <div className="game-body">
+
+        {/* ─ LEFT: status + circle + deck + actions ─ */}
+        <div className="game-left">
+          {/* Status */}
+          <div className="status-strip">
+            <div className="status-card">
+              <span>{text(lang, 'Вы', 'You')}</span>
+              <strong>{me.name}</strong>
+              <small>{roleLabel(me.role, lang)}</small>
             </div>
-
-            <PlayerCircle game={game} lang={lang} me={me} />
-
-            <div className="deck-row">
-              <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''}`}>
-                <span>{text(lang, 'Колода', 'Deck')}</span>
-                <strong>{game.deck.length}</strong>
-              </div>
-              <div className="deck-stack discard">
-                <span>{text(lang, 'Сброс', 'Discard')}</span>
-                <strong>{game.discard.length}</strong>
-              </div>
+            <div className="status-card">
+              <span>{text(lang, 'Этап', 'Step')}</span>
+              <strong>{stepLabel(game.step, lang)}</strong>
+              <small>
+                {game.direction === 1
+                  ? text(lang, '↻ По часовой', '↻ Clockwise')
+                  : text(lang, '↺ Против', '↺ Counter-CW')}
+              </small>
             </div>
-
-            <div className="action-row">
-              {myTurn && game.step === 'draw' && !game.pendingAction && (
-                <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
-                  {text(lang, 'Взять карту', 'Draw card')}
-                </button>
-              )}
-
-              {myTurn && me.role === 'thing' && game.step !== 'draw' && (
-                <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLARE_VICTORY' })} type="button">
-                  {text(lang, 'Объявить победу', 'Declare victory')}
-                </button>
-              )}
-
-              {myTurn && game.step === 'end_turn' && (
-                <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'END_TURN' })} type="button">
-                  {text(lang, 'Завершить ход', 'End turn')}
-                </button>
-              )}
+            <div className={`status-card ${myTurn ? 'active' : ''}`}>
+              <span>{text(lang, 'Состояние', 'Status')}</span>
+              <strong>{myTurn ? text(lang, 'Ваш ход', 'Your turn') : text(lang, 'Ожидание', 'Waiting')}</strong>
+              <small>
+                {myTurn
+                  ? text(lang, 'Вы можете действовать.', 'You can act.')
+                  : summary ?? text(lang, `Ход: ${current.name}`, `Turn: ${current.name}`)}
+              </small>
             </div>
+          </div>
 
-            {(summary || pendingOwnerName) && (
-              <div className="notice-box">
-                <strong>{text(lang, 'Сейчас на столе', 'Current table state')}</strong>
-                <p>{summary}</p>
-                {!summary && pendingOwnerName && (
-                  <p>{text(lang, `Ожидается действие игрока ${pendingOwnerName}.`, `Waiting for ${pendingOwnerName}.`)}</p>
-                )}
-              </div>
+          {/* Player circle */}
+          <PlayerCircle game={game} lang={lang} me={me} />
+
+          {/* Deck / discard */}
+          <div className="deck-row">
+            <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''}`}>
+              <span>{text(lang, 'Колода', 'Deck')}</span>
+              <strong>{game.deck.length}</strong>
+            </div>
+            <div className="deck-stack discard">
+              <span>{text(lang, 'Сброс', 'Discard')}</span>
+              <strong>{game.discard.length}</strong>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="action-row">
+            {myTurn && game.step === 'draw' && !game.pendingAction && (
+              <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
+                {text(lang, '🃏 Взять карту', '🃏 Draw card')}
+              </button>
+            )}
+            {myTurn && me.role === 'thing' && game.step !== 'draw' && (
+              <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLARE_VICTORY' })} type="button">
+                {text(lang, '☣ Объявить победу', '☣ Declare victory')}
+              </button>
+            )}
+            {myTurn && game.step === 'end_turn' && (
+              <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'END_TURN' })} type="button">
+                {text(lang, '→ Завершить ход', '→ End turn')}
+              </button>
             )}
           </div>
 
-          <div className="panel">
-            <div className="panel-header">
-              <h3>{text(lang, 'Ваша рука', 'Your hand')}</h3>
-              <span className="helper-text">{me.hand.length} {text(lang, 'карт', 'cards')}</span>
+          {/* Notice */}
+          {(summary || pendingOwnerName) && (
+            <div className="notice-box">
+              <strong>{text(lang, 'На столе', 'Table state')}</strong>
+              <p>
+                {summary ?? text(
+                  lang,
+                  `Ожидается: ${pendingOwnerName}`,
+                  `Waiting for: ${pendingOwnerName}`,
+                )}
+              </p>
             </div>
+          )}
+
+          {error && <p className="error-text" style={{ fontSize: '.76rem', margin: 0 }}>{error}</p>}
+        </div>
+
+        {/* ─ CENTER: your hand ─ */}
+        <div className="game-center">
+          <div className="hand-header">
+            <h3>{text(lang, 'Ваша рука', 'Your hand')}</h3>
+            <span className="hand-count">{me.hand.length} {text(lang, 'карт', 'cards')}</span>
+          </div>
+          <div className="hand-scroll">
             <PlayerHand game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
           </div>
         </div>
 
-        <div className="table-side">
-          <PendingActionPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
-          <EventLog game={game} lang={lang} />
-          {error && <div className="panel"><p className="error-text">{error}</p></div>}
+        {/* ─ RIGHT: pending + log ─ */}
+        <div className="game-right">
+          <div className="pending-panel">
+            <PendingActionPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
+          </div>
+          <div className="log-panel">
+            <div className="log-header">{text(lang, 'Журнал событий', 'Event log')}</div>
+            <div className="log-list">
+              {game.log.slice(0, 24).map((entry) => (
+                <div className="log-entry" key={entry.id}>
+                  {lang === 'ru' ? entry.textRu : entry.text}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </section>
+
+      </div>
     </main>
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   TOP BAR
+══════════════════════════════════════════════════════════════════════ */
 function TopBar({
   lang,
   room,
@@ -211,23 +242,26 @@ function TopBar({
   onLeave: () => void;
 }) {
   return (
-    <section className="top-bar">
-      <div>
-        <p className="eyebrow">{text(lang, 'Комната', 'Room')}</p>
-        <h2 className="room-inline">{room.code}</h2>
-      </div>
-      <div className="room-banner-actions">
-        <button className="btn secondary" onClick={() => void onCopy()} type="button">
-          {text(lang, 'Скопировать ссылку', 'Copy link')}
+    <div className="top-bar">
+      <span className="top-bar-brand">STAY AWAY!</span>
+      <span className="top-bar-sep">·</span>
+      <span style={{ fontSize: '.7rem', color: 'var(--muted)' }}>{text(lang, 'Комната', 'Room')}</span>
+      <span className="top-bar-room">{room.code}</span>
+      <div className="top-bar-actions">
+        <button className="btn small secondary" onClick={() => void onCopy()} type="button">
+          {text(lang, 'Ссылка', 'Copy link')}
         </button>
-        <button className="btn ghost" onClick={onLeave} type="button">
+        <button className="btn small ghost" onClick={onLeave} type="button">
           {text(lang, 'Выйти', 'Leave')}
         </button>
       </div>
-    </section>
+    </div>
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   PLAYER CIRCLE
+══════════════════════════════════════════════════════════════════════ */
 function PlayerCircle({
   game,
   lang,
@@ -244,39 +278,53 @@ function PlayerCircle({
     <div className="player-circle">
       {game.players.map((player) => {
         const angle = (player.position / total) * 360 - 90;
-        const radius = 42;
-        const x = 50 + radius * Math.cos((angle * Math.PI) / 180);
-        const y = 50 + radius * Math.sin((angle * Math.PI) / 180);
-        const currentPlayer = player.id === current.id;
-        const self = player.id === me.id;
+        const r = 42;
+        const x = 50 + r * Math.cos((angle * Math.PI) / 180);
+        const y = 50 + r * Math.sin((angle * Math.PI) / 180);
+        const isCurrent = player.id === current.id;
+        const isSelf = player.id === me.id;
 
         return (
-          <div className={`player-node ${currentPlayer ? 'active' : ''} ${self ? 'self' : ''} ${player.isAlive ? '' : 'dead'}`} key={player.id} style={{ left: `${x}%`, top: `${y}%` }}>
+          <div
+            className={`player-node ${isCurrent ? 'active' : ''} ${isSelf ? 'self' : ''} ${player.isAlive ? '' : 'dead'}`}
+            key={player.id}
+            style={{ left: `${x}%`, top: `${y}%` }}
+          >
             <div className="player-avatar">{player.name.charAt(0).toUpperCase()}</div>
             <div className="player-meta">
               <strong>{player.name}</strong>
-              <span>{self ? roleLabel(player.role, lang) : text(lang, `${player.handCount} карт`, `${player.handCount} cards`)}</span>
+              <span>
+                {isSelf
+                  ? roleLabel(player.role, lang)
+                  : text(lang, `${player.handCount}к`, `${player.handCount}c`)}
+              </span>
             </div>
-            {player.inQuarantine && <div className="token quarantine">Q{player.quarantineTurnsLeft}</div>}
-            {!player.isAlive && <div className="token dead">OUT</div>}
+            {player.inQuarantine && (
+              <div className="token quarantine">Q{player.quarantineTurnsLeft}</div>
+            )}
+            {!player.isAlive && <div className="token dead">✗</div>}
           </div>
         );
       })}
 
       {game.doors.map((door, index) => {
-        const first = game.players.find((player) => player.position === door.between[0]);
-        const second = game.players.find((player) => player.position === door.between[1]);
+        const first = game.players.find((p) => p.position === door.between[0]);
+        const second = game.players.find((p) => p.position === door.between[1]);
         if (!first || !second || !hasDoorBetween(game as never, first.position, second.position)) return null;
 
-        const firstAngle = (first.position / total) * 360 - 90;
-        const secondAngle = (second.position / total) * 360 - 90;
-        const midAngle = (firstAngle + secondAngle) / 2;
-        const x = 50 + 42 * Math.cos((midAngle * Math.PI) / 180);
-        const y = 50 + 42 * Math.sin((midAngle * Math.PI) / 180);
+        const a1 = (first.position / total) * 360 - 90;
+        const a2 = (second.position / total) * 360 - 90;
+        const mid = (a1 + a2) / 2;
+        const x = 50 + 42 * Math.cos((mid * Math.PI) / 180);
+        const y = 50 + 42 * Math.sin((mid * Math.PI) / 180);
 
         return (
-          <div className="door-marker" key={`${door.between.join('-')}-${index}`} style={{ left: `${x}%`, top: `${y}%` }}>
-            {text(lang, 'Дверь', 'Door')}
+          <div
+            className="door-marker"
+            key={`${door.between.join('-')}-${index}`}
+            style={{ left: `${x}%`, top: `${y}%` }}
+          >
+            {text(lang, '🚪', '🚪')}
           </div>
         );
       })}
@@ -289,6 +337,9 @@ function PlayerCircle({
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   PLAYER HAND
+══════════════════════════════════════════════════════════════════════ */
 function PlayerHand({
   game,
   lang,
@@ -305,17 +356,30 @@ function PlayerHand({
   return (
     <div className="hand-grid">
       {me.hand.map((card) => {
-        const canPlay = getCurrentPlayer(game).id === me.id && game.step === 'play_or_discard' && canPlayCard(game as never, card.defId);
-        const canDiscard = getCurrentPlayer(game).id === me.id && game.step === 'play_or_discard' && canDiscardCard(game as never, me as never, card.uid);
-        const canTrade = getCurrentPlayer(game).id === me.id && game.step === 'trade' && localTradeCheck(me, card);
+        const isMyTurn = getCurrentPlayer(game).id === me.id;
+        const canPlay = isMyTurn && game.step === 'play_or_discard' && canPlayCard(game as never, card.defId);
+        const canDiscard = isMyTurn && game.step === 'play_or_discard' && canDiscardCard(game as never, me as never, card.uid);
+        const canTrade = isMyTurn && game.step === 'trade' && localTradeCheck(me, card);
 
         return (
           <div className="hand-card" key={card.uid}>
             <CardView card={card} faceUp lang={lang} />
             <div className="hand-card-actions">
-              {canPlay && <button className="btn small primary" disabled={loading} onClick={() => void onAction({ type: 'PLAY_CARD', cardUid: card.uid })} type="button">{text(lang, 'Сыграть', 'Play')}</button>}
-              {canDiscard && <button className="btn small secondary" disabled={loading} onClick={() => void onAction({ type: 'DISCARD_CARD', cardUid: card.uid })} type="button">{text(lang, 'Сбросить', 'Discard')}</button>}
-              {canTrade && <button className="btn small accent" disabled={loading} onClick={() => void onAction({ type: 'OFFER_TRADE', cardUid: card.uid })} type="button">{text(lang, 'Обменять', 'Offer')}</button>}
+              {canPlay && (
+                <button className="btn small primary" disabled={loading} onClick={() => void onAction({ type: 'PLAY_CARD', cardUid: card.uid })} type="button">
+                  {text(lang, 'Сыграть', 'Play')}
+                </button>
+              )}
+              {canDiscard && (
+                <button className="btn small secondary" disabled={loading} onClick={() => void onAction({ type: 'DISCARD_CARD', cardUid: card.uid })} type="button">
+                  {text(lang, 'Сброс', 'Discard')}
+                </button>
+              )}
+              {canTrade && (
+                <button className="btn small accent" disabled={loading} onClick={() => void onAction({ type: 'OFFER_TRADE', cardUid: card.uid })} type="button">
+                  {text(lang, 'Обмен', 'Offer')}
+                </button>
+              )}
             </div>
           </div>
         );
@@ -324,6 +388,9 @@ function PlayerHand({
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   PENDING ACTION DISPATCHER
+══════════════════════════════════════════════════════════════════════ */
 function PendingActionPanel({
   game,
   lang,
@@ -339,59 +406,55 @@ function PendingActionPanel({
 }) {
   const pending = game.pendingAction;
   if (!pending) {
-    return <InfoPanel title={text(lang, 'Активное действие', 'Active action')} body={text(lang, 'Сейчас у вас нет отдельного запроса на выбор или подтверждение.', 'There is no private prompt waiting for you right now.')} />;
+    return (
+      <InfoPanel
+        title={text(lang, 'Активное действие', 'Active action')}
+        body={text(lang, 'Нет активных запросов.', 'No active prompts.')}
+      />
+    );
   }
 
-  if (pending.type === 'choose_target') {
+  if (pending.type === 'choose_target')
     return <TargetPanel game={game} lang={lang} loading={loading} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'choose_card_to_discard') {
+  if (pending.type === 'choose_card_to_discard')
     return <DiscardPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />;
-  }
-  if (pending.type === 'persistence_pick') {
+  if (pending.type === 'persistence_pick')
     return <PersistencePanel lang={lang} loading={loading} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'choose_card_to_give') {
+  if (pending.type === 'choose_card_to_give')
     return <TemptationPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'view_hand' || pending.type === 'view_card' || pending.type === 'whisky_reveal') {
+  if (pending.type === 'view_hand' || pending.type === 'view_card' || pending.type === 'whisky_reveal')
     return <RevealPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'trade_defense') {
+  if (pending.type === 'trade_defense')
     return <TradeDefensePanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'just_between_us') {
+  if (pending.type === 'just_between_us')
     return <JustBetweenUsPanel game={game} lang={lang} loading={loading} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'just_between_us_pick') {
+  if (pending.type === 'just_between_us_pick')
     return <JustBetweenUsPickPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'party_pass') {
+  if (pending.type === 'party_pass')
     return <PartyPassPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
-  }
-  if (pending.type === 'temptation_response') {
+  if (pending.type === 'temptation_response')
     return <TemptationResponsePanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
-  }
 
-  return <InfoPanel title={text(lang, 'Активное действие', 'Active action')} body={text(lang, 'Это действие сейчас не требует ответа с вашего устройства.', 'This action does not require a response from your device right now.')} />;
-}
-
-function EventLog({ game, lang }: { game: ViewerGameState; lang: Lang }) {
   return (
-    <div className="panel">
-      <div className="panel-header"><h3>{text(lang, 'Журнал событий', 'Event log')}</h3></div>
-      <div className="log-list">
-        {game.log.slice(0, 24).map((entry) => (
-          <div className="log-entry" key={entry.id}>{lang === 'ru' ? entry.textRu : entry.text}</div>
-        ))}
-      </div>
-    </div>
+    <InfoPanel
+      title={text(lang, 'Активное действие', 'Active action')}
+      body={text(lang, 'Ответ не требуется.', 'No response needed from you.')}
+    />
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   CARD VIEW
+══════════════════════════════════════════════════════════════════════ */
 function CardView({ card, faceUp, lang }: { card: CardInstance; faceUp: boolean; lang: Lang }) {
   const def = getCardDef(card.defId);
-  if (!faceUp) return <div className={`card card-back ${def.back === 'panic' ? 'panic-back' : 'event-back'}`}>{def.back === 'panic' ? text(lang, 'Паника', 'Panic') : text(lang, 'Событие', 'Event')}</div>;
+  if (!faceUp) {
+    return (
+      <div className={`card card-back ${def.back === 'panic' ? 'panic-back' : 'event-back'}`}>
+        {def.back === 'panic' ? text(lang, 'Паника', 'Panic') : text(lang, 'Событие', 'Event')}
+      </div>
+    );
+  }
 
   return (
     <div className={`card cat-${def.category}`}>
@@ -402,10 +465,21 @@ function CardView({ card, faceUp, lang }: { card: CardInstance; faceUp: boolean;
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   INFO PANEL (no-action state)
+══════════════════════════════════════════════════════════════════════ */
 function InfoPanel({ title, body }: { title: string; body: string }) {
-  return <div className="panel"><div className="panel-header"><h3>{title}</h3></div><p className="helper-text">{body}</p></div>;
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{title}</h3></div>
+      <p className="helper-text">{body}</p>
+    </div>
+  );
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ACTION PANELS
+══════════════════════════════════════════════════════════════════════ */
 function TargetPanel({
   game,
   lang,
@@ -421,12 +495,12 @@ function TargetPanel({
 }) {
   return (
     <div className="panel">
-      <div className="panel-header"><h3>{text(lang, 'Выберите цель', 'Choose a target')}</h3></div>
+      <div className="panel-header"><h3>{text(lang, 'Выберите цель', 'Choose target')}</h3></div>
       <p className="helper-text">{getCardName(pending.cardDefId, lang)}</p>
-      <div className="stack-actions">
-        {pending.targets.map((targetId) => (
-          <button className="btn secondary" disabled={loading} key={targetId} onClick={() => void onAction({ type: 'SELECT_TARGET', targetPlayerId: targetId })} type="button">
-            {game.players.find((player) => player.id === targetId)?.name ?? targetId}
+      <div className="stack-actions" style={{ marginTop: '8px' }}>
+        {pending.targets.map((tid) => (
+          <button className="btn secondary" disabled={loading} key={tid} onClick={() => void onAction({ type: 'SELECT_TARGET', targetPlayerId: tid })} type="button">
+            {game.players.find((p) => p.id === tid)?.name ?? tid}
           </button>
         ))}
       </div>
@@ -449,7 +523,7 @@ function DiscardPanel({
 }) {
   return (
     <div className="panel">
-      <div className="panel-header"><h3>{text(lang, 'Выберите сброс', 'Choose a discard')}</h3></div>
+      <div className="panel-header"><h3>{text(lang, 'Выберите сброс', 'Choose discard')}</h3></div>
       <div className="hand-grid compact">
         {me.hand.map((card) => {
           const allowed = canDiscardCard(game as never, me as never, card.uid);
@@ -491,7 +565,7 @@ function PersistencePanel({
               onClick={() => void onAction({
                 type: 'PERSISTENCE_PICK',
                 keepUid: card.uid,
-                discardUids: pending.drawnCards.filter((item) => item.uid !== card.uid).map((item) => item.uid),
+                discardUids: pending.drawnCards.filter((c) => c.uid !== card.uid).map((c) => c.uid),
               })}
               type="button"
             >
@@ -519,18 +593,14 @@ function TemptationPanel({
   pending: Extract<PendingAction, { type: 'choose_card_to_give' }>;
   onAction: (action: GameAction) => Promise<void>;
 }) {
-  const target = game.players.find((player) => player.id === pending.targetPlayerId);
+  const target = game.players.find((p) => p.id === pending.targetPlayerId);
 
-  // Filter cards: can't give The Thing, humans/infected can't give Infected (only Thing can infect)
-  const canGiveCard = (card: { defId: string }) => {
+  const canGive = (card: { defId: string }) => {
     if (card.defId === 'the_thing') return false;
     if (card.defId === 'infected') {
-      if (me.role === 'thing') return true; // Thing can pass Infected
-      if (me.role === 'infected') {
-        // Infected can only give Infected back to Thing, must keep 1
-        return me.hand.filter(c => c.defId === 'infected').length > 1;
-      }
-      return false; // Humans can't give Infected
+      if (me.role === 'thing') return true;
+      if (me.role === 'infected') return me.hand.filter((c) => c.defId === 'infected').length > 1;
+      return false;
     }
     return true;
   };
@@ -539,15 +609,11 @@ function TemptationPanel({
     <div className="panel">
       <div className="panel-header"><h3>{text(lang, 'Соблазн', 'Temptation')}</h3></div>
       <p className="helper-text">
-        {text(
-          lang,
-          `Выберите карту, которую хотите отдать игроку ${target?.name ?? pending.targetPlayerId}.`,
-          `Choose the card you want to give to ${target?.name ?? pending.targetPlayerId}.`,
-        )}
+        {text(lang, `Отдать карту → ${target?.name ?? '?'}`, `Give card → ${target?.name ?? '?'}`)}
       </p>
       <div className="hand-grid compact">
         {me.hand.map((card) => {
-          const allowed = canGiveCard(card);
+          const allowed = canGive(card);
           return (
             <div className="hand-card" key={card.uid}>
               <CardView card={card} faceUp lang={lang} />
@@ -579,7 +645,7 @@ function RevealPanel({
 }) {
   const cards = pending.type === 'view_hand' ? pending.cards : pending.type === 'view_card' ? [pending.card] : pending.cards;
   const ownerId = pending.type === 'whisky_reveal' ? pending.playerId : pending.targetPlayerId;
-  const ownerName = game.players.find((player) => player.id === ownerId)?.name ?? ownerId;
+  const ownerName = game.players.find((p) => p.id === ownerId)?.name ?? ownerId;
   const canConfirm = pending.viewerPlayerId === me.id;
 
   return (
@@ -587,18 +653,18 @@ function RevealPanel({
       <div className="panel-header"><h3>{text(lang, 'Просмотр карт', 'Card reveal')}</h3></div>
       <p className="helper-text">
         {pending.type === 'whisky_reveal'
-          ? text(lang, `${ownerName} показывает свои карты всем.`, `${ownerName} is showing their cards to everyone.`)
-          : text(lang, `Карты игрока ${ownerName}.`, `${ownerName}'s cards.`)}
+          ? text(lang, `${ownerName} показывает карты всем.`, `${ownerName} shows cards to all.`)
+          : text(lang, `Карты: ${ownerName}`, `${ownerName}'s cards`)}
       </p>
       <div className="hand-grid compact">
         {cards.map((card) => <CardView card={card} faceUp key={card.uid} lang={lang} />)}
       </div>
       {canConfirm ? (
-        <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'CONFIRM_VIEW' })} type="button">
+        <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'CONFIRM_VIEW' })} style={{ marginTop: '8px' }} type="button">
           {text(lang, 'Подтвердить', 'Confirm')}
         </button>
       ) : (
-        <p className="helper-text">{text(lang, 'Подтверждение ждёт другого игрока.', 'Another player needs to confirm this reveal.')}</p>
+        <p className="helper-text">{text(lang, 'Другой игрок должен подтвердить.', 'Another player must confirm.')}</p>
       )}
     </div>
   );
@@ -619,24 +685,25 @@ function TradeDefensePanel({
   pending: Extract<PendingAction, { type: 'trade_defense' }>;
   onAction: (action: GameAction) => Promise<void>;
 }) {
-  const allowedDefenseIds = pending.reason === 'trade' ? ['fear', 'no_thanks', 'miss'] : pending.reason === 'flamethrower' ? ['no_barbecue'] : ['im_fine_here'];
-  const defenseCards = me.hand.filter((card) => allowedDefenseIds.includes(card.defId));
-  const tradeableCards = me.hand.filter((card) => localTradeCheck(me, card));
-  const fromName = game.players.find((player) => player.id === pending.fromId)?.name ?? pending.fromId;
+  const allowedIds = pending.reason === 'trade'
+    ? ['fear', 'no_thanks', 'miss']
+    : pending.reason === 'flamethrower'
+      ? ['no_barbecue']
+      : ['im_fine_here'];
+
+  const defenseCards = me.hand.filter((c) => allowedIds.includes(c.defId));
+  const tradeableCards = me.hand.filter((c) => localTradeCheck(me, c));
+  const fromName = game.players.find((p) => p.id === pending.fromId)?.name ?? pending.fromId;
 
   return (
     <div className="panel">
-      <div className="panel-header"><h3>{text(lang, 'Ответ на действие', 'Respond to action')}</h3></div>
+      <div className="panel-header"><h3>{text(lang, 'Ответ на действие', 'Respond')}</h3></div>
       <p className="helper-text">
-        {text(
-          lang,
-          `${fromName} инициировал ${actionReasonLabel(pending.reason, lang)} против вас.`,
-          `${fromName} initiated a ${actionReasonLabel(pending.reason, lang)} against you.`,
-        )}
+        {text(lang, `${fromName} → ${actionReasonLabel(pending.reason, lang)}`, `${fromName} → ${actionReasonLabel(pending.reason, lang)}`)}
       </p>
       {defenseCards.length > 0 && (
         <>
-          <h4 className="subheading">{text(lang, 'Доступная защита', 'Available defense')}</h4>
+          <h4 className="subheading">{text(lang, 'Защита', 'Defense')}</h4>
           <div className="hand-grid compact">
             {defenseCards.map((card) => (
               <div className="hand-card" key={card.uid}>
@@ -651,13 +718,13 @@ function TradeDefensePanel({
       )}
       {pending.reason === 'trade' && (
         <>
-          <h4 className="subheading">{text(lang, 'Или принять обмен', 'Or accept the trade')}</h4>
+          <h4 className="subheading">{text(lang, 'Принять обмен', 'Accept trade')}</h4>
           <div className="hand-grid compact">
             {tradeableCards.map((card) => (
               <div className="hand-card" key={card.uid}>
                 <CardView card={card} faceUp lang={lang} />
                 <button className="btn small primary" disabled={loading} onClick={() => void onAction({ type: 'RESPOND_TRADE', cardUid: card.uid })} type="button">
-                  {text(lang, 'Дать эту карту', 'Give this card')}
+                  {text(lang, 'Дать', 'Give')}
                 </button>
               </div>
             ))}
@@ -665,16 +732,11 @@ function TradeDefensePanel({
         </>
       )}
       {pending.reason !== 'trade' && (
-        <div className="stack-actions" style={{ marginTop: '12px' }}>
-          <button
-            className="btn danger"
-            disabled={loading}
-            onClick={() => void onAction({ type: 'DECLINE_DEFENSE' })}
-            type="button"
-          >
+        <div className="stack-actions" style={{ marginTop: '10px' }}>
+          <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLINE_DEFENSE' })} type="button">
             {pending.reason === 'flamethrower'
-              ? text(lang, 'Не защищаться (принять уничтожение)', 'Don\'t defend (accept elimination)')
-              : text(lang, 'Не защищаться (принять перемещение)', 'Don\'t defend (accept swap)')}
+              ? text(lang, 'Принять уничтожение', 'Accept elimination')
+              : text(lang, 'Принять перемещение', 'Accept swap')}
           </button>
         </div>
       )}
@@ -698,24 +760,24 @@ function PartyPassPanel({
   onAction: (action: GameAction) => Promise<void>;
 }) {
   const iMyTurn = pending.pendingPlayerIds.includes(me.id);
-  const alreadyChosen = pending.chosen.find(c => c.playerId === me.id);
+  const alreadyChosen = pending.chosen.find((c) => c.playerId === me.id);
 
   const canGive = (card: { defId: string }) => {
     if (card.defId === 'the_thing') return false;
     if (card.defId === 'infected' && me.role === 'infected') {
-      return me.hand.filter(c => c.defId === 'infected').length > 1;
+      return me.hand.filter((c) => c.defId === 'infected').length > 1;
     }
     return true;
   };
 
   return (
     <div className="panel">
-      <div className="panel-header"><h3>{text(lang, 'Вечеринка!', 'Party!')}</h3></div>
+      <div className="panel-header"><h3>{text(lang, '🎉 Вечеринка!', '🎉 Party!')}</h3></div>
       {alreadyChosen ? (
-        <p className="helper-text">{text(lang, 'Вы выбрали карту. Ожидание остальных игроков…', 'You chose a card. Waiting for other players…')}</p>
+        <p className="helper-text">{text(lang, 'Выбрано. Ждём остальных…', 'Chosen. Waiting for others…')}</p>
       ) : iMyTurn ? (
         <>
-          <p className="helper-text">{text(lang, 'Выберите карту, которую хотите передать соседу.', 'Choose a card to pass to your neighbor.')}</p>
+          <p className="helper-text">{text(lang, 'Передайте карту соседу.', 'Pass a card to your neighbor.')}</p>
           <div className="hand-grid compact">
             {me.hand.map((card) => {
               const allowed = canGive(card);
@@ -737,18 +799,14 @@ function PartyPassPanel({
         </>
       ) : (
         <p className="helper-text">
-          {text(
-            lang,
-            `Ожидание других игроков (${pending.pendingPlayerIds.length} остал.)`,
-            `Waiting for other players (${pending.pendingPlayerIds.length} remaining)`,
-          )}
+          {text(lang, `Ждём (${pending.pendingPlayerIds.length} ост.)`, `Waiting (${pending.pendingPlayerIds.length} left)`)}
         </p>
       )}
       <div className="waiting-list">
-        {game.players.filter(p => pending.pendingPlayerIds.includes(p.id)).map(p => (
+        {game.players.filter((p) => pending.pendingPlayerIds.includes(p.id)).map((p) => (
           <span className="badge dim" key={p.id}>{p.name}…</span>
         ))}
-        {game.players.filter(p => pending.chosen.some(c => c.playerId === p.id)).map(p => (
+        {game.players.filter((p) => pending.chosen.some((c) => c.playerId === p.id)).map((p) => (
           <span className="badge host" key={p.id}>✓ {p.name}</span>
         ))}
       </div>
@@ -772,14 +830,14 @@ function TemptationResponsePanel({
   onAction: (action: GameAction) => Promise<void>;
 }) {
   const isTarget = me.id === pending.toId;
-  const fromPlayer = game.players.find(p => p.id === pending.fromId);
-  const offeredCard = fromPlayer?.hand?.find(c => c.uid === pending.offeredCardUid);
+  const fromPlayer = game.players.find((p) => p.id === pending.fromId);
+  const offeredCard = fromPlayer?.hand?.find((c) => c.uid === pending.offeredCardUid);
 
   const canGive = (card: { defId: string }) => {
     if (card.defId === 'the_thing') return false;
     if (card.defId === 'infected') {
       if (me.role === 'thing') return true;
-      if (me.role === 'infected') return me.hand.filter(c => c.defId === 'infected').length > 1;
+      if (me.role === 'infected') return me.hand.filter((c) => c.defId === 'infected').length > 1;
       return false;
     }
     return true;
@@ -791,8 +849,8 @@ function TemptationResponsePanel({
         title={text(lang, 'Соблазн', 'Temptation')}
         body={text(
           lang,
-          `${game.players.find(p => p.id === pending.toId)?.name ?? '?'} выбирает карту для обмена…`,
-          `${game.players.find(p => p.id === pending.toId)?.name ?? '?'} is choosing a card to give…`,
+          `${game.players.find((p) => p.id === pending.toId)?.name ?? '?'} выбирает карту…`,
+          `${game.players.find((p) => p.id === pending.toId)?.name ?? '?'} is choosing…`,
         )}
       />
     );
@@ -800,17 +858,13 @@ function TemptationResponsePanel({
 
   return (
     <div className="panel">
-      <div className="panel-header"><h3>{text(lang, 'Соблазн — ваш ответ', 'Temptation — your reply')}</h3></div>
+      <div className="panel-header"><h3>{text(lang, 'Соблазн — ваш ход', 'Temptation — your turn')}</h3></div>
       <p className="helper-text">
-        {text(
-          lang,
-          `${fromPlayer?.name ?? '?'} предлагает вам обмен. Выберите карту, которую хотите отдать.`,
-          `${fromPlayer?.name ?? '?'} wants to trade with you. Choose a card to give back.`,
-        )}
+        {text(lang, `${fromPlayer?.name ?? '?'} предлагает обмен.`, `${fromPlayer?.name ?? '?'} wants to trade.`)}
       </p>
       {offeredCard && (
-        <div style={{ marginBottom: '0.5rem' }}>
-          <p className="helper-text">{text(lang, 'Карта, которую вам предлагают:', 'Card being offered to you:')}</p>
+        <div style={{ marginBottom: '6px' }}>
+          <p className="helper-text" style={{ marginBottom: '4px' }}>{text(lang, 'Вам предлагают:', 'Offered to you:')}</p>
           <CardView card={offeredCard} faceUp={false} lang={lang} />
         </div>
       )}
@@ -820,12 +874,7 @@ function TemptationResponsePanel({
           return (
             <div className="hand-card" key={card.uid}>
               <CardView card={card} faceUp lang={lang} />
-              <button
-                className="btn small accent"
-                disabled={!allowed || loading}
-                onClick={() => void onAction({ type: 'TEMPTATION_RESPOND', cardUid: card.uid })}
-                type="button"
-              >
+              <button className="btn small accent" disabled={!allowed || loading} onClick={() => void onAction({ type: 'TEMPTATION_RESPOND', cardUid: card.uid })} type="button">
                 {text(lang, 'Отдать', 'Give')}
               </button>
             </div>
@@ -856,23 +905,23 @@ function JustBetweenUsPickPanel({
   const isInvolved = isA || isB;
   const myChoice = isA ? pending.cardUidA : pending.cardUidB;
   const alreadyChose = myChoice !== null;
-  const partnerName = game.players.find(p => p.id === (isA ? pending.playerB : pending.playerA))?.name ?? '?';
+  const partnerName = game.players.find((p) => p.id === (isA ? pending.playerB : pending.playerA))?.name ?? '?';
 
   const canGive = (card: { defId: string }) => {
     if (card.defId === 'the_thing') return false;
     if (card.defId === 'infected' && me.role === 'infected') {
-      return me.hand.filter(c => c.defId === 'infected').length > 1;
+      return me.hand.filter((c) => c.defId === 'infected').length > 1;
     }
     return true;
   };
 
   if (!isInvolved) {
-    const aName = game.players.find(p => p.id === pending.playerA)?.name ?? '?';
-    const bName = game.players.find(p => p.id === pending.playerB)?.name ?? '?';
+    const aName = game.players.find((p) => p.id === pending.playerA)?.name ?? '?';
+    const bName = game.players.find((p) => p.id === pending.playerB)?.name ?? '?';
     return (
       <InfoPanel
         title={text(lang, 'Только между нами', 'Just Between Us')}
-        body={text(lang, `${aName} и ${bName} выбирают карты для обмена…`, `${aName} and ${bName} are choosing cards to trade…`)}
+        body={text(lang, `${aName} и ${bName} выбирают…`, `${aName} and ${bName} choosing…`)}
       />
     );
   }
@@ -881,18 +930,10 @@ function JustBetweenUsPickPanel({
     <div className="panel">
       <div className="panel-header"><h3>{text(lang, 'Только между нами', 'Just Between Us')}</h3></div>
       {alreadyChose ? (
-        <p className="helper-text">
-          {text(lang, `Вы выбрали карту. Ожидание ${partnerName}…`, `You chose a card. Waiting for ${partnerName}…`)}
-        </p>
+        <p className="helper-text">{text(lang, `Выбрано. Ждём ${partnerName}…`, `Chosen. Waiting for ${partnerName}…`)}</p>
       ) : (
         <>
-          <p className="helper-text">
-            {text(
-              lang,
-              `Выберите карту для обмена с ${partnerName}.`,
-              `Choose a card to trade with ${partnerName}.`,
-            )}
-          </p>
+          <p className="helper-text">{text(lang, `Обмен с ${partnerName}.`, `Trade with ${partnerName}.`)}</p>
           <div className="hand-grid compact">
             {me.hand.map((card) => {
               const allowed = canGive(card);
@@ -931,15 +972,16 @@ function JustBetweenUsPanel({
   onAction: (action: GameAction) => Promise<void>;
 }) {
   const alive = game.players
-    .filter((player) => pending.targets.includes(player.id) && player.isAlive)
+    .filter((p) => pending.targets.includes(p.id) && p.isAlive)
     .slice()
-    .sort((left, right) => left.position - right.position);
+    .sort((a, b) => a.position - b.position);
+
   const seenPairs = new Set<string>();
   const pairs = alive
-    .map((player, index) => {
-      const next = alive[(index + 1) % alive.length];
+    .map((player, i) => {
+      const next = alive[(i + 1) % alive.length];
       if (!next || next.id === player.id) return null;
-      const key = [player.id, next.id].sort((left, right) => left - right).join('-');
+      const key = [player.id, next.id].sort((a, b) => a - b).join('-');
       if (seenPairs.has(key)) return null;
       seenPairs.add(key);
       return [player, next] as const;
@@ -949,17 +991,17 @@ function JustBetweenUsPanel({
   return (
     <div className="panel">
       <div className="panel-header"><h3>{text(lang, 'Только между нами', 'Just Between Us')}</h3></div>
-      <p className="helper-text">{text(lang, 'Выберите двух соседних игроков, которые обязаны обменяться картами.', 'Choose two adjacent players who must trade cards.')}</p>
-      <div className="stack-actions">
-        {pairs.map(([player1, player2]) => (
+      <p className="helper-text">{text(lang, 'Выберите пару соседних игроков.', 'Pick two adjacent players.')}</p>
+      <div className="stack-actions" style={{ marginTop: '8px' }}>
+        {pairs.map(([p1, p2]) => (
           <button
             className="btn secondary"
             disabled={loading}
-            key={`${player1.id}-${player2.id}`}
-            onClick={() => void onAction({ type: 'JUST_BETWEEN_US_SELECT', player1: player1.id, player2: player2.id })}
+            key={`${p1.id}-${p2.id}`}
+            onClick={() => void onAction({ type: 'JUST_BETWEEN_US_SELECT', player1: p1.id, player2: p2.id })}
             type="button"
           >
-            {player1.name} + {player2.name}
+            {p1.name} ↔ {p2.name}
           </button>
         ))}
       </div>
