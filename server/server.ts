@@ -172,6 +172,13 @@ function canViewerSeePendingAction(
     case 'show_hand_confirm':
       return pendingAction.playerId === viewerId;
     case 'party_pass':
+      // All participants (pending + already chosen) must see this panel
+      return pendingAction.pendingPlayerIds.includes(viewerId) ||
+        pendingAction.chosen.some(c => c.playerId === viewerId);
+    case 'temptation_response':
+      return viewerId === pendingAction.fromId || viewerId === pendingAction.toId;
+    case 'just_between_us_pick':
+      return viewerId === pendingAction.playerA || viewerId === pendingAction.playerB;
     case 'panic_effect':
       return currentPlayer(game).id === viewerId;
     case 'just_between_us':

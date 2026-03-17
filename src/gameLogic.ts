@@ -388,20 +388,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }));
 
       if (action.thingInDeck) {
-        // "Thing in deck" variant: shuffle The Thing card into event cards,
-        // deal 4 cards to each player from that pool; whoever draws The Thing becomes The Thing.
-        const dealPool = shuffle([...eventCards, thingCard]);
+        // "Thing in deck" variant: deal 4 regular event cards to each player,
+        // shuffle The Thing into the draw deck — any player may draw it during play.
+        const dealPool = shuffle([...eventCards]);
         for (let i = 0; i < count; i++) {
           for (let j = 0; j < 4; j++) {
             const card = dealPool.pop();
-            if (card) {
-              players[i].hand.push(card);
-              if (card.defId === 'the_thing') players[i].role = 'thing';
-            }
+            if (card) players[i].hand.push(card);
           }
         }
-        // Remaining event cards + all infected + all panic = main deck
-        const mainDeck = [...dealPool, ...infectedCards, ...panicCards];
+        // Remaining event cards + The Thing + infected + panic = main deck
+        const mainDeck = [...dealPool, thingCard, ...infectedCards, ...panicCards];
         shuffle(mainDeck);
         s.deck = mainDeck;
       } else {
@@ -480,6 +477,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
         // If pendingAction was set by panic (e.g. just_between_us), step stays 'draw'
         // and we wait for the pending action to resolve before allowing the next draw
+      } else if (card.defId === 'the_thing') {
+        // Drew The Thing from deck — this player is now The Thing
+        cur.role = 'thing';
+        cur.hand.push(card);
+        log(s, `${cur.name} drew a card.`, `${cur.name} взял(а) карту.`);
+        s.step = 'play_or_discard';
       } else {
         // Event card: add to hand
         cur.hand.push(card);
