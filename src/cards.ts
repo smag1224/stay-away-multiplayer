@@ -164,18 +164,6 @@ export const CARD_DEFS: CardDef[] = [
     copiesByPlayerCount: [2, 2, 3, 4, 5, 5, 6, 7],
   },
   {
-    id: 'blind_date',
-    name: 'Blind Date',
-    nameRu: 'Свидание вслепую',
-    category: 'action',
-    back: 'event',
-    description: 'Draw the top card from the deck and add it to your hand without looking; then pass one card to an adjacent player.',
-    descriptionRu: 'Возьмите верхнюю карту из колоды не глядя, добавьте в руку; затем передайте одну карту соседу.',
-    copies: 1,
-    minPlayers: 4,
-    copiesByPlayerCount: [1, 1, 1, 1, 1, 2, 2, 2],
-  },
-  {
     id: 'cant_be_friends',
     name: "Can't We Be Friends?",
     nameRu: 'Давай дружить?',

@@ -1332,13 +1332,6 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
       break;
     }
 
-    case 'blind_date': {
-      // Draw top card blindly, add to hand, then pass a card to a neighbor
-      const drawnCard = s.deck.shift();
-      if (drawnCard) player.hand.push(drawnCard);
-      break;
-    }
-
     case 'cant_be_friends': {
       // Defense card — played from hand as reaction, not as an action card
       break;
