@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ConnectScreen, LobbyScreen } from './ConnectLobby.tsx';
 import { GameScreen } from './GameScreen.tsx';
@@ -25,6 +25,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Track latest known state timestamp to prevent stale poll responses from overwriting fresh action responses
+  const lastKnownUpdatedAt = useRef(0);
 
   useEffect(() => {
     writeStoredLang(lang);
@@ -33,6 +35,7 @@ function App() {
   useEffect(() => {
     if (!session) {
       setRoom(null);
+      lastKnownUpdatedAt.current = 0;
       return;
     }
 
@@ -42,8 +45,13 @@ function App() {
       try {
         const nextRoom = await api<RoomView>(`/api/rooms/${session.roomCode}?sessionId=${session.sessionId}`);
         if (cancelled) return;
-        setRoom(nextRoom);
-        setError(null);
+        // Only accept poll responses that are at least as fresh as our last known state
+        // This prevents stale GET responses from overwriting a recent action POST response
+        if (nextRoom.updatedAt >= lastKnownUpdatedAt.current) {
+          setRoom(nextRoom);
+          lastKnownUpdatedAt.current = nextRoom.updatedAt;
+          setError(null);
+        }
       } catch (refreshError) {
         if (cancelled) return;
         const message = refreshError instanceof Error ? refreshError.message : String(refreshError);
@@ -94,6 +102,8 @@ function App() {
     setLoading(true);
     try {
       const nextRoom = await api<RoomView>(path, { method: 'POST', body: JSON.stringify(body) });
+      // Update the timestamp guard so stale poll responses don't overwrite this fresh state
+      lastKnownUpdatedAt.current = nextRoom.updatedAt;
       setRoom(nextRoom);
       setError(null);
     } catch (requestError) {

@@ -137,6 +137,7 @@ export interface GameState {
   pendingAction: PendingAction | null;
   revealingPlayer: number;     // index during role_reveal phase
   tradeSkipped: boolean;       // if Temptation was played
+  panicAnnouncement: string | null; // defId of last drawn panic card (shown to all)
   lang: 'en' | 'ru';
 }
 
@@ -159,4 +160,5 @@ export type GameAction =
   | { type: 'TEMPTATION_SELECT'; targetPlayerId: number; cardUid: string }
   | { type: 'PARTY_PASS_CARD'; cardUid: string }
   | { type: 'JUST_BETWEEN_US_SELECT'; player1: number; player2: number }
+  | { type: 'DECLINE_DEFENSE' }
   | { type: 'SET_LANG'; lang: 'en' | 'ru' };

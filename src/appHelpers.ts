@@ -61,7 +61,15 @@ export async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T>
     ...init,
   });
 
-  const payload = await response.json() as ApiResponse<T>;
+  const raw = await response.text();
+  let payload: ApiResponse<T>;
+
+  try {
+    payload = JSON.parse(raw) as ApiResponse<T>;
+  } catch {
+    throw new Error(raw || `HTTP ${response.status}`);
+  }
+
   if (!payload.ok) {
     throw new Error(payload.error);
   }

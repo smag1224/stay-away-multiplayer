@@ -360,13 +360,63 @@ input {
   color: var(--muted);
 }
 
+/* ── Panic Announcement Banner ─────────────────────────────────────────── */
+
+.panic-banner {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  background: linear-gradient(135deg, rgba(180, 60, 80, 0.25) 0%, rgba(120, 40, 90, 0.2) 100%);
+  border: 1px solid rgba(220, 80, 100, 0.4);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  animation: panicPulse 2s ease-in-out infinite;
+}
+
+@keyframes panicPulse {
+  0%, 100% { border-color: rgba(220, 80, 100, 0.4); }
+  50% { border-color: rgba(220, 80, 100, 0.7); }
+}
+
+.panic-banner-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.panic-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panic-banner-content strong {
+  color: var(--danger-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.82rem;
+}
+
+.panic-banner-name {
+  font-family: 'Cinzel', serif;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+.panic-banner-desc {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .board-panel {
   overflow: hidden;
 }
 
 .player-circle {
   position: relative;
-  width: min(720px, 100%);
+  width: min(480px, 100%);
   aspect-ratio: 1;
   margin: 0 auto 24px;
   border-radius: 50%;
@@ -639,29 +689,159 @@ input {
   .table-layout {
     grid-template-columns: 1fr;
   }
+
+  /* On tablet/mobile: show pending actions and hand first, board second */
+  .table-main {
+    order: 2;
+  }
+  .table-side {
+    order: 1;
+  }
 }
 
 @media (max-width: 720px) {
   .app-shell {
+    padding: 10px;
+  }
+
+  .hero-panel,
+  .connect-card,
+  .panel,
+  .room-banner,
+  .top-bar {
     padding: 16px;
+    border-radius: 16px;
+  }
+
+  .status-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .status-card {
+    padding: 12px 14px;
+    border-radius: 16px;
   }
 
   .player-circle {
     aspect-ratio: auto;
-    height: 520px;
+    height: 340px;
   }
 
   .player-node {
-    width: 100px;
+    width: 80px;
   }
 
   .player-avatar {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+  }
+
+  .player-meta strong {
+    font-size: 0.78rem;
+  }
+
+  .player-meta span {
+    font-size: 0.68rem;
   }
 
   .card,
   .card-back {
-    min-height: 190px;
+    min-height: 160px;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .card-name {
+    font-size: 0.88rem;
+  }
+
+  .card-desc {
+    font-size: 0.78rem;
+  }
+
+  .hand-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+  }
+
+  .hand-grid.compact {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .deck-row {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .deck-stack {
+    min-width: 120px;
+    padding: 12px 14px;
+  }
+
+  .btn {
+    padding: 10px 14px;
+    min-height: 42px;
+    font-size: 0.9rem;
+  }
+
+  .btn.small {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+  }
+
+  .log-list {
+    max-height: 240px;
+  }
+
+  .log-entry {
+    font-size: 0.85rem;
+  }
+
+  .panic-banner {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .panic-banner-icon {
+    font-size: 1.4rem;
+  }
+
+  .circle-core strong {
+    font-size: 1.4rem;
+  }
+
+  .token {
+    font-size: 0.65rem;
+    padding: 3px 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  .app-shell {
+    padding: 6px;
+  }
+
+  .status-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .hand-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .player-circle {
+    height: 280px;
+  }
+
+  .player-node {
+    width: 68px;
+  }
+
+  .player-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.75rem;
   }
 }

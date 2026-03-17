@@ -290,6 +290,7 @@ function allowedToDispatch(room: Room, member: RoomMember, action: GameAction): 
       return false;
     case 'RESPOND_TRADE':
     case 'PLAY_DEFENSE':
+    case 'DECLINE_DEFENSE':
       return pendingAction?.type === 'trade_defense' && pendingAction.defenderId === member.playerId;
     case 'CONFIRM_VIEW':
       if (!pendingAction) {

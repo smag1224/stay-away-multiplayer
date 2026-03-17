@@ -1,4 +1,4 @@
-import { getCardDef, getCardName } from './cards.ts';
+import { getCardDef, getCardName, getCardDescription } from './cards.ts';
 import {
   canDiscardCard,
   canPlayCard,
@@ -116,6 +116,18 @@ export function GameScreen({
         </div>
       </section>
 
+      {/* Panic announcement banner — visible to ALL players */}
+      {game.panicAnnouncement && (
+        <section className="panic-banner">
+          <div className="panic-banner-icon">⚠</div>
+          <div className="panic-banner-content">
+            <strong>{text(lang, 'Паника!', 'Panic!')}</strong>
+            <span className="panic-banner-name">{getCardName(game.panicAnnouncement, lang)}</span>
+            <p className="panic-banner-desc">{getCardDescription(game.panicAnnouncement, lang)}</p>
+          </div>
+        </section>
+      )}
+
       <section className="table-layout">
         <div className="table-main">
           <div className="panel board-panel">
@@ -127,7 +139,7 @@ export function GameScreen({
             <PlayerCircle game={game} lang={lang} me={me} />
 
             <div className="deck-row">
-              <div className={`deck-stack ${myTurn && game.step === 'draw' ? 'highlight' : ''}`}>
+              <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''}`}>
                 <span>{text(lang, 'Колода', 'Deck')}</span>
                 <strong>{game.deck.length}</strong>
               </div>
@@ -138,7 +150,7 @@ export function GameScreen({
             </div>
 
             <div className="action-row">
-              {myTurn && game.step === 'draw' && (
+              {myTurn && game.step === 'draw' && !game.pendingAction && (
                 <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
                   {text(lang, 'Взять карту', 'Draw card')}
                 </button>
@@ -499,6 +511,21 @@ function TemptationPanel({
   onAction: (action: GameAction) => Promise<void>;
 }) {
   const target = game.players.find((player) => player.id === pending.targetPlayerId);
+
+  // Filter cards: can't give The Thing, humans/infected can't give Infected (only Thing can infect)
+  const canGiveCard = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected') {
+      if (me.role === 'thing') return true; // Thing can pass Infected
+      if (me.role === 'infected') {
+        // Infected can only give Infected back to Thing, must keep 1
+        return me.hand.filter(c => c.defId === 'infected').length > 1;
+      }
+      return false; // Humans can't give Infected
+    }
+    return true;
+  };
+
   return (
     <div className="panel">
       <div className="panel-header"><h3>{text(lang, 'Соблазн', 'Temptation')}</h3></div>
@@ -510,14 +537,17 @@ function TemptationPanel({
         )}
       </p>
       <div className="hand-grid compact">
-        {me.hand.map((card) => (
-          <div className="hand-card" key={card.uid}>
-            <CardView card={card} faceUp lang={lang} />
-            <button className="btn small accent" disabled={loading} onClick={() => void onAction({ type: 'TEMPTATION_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid })} type="button">
-              {text(lang, 'Отдать', 'Give')}
-            </button>
-          </div>
-        ))}
+        {me.hand.map((card) => {
+          const allowed = canGiveCard(card);
+          return (
+            <div className="hand-card" key={card.uid}>
+              <CardView card={card} faceUp lang={lang} />
+              <button className="btn small accent" disabled={!allowed || loading} onClick={() => void onAction({ type: 'TEMPTATION_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid })} type="button">
+                {text(lang, 'Отдать', 'Give')}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -625,8 +655,19 @@ function TradeDefensePanel({
           </div>
         </>
       )}
-      {defenseCards.length === 0 && pending.reason !== 'trade' && (
-        <p className="helper-text">{text(lang, 'Подходящей защитной карты нет, поэтому действие сработает.', 'You do not have the required defense card, so the action will go through.')}</p>
+      {pending.reason !== 'trade' && (
+        <div className="stack-actions" style={{ marginTop: '12px' }}>
+          <button
+            className="btn danger"
+            disabled={loading}
+            onClick={() => void onAction({ type: 'DECLINE_DEFENSE' })}
+            type="button"
+          >
+            {pending.reason === 'flamethrower'
+              ? text(lang, 'Не защищаться (принять уничтожение)', 'Don\'t defend (accept elimination)')
+              : text(lang, 'Не защищаться (принять перемещение)', 'Don\'t defend (accept swap)')}
+          </button>
+        </div>
       )}
     </div>
   );

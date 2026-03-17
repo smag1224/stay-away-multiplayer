@@ -333,6 +333,7 @@ export function createInitialState(): GameState {
     pendingAction: null,
     revealingPlayer: 0,
     tradeSkipped: false,
+    panicAnnouncement: null,
     lang: 'ru',
   };
 }
@@ -350,6 +351,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     log: [...state.log],
     seats: [...state.seats],
     winnerPlayerIds: [...state.winnerPlayerIds],
+    panicAnnouncement: state.panicAnnouncement,
   };
 
   switch (action.type) {
@@ -433,6 +435,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'DRAW_CARD': {
       if (s.step !== 'draw') return s;
+      if (s.pendingAction) return s; // Don't draw while a pending action is active
+      s.panicAnnouncement = null; // Clear previous panic announcement
       const cur = currentPlayer(s);
       const card = drawFromDeck(s);
       if (!card) return s;
@@ -440,16 +444,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const def = getCardDef(card.defId);
 
       if (def.back === 'panic') {
-        // Panic card: play immediately
+        // Panic card: play immediately, show announcement to all players
         log(s,
           `${cur.name} drew panic card: ${def.name}`,
           `${cur.name} вытянул(а) панику: ${def.nameRu}`
         );
+        s.panicAnnouncement = card.defId;
         applyPanicEffect(s, card);
         s.discard.push(card);
-        // After panic, move to trade step
-        s.step = 'trade';
-        handleTradeStep(s);
+        // After panic, draw again (unless a pending action like just_between_us needs resolution first)
+        if (!s.pendingAction) {
+          s.step = 'draw'; // Player draws again after panic
+        }
+        // If pendingAction was set by panic (e.g. just_between_us), step stays 'draw'
+        // and we wait for the pending action to resolve before allowing the next draw
       } else {
         // Event card: add to hand
         cur.hand.push(card);
@@ -723,6 +731,41 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return s;
     }
 
+    case 'DECLINE_DEFENSE': {
+      // Defender chooses NOT to play their defense card (e.g. No Barbecue, I'm Fine Here)
+      if (!s.pendingAction || s.pendingAction.type !== 'trade_defense') return s;
+      const { fromId, defenderId, reason } = s.pendingAction;
+      const defFrom = getPlayer(s, fromId);
+      const defTarget = getPlayer(s, defenderId);
+
+      s.pendingAction = null;
+
+      if (reason === 'flamethrower') {
+        // Defender accepts elimination
+        log(s,
+          `${defTarget.name} chose not to defend against Flamethrower.`,
+          `${defTarget.name} решил(а) не защищаться от Огнемёта.`
+        );
+        eliminatePlayer(s, defTarget);
+        if (s.phase !== 'game_over' && s.step === 'play_or_discard') {
+          s.step = 'trade';
+          handleTradeStep(s);
+        }
+      } else if (reason === 'swap') {
+        // Defender accepts the seat swap
+        log(s,
+          `${defTarget.name} chose not to defend against the swap.`,
+          `${defTarget.name} решил(а) не защищаться от перемещения.`
+        );
+        swapPositions(s, defFrom, defTarget);
+        if (s.step === 'play_or_discard') {
+          s.step = 'trade';
+          handleTradeStep(s);
+        }
+      }
+      return s;
+    }
+
     case 'END_TURN': {
       advanceTurn(s);
       return s;
@@ -731,12 +774,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'CONFIRM_VIEW': {
       s.pendingAction = null;
       if (s.step === 'trade_response') {
+        // After viewing during trade (e.g. Fear defense), advance turn
         s.step = 'end_turn';
         advanceTurn(s);
       } else if (s.step === 'play_or_discard') {
+        // After viewing during play phase (e.g. Analysis, Whisky), move to trade
         s.step = 'trade';
         handleTradeStep(s);
+      } else if (s.step === 'end_turn') {
+        // Fallback: if somehow stuck at end_turn with a view, advance
+        advanceTurn(s);
       }
+      // If step is 'draw', do nothing — player will draw again
       return s;
     }
 
@@ -751,6 +800,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           drawnCards.filter(c => c.uid !== action.keepUid).forEach(c => s.discard.push(c));
         }
         s.pendingAction = null;
+        // Explicitly keep step at play_or_discard so the player can play or discard another card
+        // (Persistence allows: keep 1 card, then play or discard 1 card from hand)
+        s.step = 'play_or_discard';
       }
       return s;
     }
@@ -799,18 +851,57 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const cardIdx = cur.hand.findIndex(c => c.uid === action.cardUid);
       if (cardIdx === -1) return s;
 
-      // For now, pick a random card from target
-      if (target.hand.length === 0) return s;
-      const targetCardIdx = Math.floor(Math.random() * target.hand.length);
-
       const curCard = cur.hand[cardIdx];
-      const targetCard = target.hand[targetCardIdx];
+
+      // ── Infection validation for Temptation ──
+      // The Thing card can never be traded
+      if (curCard.defId === 'the_thing') return s;
+
+      // Only The Thing can pass Infected cards to non-Thing players
+      if (curCard.defId === 'infected') {
+        if (cur.role === 'thing') {
+          // Thing can infect anyone via Temptation
+        } else if (cur.role === 'infected') {
+          // Infected can only give Infected back to The Thing
+          if (target.role !== 'thing') return s;
+          // Must keep at least 1 Infected card
+          if (cur.hand.filter(c => c.defId === 'infected').length <= 1) return s;
+        } else {
+          // Humans cannot pass Infected cards to anyone
+          return s;
+        }
+      }
+
+      // Pick a random tradeable card from target (skip The Thing card and protected Infected cards)
+      if (target.hand.length === 0) return s;
+      const targetTradeableCards = target.hand.filter(c => {
+        if (c.defId === 'the_thing') return false;
+        if (c.defId === 'infected') {
+          // Only Thing can give Infected to non-Thing targets
+          if (target.role !== 'thing' || cur.role === 'thing') {
+            // Infected players must keep at least 1 Infected
+            if (target.role === 'infected' && target.hand.filter(h => h.defId === 'infected').length <= 1) return false;
+            // Humans/Infected can't pass Infected to non-Thing
+            if (target.role !== 'thing' && cur.role !== 'thing') return false;
+          }
+        }
+        return true;
+      });
+      if (targetTradeableCards.length === 0) return s;
+      const targetCard = targetTradeableCards[Math.floor(Math.random() * targetTradeableCards.length)];
+      const targetCardIdx = target.hand.findIndex(c => c.uid === targetCard.uid);
+
       cur.hand[cardIdx] = targetCard;
       target.hand[targetCardIdx] = curCard;
 
-      // Check infection
+      // Check infection: only The Thing passing Infected infects a human
       if (curCard.defId === 'infected' && cur.role === 'thing' && target.role === 'human') {
         target.role = 'infected';
+        log(s, `${target.name} has been infected!`, `${target.name} заражён(а)!`);
+      }
+      if (targetCard.defId === 'infected' && target.role === 'thing' && cur.role === 'human') {
+        cur.role = 'infected';
+        log(s, `${cur.name} has been infected!`, `${cur.name} заражён(а)!`);
       }
 
       s.tradeSkipped = true;
@@ -871,6 +962,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       s.pendingAction = null;
+      // Just Between Us is always from a panic card, so after resolution the player draws again
+      s.step = 'draw';
       log(s,
         `${first.name} and ${second.name} traded due to Just Between Us.`,
         `${first.name} и ${second.name} обменялись из-за «Только между нами».`
