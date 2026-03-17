@@ -100,10 +100,12 @@ export function LobbyScreen({
   loading,
   room,
   shareUrl,
+  thingInDeck,
   onCopy,
   onLeave,
   onReset,
   onStart,
+  onThingInDeckChange,
 }: {
   copied: boolean;
   error: string | null;
@@ -111,10 +113,12 @@ export function LobbyScreen({
   loading: boolean;
   room: RoomView;
   shareUrl: string;
+  thingInDeck: boolean;
   onCopy: () => Promise<void>;
   onLeave: () => void;
   onReset: () => Promise<void>;
   onStart: () => Promise<void>;
+  onThingInDeckChange: (value: boolean) => void;
 }) {
   const canStart = room.me.isHost && room.members.length >= 4;
 
@@ -176,6 +180,25 @@ export function LobbyScreen({
 
           {room.me.isHost ? (
             <div className="stack-actions">
+              <label className="toggle-row">
+                <input
+                  checked={thingInDeck}
+                  type="checkbox"
+                  onChange={(e) => onThingInDeckChange(e.target.checked)}
+                />
+                <span>
+                  {text(
+                    lang,
+                    'Замешать «Нечто» в колоду (вариант)',
+                    'Shuffle "The Thing" into deck (variant)',
+                  )}
+                </span>
+              </label>
+              <p className="helper-text">
+                {thingInDeck
+                  ? text(lang, 'Карта «Нечто» замешана в колоду — игрок, вытащивший её, становится Нечто.', 'The Thing card is in the deck — whoever draws it becomes The Thing.')
+                  : text(lang, 'Карта «Нечто» выдаётся случайному игроку в начале (стандарт).', '"The Thing" card is dealt to a random player at the start (standard).')}
+              </p>
               <button className="btn primary" disabled={!canStart || loading} onClick={() => void onStart()} type="button">
                 {text(lang, 'Начать партию', 'Start match')}
               </button>

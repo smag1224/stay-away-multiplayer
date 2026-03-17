@@ -363,6 +363,15 @@ function PendingActionPanel({
   if (pending.type === 'just_between_us') {
     return <JustBetweenUsPanel game={game} lang={lang} loading={loading} pending={pending} onAction={onAction} />;
   }
+  if (pending.type === 'just_between_us_pick') {
+    return <JustBetweenUsPickPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  }
+  if (pending.type === 'party_pass') {
+    return <PartyPassPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  }
+  if (pending.type === 'temptation_response') {
+    return <TemptationResponsePanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  }
 
   return <InfoPanel title={text(lang, 'Активное действие', 'Active action')} body={text(lang, 'Это действие сейчас не требует ответа с вашего устройства.', 'This action does not require a response from your device right now.')} />;
 }
@@ -668,6 +677,241 @@ function TradeDefensePanel({
               : text(lang, 'Не защищаться (принять перемещение)', 'Don\'t defend (accept swap)')}
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+function PartyPassPanel({
+  game,
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'party_pass' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const iMyTurn = pending.pendingPlayerIds.includes(me.id);
+  const alreadyChosen = pending.chosen.find(c => c.playerId === me.id);
+
+  const canGive = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected' && me.role === 'infected') {
+      return me.hand.filter(c => c.defId === 'infected').length > 1;
+    }
+    return true;
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Вечеринка!', 'Party!')}</h3></div>
+      {alreadyChosen ? (
+        <p className="helper-text">{text(lang, 'Вы выбрали карту. Ожидание остальных игроков…', 'You chose a card. Waiting for other players…')}</p>
+      ) : iMyTurn ? (
+        <>
+          <p className="helper-text">{text(lang, 'Выберите карту, которую хотите передать соседу.', 'Choose a card to pass to your neighbor.')}</p>
+          <div className="hand-grid compact">
+            {me.hand.map((card) => {
+              const allowed = canGive(card);
+              return (
+                <div className="hand-card" key={card.uid}>
+                  <CardView card={card} faceUp lang={lang} />
+                  <button
+                    className="btn small accent"
+                    disabled={!allowed || loading}
+                    onClick={() => void onAction({ type: 'PARTY_PASS_CARD', cardUid: card.uid, playerId: me.id })}
+                    type="button"
+                  >
+                    {text(lang, 'Передать', 'Pass')}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="helper-text">
+          {text(
+            lang,
+            `Ожидание других игроков (${pending.pendingPlayerIds.length} остал.)`,
+            `Waiting for other players (${pending.pendingPlayerIds.length} remaining)`,
+          )}
+        </p>
+      )}
+      <div className="waiting-list">
+        {game.players.filter(p => pending.pendingPlayerIds.includes(p.id)).map(p => (
+          <span className="badge dim" key={p.id}>{p.name}…</span>
+        ))}
+        {game.players.filter(p => pending.chosen.some(c => c.playerId === p.id)).map(p => (
+          <span className="badge host" key={p.id}>✓ {p.name}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TemptationResponsePanel({
+  game,
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'temptation_response' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const isTarget = me.id === pending.toId;
+  const fromPlayer = game.players.find(p => p.id === pending.fromId);
+  const offeredCard = fromPlayer?.hand?.find(c => c.uid === pending.offeredCardUid);
+
+  const canGive = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected') {
+      if (me.role === 'thing') return true;
+      if (me.role === 'infected') return me.hand.filter(c => c.defId === 'infected').length > 1;
+      return false;
+    }
+    return true;
+  };
+
+  if (!isTarget) {
+    return (
+      <InfoPanel
+        title={text(lang, 'Соблазн', 'Temptation')}
+        body={text(
+          lang,
+          `${game.players.find(p => p.id === pending.toId)?.name ?? '?'} выбирает карту для обмена…`,
+          `${game.players.find(p => p.id === pending.toId)?.name ?? '?'} is choosing a card to give…`,
+        )}
+      />
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Соблазн — ваш ответ', 'Temptation — your reply')}</h3></div>
+      <p className="helper-text">
+        {text(
+          lang,
+          `${fromPlayer?.name ?? '?'} предлагает вам обмен. Выберите карту, которую хотите отдать.`,
+          `${fromPlayer?.name ?? '?'} wants to trade with you. Choose a card to give back.`,
+        )}
+      </p>
+      {offeredCard && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <p className="helper-text">{text(lang, 'Карта, которую вам предлагают:', 'Card being offered to you:')}</p>
+          <CardView card={offeredCard} faceUp={false} lang={lang} />
+        </div>
+      )}
+      <div className="hand-grid compact">
+        {me.hand.map((card) => {
+          const allowed = canGive(card);
+          return (
+            <div className="hand-card" key={card.uid}>
+              <CardView card={card} faceUp lang={lang} />
+              <button
+                className="btn small accent"
+                disabled={!allowed || loading}
+                onClick={() => void onAction({ type: 'TEMPTATION_RESPOND', cardUid: card.uid })}
+                type="button"
+              >
+                {text(lang, 'Отдать', 'Give')}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function JustBetweenUsPickPanel({
+  game,
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'just_between_us_pick' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const isA = me.id === pending.playerA;
+  const isB = me.id === pending.playerB;
+  const isInvolved = isA || isB;
+  const myChoice = isA ? pending.cardUidA : pending.cardUidB;
+  const alreadyChose = myChoice !== null;
+  const partnerName = game.players.find(p => p.id === (isA ? pending.playerB : pending.playerA))?.name ?? '?';
+
+  const canGive = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected' && me.role === 'infected') {
+      return me.hand.filter(c => c.defId === 'infected').length > 1;
+    }
+    return true;
+  };
+
+  if (!isInvolved) {
+    const aName = game.players.find(p => p.id === pending.playerA)?.name ?? '?';
+    const bName = game.players.find(p => p.id === pending.playerB)?.name ?? '?';
+    return (
+      <InfoPanel
+        title={text(lang, 'Только между нами', 'Just Between Us')}
+        body={text(lang, `${aName} и ${bName} выбирают карты для обмена…`, `${aName} and ${bName} are choosing cards to trade…`)}
+      />
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Только между нами', 'Just Between Us')}</h3></div>
+      {alreadyChose ? (
+        <p className="helper-text">
+          {text(lang, `Вы выбрали карту. Ожидание ${partnerName}…`, `You chose a card. Waiting for ${partnerName}…`)}
+        </p>
+      ) : (
+        <>
+          <p className="helper-text">
+            {text(
+              lang,
+              `Выберите карту для обмена с ${partnerName}.`,
+              `Choose a card to trade with ${partnerName}.`,
+            )}
+          </p>
+          <div className="hand-grid compact">
+            {me.hand.map((card) => {
+              const allowed = canGive(card);
+              return (
+                <div className="hand-card" key={card.uid}>
+                  <CardView card={card} faceUp lang={lang} />
+                  <button
+                    className="btn small accent"
+                    disabled={!allowed || loading}
+                    onClick={() => void onAction({ type: 'JUST_BETWEEN_US_PICK', cardUid: card.uid, playerId: me.id })}
+                    type="button"
+                  >
+                    {text(lang, 'Выбрать', 'Pick')}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

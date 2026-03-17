@@ -19,6 +19,8 @@ export interface CardDef {
   descriptionRu: string;
   copies: number;
   minPlayers: number;
+  /** Per-player-count copy counts: index 0 = 4 players, index 7 = 11 players */
+  copiesByPlayerCount?: number[];
 }
 
 export interface CardInstance {
@@ -116,8 +118,10 @@ export type PendingAction =
       public?: boolean;
     }
   | { type: 'temptation_target'; cardUid: string; targets: number[] }
-  | { type: 'party_pass' }
-  | { type: 'just_between_us'; targets: number[] };
+  | { type: 'party_pass'; pendingPlayerIds: number[]; chosen: { playerId: number; cardUid: string }[]; direction: 1 | -1 }
+  | { type: 'temptation_response'; fromId: number; toId: number; offeredCardUid: string }
+  | { type: 'just_between_us'; targets: number[] }
+  | { type: 'just_between_us_pick'; playerA: number; playerB: number; cardUidA: string | null; cardUidB: string | null };
 
 // ── Game State ──────────────────────────────────────────────────────────────
 
@@ -144,7 +148,7 @@ export interface GameState {
 // ── Action Payloads ─────────────────────────────────────────────────────────
 
 export type GameAction =
-  | { type: 'START_GAME'; playerNames: string[] }
+  | { type: 'START_GAME'; playerNames: string[]; thingInDeck?: boolean }
   | { type: 'REVEAL_NEXT' }
   | { type: 'DRAW_CARD' }
   | { type: 'PLAY_CARD'; cardUid: string; targetPlayerId?: number; targetPosition?: number }
@@ -158,7 +162,9 @@ export type GameAction =
   | { type: 'PERSISTENCE_PICK'; keepUid: string; discardUids: string[] }
   | { type: 'CONFIRM_VIEW' }
   | { type: 'TEMPTATION_SELECT'; targetPlayerId: number; cardUid: string }
-  | { type: 'PARTY_PASS_CARD'; cardUid: string }
+  | { type: 'PARTY_PASS_CARD'; cardUid: string; playerId: number }
   | { type: 'JUST_BETWEEN_US_SELECT'; player1: number; player2: number }
+  | { type: 'JUST_BETWEEN_US_PICK'; cardUid: string; playerId: number }
+  | { type: 'TEMPTATION_RESPOND'; cardUid: string }
   | { type: 'DECLINE_DEFENSE' }
   | { type: 'SET_LANG'; lang: 'en' | 'ru' };

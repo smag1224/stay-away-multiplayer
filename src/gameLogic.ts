@@ -171,7 +171,8 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         })
         .map(pos => playerAtPosition(state, pos)!.id);
     }
-    case 'get_out_of_here': {
+    case 'get_out_of_here':
+    case 'you_better_run': {
       // Any alive player not in quarantine (doors ignored)
       return state.players
         .filter(p => p.isAlive && p.id !== cur.id && !p.inQuarantine)
@@ -188,12 +189,13 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         });
       return targets;
     }
-    case 'locked_door': {
-      // Adjacent positions only, target cannot be in quarantine
+    case 'locked_door':
+    case 'rotten_ropes': {
+      // Adjacent positions only
       return adjacent
         .filter(pos => !hasDoorBetween(state, cur.position, pos))
         .map(pos => playerAtPosition(state, pos)!)
-        .filter(p => p && !p.inQuarantine)
+        .filter(p => p !== undefined)
         .map(p => p.id);
     }
     case 'temptation': {
@@ -234,7 +236,7 @@ export function canPlayCard(state: GameState, cardDefId: string): boolean {
   // Cards requiring targets need at least one valid target
   const targets = getValidTargets(state, cardDefId);
   if (['flamethrower', 'analysis', 'suspicion', 'swap_places', 'get_out_of_here',
-       'quarantine', 'locked_door', 'temptation'].includes(cardDefId)) {
+       'you_better_run', 'quarantine', 'locked_door', 'rotten_ropes', 'temptation'].includes(cardDefId)) {
     return targets.length > 0;
   }
 
@@ -294,10 +296,14 @@ function buildDeck(playerCount: number): { deck: CardInstance[]; thingCard: Card
   const cards: CardInstance[] = [];
   let thingCard: CardInstance | null = null;
 
+  // copiesByPlayerCount index: 0=4p, 1=5p, 2=6p, 3=7p, 4=8p, 5=9p, 6=10p, 7=11p
+  const countIdx = Math.min(Math.max(playerCount - 4, 0), 7);
+
   for (const def of CARD_DEFS) {
     if (def.minPlayers > playerCount) continue;
 
-    for (let i = 0; i < def.copies; i++) {
+    const copies = def.copiesByPlayerCount ? def.copiesByPlayerCount[countIdx] : def.copies;
+    for (let i = 0; i < copies; i++) {
       const card: CardInstance = { uid: uid(), defId: def.id };
       if (def.id === 'the_thing') {
         thingCard = card;
@@ -370,12 +376,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const infectedCards = deck.filter(c => c.defId === 'infected');
       const panicCards = deck.filter(c => getCardDef(c.defId).back === 'panic');
 
-      // Create players
-      const thingPlayerIdx = Math.floor(Math.random() * count);
       const players: Player[] = names.map((name, i) => ({
         id: i,
         name,
-        role: (i === thingPlayerIdx ? 'thing' : 'human') as Role,
+        role: 'human' as Role,
         hand: [],
         isAlive: true,
         inQuarantine: false,
@@ -383,33 +387,51 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         position: i,
       }));
 
-      // Deal starting hands: 4 cards each
-      // The Thing gets "The Thing" card + 3 random event cards
-      // Others get 4 random event cards each
-      // Total starting cards = 4 * count (including The Thing card)
-      shuffle(eventCards);
-
-      for (let i = 0; i < count; i++) {
-        if (i === thingPlayerIdx) {
-          players[i].hand.push(thingCard);
-          for (let j = 0; j < 3; j++) {
-            const card = eventCards.pop();
-            if (card) players[i].hand.push(card);
-          }
-        } else {
+      if (action.thingInDeck) {
+        // "Thing in deck" variant: shuffle The Thing card into event cards,
+        // deal 4 cards to each player from that pool; whoever draws The Thing becomes The Thing.
+        const dealPool = shuffle([...eventCards, thingCard]);
+        for (let i = 0; i < count; i++) {
           for (let j = 0; j < 4; j++) {
-            const card = eventCards.pop();
-            if (card) players[i].hand.push(card);
+            const card = dealPool.pop();
+            if (card) {
+              players[i].hand.push(card);
+              if (card.defId === 'the_thing') players[i].role = 'thing';
+            }
           }
         }
+        // Remaining event cards + all infected + all panic = main deck
+        const mainDeck = [...dealPool, ...infectedCards, ...panicCards];
+        shuffle(mainDeck);
+        s.deck = mainDeck;
+      } else {
+        // Standard variant: one player is pre-assigned as The Thing, gets the The Thing card
+        const thingPlayerIdx = Math.floor(Math.random() * count);
+        players[thingPlayerIdx].role = 'thing';
+        shuffle(eventCards);
+
+        for (let i = 0; i < count; i++) {
+          if (i === thingPlayerIdx) {
+            players[i].hand.push(thingCard);
+            for (let j = 0; j < 3; j++) {
+              const card = eventCards.pop();
+              if (card) players[i].hand.push(card);
+            }
+          } else {
+            for (let j = 0; j < 4; j++) {
+              const card = eventCards.pop();
+              if (card) players[i].hand.push(card);
+            }
+          }
+        }
+
+        // Remaining event cards + all infected + all panic = main deck
+        const mainDeck = [...eventCards, ...infectedCards, ...panicCards];
+        shuffle(mainDeck);
+        s.deck = mainDeck;
       }
 
-      // Remaining event cards + all infected + all panic = main deck
-      const mainDeck = [...eventCards, ...infectedCards, ...panicCards];
-      shuffle(mainDeck);
-
       s.players = players;
-      s.deck = mainDeck;
       s.seats = players.map(p => p.id);
       s.phase = 'role_reveal';
       s.revealingPlayer = 0;
@@ -601,20 +623,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       from.hand[fromCardIdx] = defCard;
       defender.hand[defCardIdx] = fromCard;
 
-      // Check infection
+      // Check infection (no log — infection is secret)
       if (fromCard.defId === 'infected' && from.role === 'thing' && defender.role === 'human') {
         defender.role = 'infected';
-        log(s,
-          `${defender.name} has been infected!`,
-          `${defender.name} заражён(а)!`
-        );
       }
       if (defCard.defId === 'infected' && defender.role === 'thing' && from.role === 'human') {
         from.role = 'infected';
-        log(s,
-          `${from.name} has been infected!`,
-          `${from.name} заражён(а)!`
-        );
       }
 
       log(s,
@@ -642,7 +656,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const allowedDefenseIds =
         reason === 'trade'
-          ? ['fear', 'no_thanks', 'miss']
+          ? ['fear', 'no_thanks', 'miss', 'cant_be_friends']
           : reason === 'flamethrower'
             ? ['no_barbecue']
             : ['im_fine_here'];
@@ -658,9 +672,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (replacement) defender.hand.push(replacement);
 
       switch (card.defId) {
-        case 'no_thanks': {
-          log(s, `${defender.name} played No Thanks! Trade refused.`,
-              `${defender.name} сыграл(а) «Нет, спасибо!» Обмен отклонён.`);
+        case 'no_thanks':
+        case 'cant_be_friends': {
+          const cardNameLog = card.defId === 'cant_be_friends' ? 'Can\'t We Be Friends?' : 'No Thanks!';
+          const cardNameRuLog = card.defId === 'cant_be_friends' ? '«Давай дружить?»' : '«Нет, спасибо!»';
+          log(s, `${defender.name} played ${cardNameLog} Trade refused.`,
+              `${defender.name} сыграл(а) ${cardNameRuLog} Обмен отклонён.`);
           s.pendingAction = null;
           s.step = 'end_turn';
           advanceTurn(s);
@@ -872,43 +889,62 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
-      // Pick a random tradeable card from target (skip The Thing card and protected Infected cards)
-      if (target.hand.length === 0) return s;
-      const targetTradeableCards = target.hand.filter(c => {
-        if (c.defId === 'the_thing') return false;
-        if (c.defId === 'infected') {
-          // Only Thing can give Infected to non-Thing targets
-          if (target.role !== 'thing' || cur.role === 'thing') {
-            // Infected players must keep at least 1 Infected
-            if (target.role === 'infected' && target.hand.filter(h => h.defId === 'infected').length <= 1) return false;
-            // Humans/Infected can't pass Infected to non-Thing
-            if (target.role !== 'thing' && cur.role !== 'thing') return false;
-          }
+      // Now wait for the target player to choose their card
+      s.pendingAction = {
+        type: 'temptation_response',
+        fromId: cur.id,
+        toId: target.id,
+        offeredCardUid: curCard.uid,
+      };
+      return s;
+    }
+
+    case 'TEMPTATION_RESPOND': {
+      if (!s.pendingAction || s.pendingAction.type !== 'temptation_response') return s;
+      const { fromId, toId, offeredCardUid } = s.pendingAction;
+      const from = getPlayer(s, fromId);
+      const target = getPlayer(s, toId);
+
+      // Validate the offered card is still in from's hand
+      const fromCardIdx = from.hand.findIndex(c => c.uid === offeredCardUid);
+      if (fromCardIdx === -1) return s;
+      const fromCard = from.hand[fromCardIdx];
+
+      // Validate the card the target wants to give
+      const targetCardIdx = target.hand.findIndex(c => c.uid === action.cardUid);
+      if (targetCardIdx === -1) return s;
+      const targetCard = target.hand[targetCardIdx];
+
+      // Validate target can give this card (same rules as Temptation offering)
+      if (targetCard.defId === 'the_thing') return s;
+      if (targetCard.defId === 'infected') {
+        if (target.role === 'thing') {
+          // Thing can pass Infected
+        } else if (target.role === 'infected') {
+          if (from.role !== 'thing') return s;
+          if (target.hand.filter(c => c.defId === 'infected').length <= 1) return s;
+        } else {
+          return s; // Humans can't give Infected
         }
-        return true;
-      });
-      if (targetTradeableCards.length === 0) return s;
-      const targetCard = targetTradeableCards[Math.floor(Math.random() * targetTradeableCards.length)];
-      const targetCardIdx = target.hand.findIndex(c => c.uid === targetCard.uid);
-
-      cur.hand[cardIdx] = targetCard;
-      target.hand[targetCardIdx] = curCard;
-
-      // Check infection: only The Thing passing Infected infects a human
-      if (curCard.defId === 'infected' && cur.role === 'thing' && target.role === 'human') {
-        target.role = 'infected';
-        log(s, `${target.name} has been infected!`, `${target.name} заражён(а)!`);
       }
-      if (targetCard.defId === 'infected' && target.role === 'thing' && cur.role === 'human') {
-        cur.role = 'infected';
-        log(s, `${cur.name} has been infected!`, `${cur.name} заражён(а)!`);
+
+      // Execute the swap
+      from.hand[fromCardIdx] = targetCard;
+      target.hand[targetCardIdx] = fromCard;
+
+      // Check infection (secret — no log)
+      if (fromCard.defId === 'infected' && from.role === 'thing' && target.role === 'human') {
+        target.role = 'infected';
+      }
+      if (targetCard.defId === 'infected' && target.role === 'thing' && from.role === 'human') {
+        from.role = 'infected';
       }
 
       s.tradeSkipped = true;
       s.pendingAction = null;
       log(s,
-        `${cur.name} used Temptation to trade with ${target.name}.`,
-        `${cur.name} использовал(а) Соблазн для обмена с ${target.name}.`
+        `${from.name} used Temptation to trade with ${target.name}.`,
+        `${from.name} использовал(а) Соблазн для обмена с ${target.name}.`
       );
 
       if (s.step === 'play_or_discard') {
@@ -919,8 +955,50 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'PARTY_PASS_CARD': {
-      // Handled by panic effect — simplified for now
-      s.pendingAction = null;
+      if (!s.pendingAction || s.pendingAction.type !== 'party_pass') return s;
+      const pa = s.pendingAction;
+      const { playerId, cardUid } = action;
+
+      // Check this player still needs to submit
+      if (!pa.pendingPlayerIds.includes(playerId)) return s;
+
+      // Validate card belongs to this player and is tradeable
+      const player = getPlayer(s, playerId);
+      const cardIdx = player.hand.findIndex(c => c.uid === cardUid);
+      if (cardIdx === -1) return s;
+      const card = player.hand[cardIdx];
+      if (card.defId === 'the_thing') return s;
+      if (card.defId === 'infected' && player.role === 'infected' &&
+          player.hand.filter(c => c.defId === 'infected').length <= 1) return s;
+
+      // Record choice
+      pa.chosen.push({ playerId, cardUid });
+      pa.pendingPlayerIds = pa.pendingPlayerIds.filter(id => id !== playerId);
+
+      // When everyone has chosen, execute all passes simultaneously
+      if (pa.pendingPlayerIds.length === 0) {
+        const direction = pa.direction;
+        const alivePos = s.players.filter(p => p.isAlive).map(p => p.position).sort((a, b) => a - b);
+        for (const { playerId: pid, cardUid: cuid } of pa.chosen) {
+          const passer = getPlayer(s, pid);
+          const posIdx = alivePos.indexOf(passer.position);
+          const nextPosIdx = (posIdx + direction + alivePos.length) % alivePos.length;
+          const nextPlayer = s.players.find(p => p.position === alivePos[nextPosIdx] && p.isAlive);
+          if (!nextPlayer) continue;
+          const idx = passer.hand.findIndex(c => c.uid === cuid);
+          if (idx === -1) continue;
+          const passedCard = passer.hand[idx];
+          passer.hand.splice(idx, 1);
+          nextPlayer.hand.push(passedCard);
+          // Check infection (secret)
+          if (passedCard.defId === 'infected' && passer.role === 'thing' && nextPlayer.role === 'human') {
+            nextPlayer.role = 'infected';
+          }
+        }
+        s.pendingAction = null;
+        log(s, 'Party! Everyone passed a card to their neighbor.', 'Вечеринка! Все передали карту соседу.');
+        s.step = 'draw';
+      }
       return s;
     }
 
@@ -939,35 +1017,72 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (firstTradeable.length === 0 || secondTradeable.length === 0) {
         s.pendingAction = null;
         log(s,
-          `Just Between Us could not be resolved.`,
-          `«Только между нами» не удалось выполнить.`
+          `Just Between Us could not be resolved — a player had no tradeable cards.`,
+          `«Только между нами» не выполнено — у одного из игроков нет торгуемых карт.`
         );
+        s.step = 'draw';
         return s;
       }
 
-      const firstCard = firstTradeable[Math.floor(Math.random() * firstTradeable.length)];
-      const secondCard = secondTradeable[Math.floor(Math.random() * secondTradeable.length)];
-      const firstIdx = first.hand.findIndex(c => c.uid === firstCard.uid);
-      const secondIdx = second.hand.findIndex(c => c.uid === secondCard.uid);
-      if (firstIdx === -1 || secondIdx === -1) return s;
+      // Both players now choose their own card
+      s.pendingAction = {
+        type: 'just_between_us_pick',
+        playerA: player1,
+        playerB: player2,
+        cardUidA: null,
+        cardUidB: null,
+      };
+      return s;
+    }
 
-      first.hand[firstIdx] = secondCard;
-      second.hand[secondIdx] = firstCard;
+    case 'JUST_BETWEEN_US_PICK': {
+      if (!s.pendingAction || s.pendingAction.type !== 'just_between_us_pick') return s;
+      const pa = s.pendingAction;
+      const { playerId, cardUid } = action;
 
-      if (firstCard.defId === 'infected' && first.role === 'thing' && second.role === 'human') {
-        second.role = 'infected';
+      if (playerId !== pa.playerA && playerId !== pa.playerB) return s;
+
+      const picker = getPlayer(s, playerId);
+      if (!canTradeCard(s, picker, cardUid)) return s;
+      const cardExists = picker.hand.some(c => c.uid === cardUid);
+      if (!cardExists) return s;
+
+      if (playerId === pa.playerA && pa.cardUidA === null) {
+        pa.cardUidA = cardUid;
+      } else if (playerId === pa.playerB && pa.cardUidB === null) {
+        pa.cardUidB = cardUid;
+      } else {
+        return s; // Already submitted
       }
-      if (secondCard.defId === 'infected' && second.role === 'thing' && first.role === 'human') {
-        first.role = 'infected';
-      }
 
-      s.pendingAction = null;
-      // Just Between Us is always from a panic card, so after resolution the player draws again
-      s.step = 'draw';
-      log(s,
-        `${first.name} and ${second.name} traded due to Just Between Us.`,
-        `${first.name} и ${second.name} обменялись из-за «Только между нами».`
-      );
+      // Execute when both have chosen
+      if (pa.cardUidA !== null && pa.cardUidB !== null) {
+        const first = getPlayer(s, pa.playerA);
+        const second = getPlayer(s, pa.playerB);
+        const firstIdx = first.hand.findIndex(c => c.uid === pa.cardUidA);
+        const secondIdx = second.hand.findIndex(c => c.uid === pa.cardUidB);
+        if (firstIdx === -1 || secondIdx === -1) return s;
+
+        const firstCard = first.hand[firstIdx];
+        const secondCard = second.hand[secondIdx];
+        first.hand[firstIdx] = secondCard;
+        second.hand[secondIdx] = firstCard;
+
+        // Check infection (secret)
+        if (firstCard.defId === 'infected' && first.role === 'thing' && second.role === 'human') {
+          second.role = 'infected';
+        }
+        if (secondCard.defId === 'infected' && second.role === 'thing' && first.role === 'human') {
+          first.role = 'infected';
+        }
+
+        s.pendingAction = null;
+        s.step = 'draw';
+        log(s,
+          `${first.name} and ${second.name} traded due to Just Between Us.`,
+          `${first.name} и ${second.name} обменялись из-за «Только между нами».`
+        );
+      }
       return s;
     }
 
@@ -980,7 +1095,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
 function needsTarget(defId: string): boolean {
   return ['flamethrower', 'analysis', 'axe', 'suspicion', 'swap_places',
-          'get_out_of_here', 'quarantine', 'locked_door', 'temptation'].includes(defId);
+          'get_out_of_here', 'you_better_run', 'quarantine', 'locked_door',
+          'rotten_ropes', 'temptation'].includes(defId);
 }
 
 function handleTradeStep(s: GameState): void {
@@ -1187,6 +1303,43 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
       s.doors.push({ between: [player.position, target.position] });
       break;
     }
+
+    case 'you_better_run': {
+      // Swap with any non-quarantined player, ignoring doors
+      if (!target) break;
+      const hasFineHere3 = target.hand.some(c => c.defId === 'im_fine_here');
+      if (hasFineHere3) {
+        s.pendingAction = {
+          type: 'trade_defense',
+          defenderId: target.id,
+          fromId: player.id,
+          offeredCardUid: card.uid,
+          reason: 'swap',
+        };
+        return;
+      }
+      swapPositions(s, player, target);
+      break;
+    }
+
+    case 'rotten_ropes': {
+      // Place a locked door between two adjacent players
+      if (!target) break;
+      s.doors.push({ between: [player.position, target.position] });
+      break;
+    }
+
+    case 'blind_date': {
+      // Draw top card blindly, add to hand, then pass a card to a neighbor
+      const drawnCard = s.deck.shift();
+      if (drawnCard) player.hand.push(drawnCard);
+      break;
+    }
+
+    case 'cant_be_friends': {
+      // Defense card — played from hand as reaction, not as an action card
+      break;
+    }
   }
 }
 
@@ -1279,48 +1432,19 @@ function applyPanicEffect(s: GameState, card: CardInstance): void {
           'Раз, два... три, четыре... Игроки перемещаются!');
       break;
     }
-    case 'panic_party': {
-      // All pass 1 card to neighbor — simplified auto-pass random card
+    case 'panic_party':
+    case 'panic_chain_reaction': {
+      // All players must choose 1 card to pass to their neighbor
       const alive = s.players.filter(p => p.isAlive && p.hand.length > 0);
       if (alive.length < 2) break;
-      const alivePos = alive.map(p => p.position).sort((a, b) => a - b);
-
-      // Collect cards to pass
-      const cardsToPass: Map<number, CardInstance> = new Map();
-      alive.forEach(p => {
-        // Pick a random tradeable card
-        const tradeable = p.hand.filter(c =>
-          c.defId !== 'the_thing' &&
-          !(p.role === 'infected' && c.defId === 'infected' &&
-            p.hand.filter(h => h.defId === 'infected').length <= 1)
-        );
-        if (tradeable.length > 0) {
-          const pick = tradeable[Math.floor(Math.random() * tradeable.length)];
-          cardsToPass.set(p.id, pick);
-        }
-      });
-
-      // Pass cards
-      cardsToPass.forEach((card, playerId) => {
-        const player = getPlayer(s, playerId);
-        const posIdx = alivePos.indexOf(player.position);
-        const nextPosIdx = (posIdx + s.direction + alivePos.length) % alivePos.length;
-        const nextPlayer = s.players.find(p => p.position === alivePos[nextPosIdx] && p.isAlive);
-        if (nextPlayer) {
-          const idx = player.hand.findIndex(c => c.uid === card.uid);
-          if (idx !== -1) {
-            player.hand.splice(idx, 1);
-            nextPlayer.hand.push(card);
-            // Check infection
-            if (card.defId === 'infected' && player.role === 'thing' && nextPlayer.role === 'human') {
-              nextPlayer.role = 'infected';
-            }
-          }
-        }
-      });
-
-      log(s, 'Party! Everyone passed a card to their neighbor.',
-          'Вечеринка! Все передали карту соседу.');
+      // chain_reaction passes in opposite direction
+      const passDir: 1 | -1 = card.defId === 'panic_chain_reaction' ? (s.direction === 1 ? -1 : 1) : s.direction;
+      s.pendingAction = {
+        type: 'party_pass',
+        pendingPlayerIds: alive.map(p => p.id),
+        chosen: [],
+        direction: passDir,
+      };
       break;
     }
     case 'panic_between_us': {
@@ -1336,6 +1460,114 @@ function applyPanicEffect(s: GameState, card: CardInstance): void {
     case 'panic_quiet_night': {
       log(s, 'Quiet Night — no talking until next turn!',
           'Тихая ночь — никаких разговоров до следующего хода!');
+      break;
+    }
+    case 'panic_one_two': {
+      // Next 2 players shift one seat in turn direction
+      const alive2 = s.players.filter(p => p.isAlive);
+      const pos2 = alive2.map(p => p.position).sort((a, b) => a - b);
+      if (pos2.length >= 2) {
+        const cur2 = currentPlayer(s);
+        const curIdx2 = pos2.indexOf(cur2.position);
+        const block2 = Array.from({ length: Math.min(2, pos2.length) }, (_, offset) =>
+          pos2[(curIdx2 + s.direction * (offset + 1) + pos2.length * 4) % pos2.length]
+        );
+        const unique2 = Array.from(new Set(block2));
+        if (unique2.length >= 2) {
+          const assignments2 = unique2.map((position, index) => {
+            const fromIndex = (index + s.direction + unique2.length) % unique2.length;
+            const player = alive2.find(p => p.position === unique2[fromIndex])!;
+            return { playerId: player.id, position };
+          });
+          assignPlayersToPositions(s, assignments2);
+        }
+      }
+      log(s, 'One, Two... Players swapping!', 'Раз, два... Игроки перемещаются!');
+      break;
+    }
+    case 'panic_oops': {
+      // Current player randomly swaps one card with a random neighbor
+      const cur3 = currentPlayer(s);
+      const neighbors = getAdjacentPositions(s, cur3.position).map(pos =>
+        s.players.find(p => p.position === pos && p.isAlive)
+      ).filter(Boolean) as Player[];
+      if (neighbors.length > 0) {
+        const neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+        const curTradeable = cur3.hand.filter(c => c.defId !== 'the_thing' &&
+          !(cur3.role === 'infected' && c.defId === 'infected' && cur3.hand.filter(h => h.defId === 'infected').length <= 1));
+        const nbTradeable = neighbor.hand.filter(c => c.defId !== 'the_thing' &&
+          !(neighbor.role === 'infected' && c.defId === 'infected' && neighbor.hand.filter(h => h.defId === 'infected').length <= 1));
+        if (curTradeable.length > 0 && nbTradeable.length > 0) {
+          const curCard3 = curTradeable[Math.floor(Math.random() * curTradeable.length)];
+          const nbCard3 = nbTradeable[Math.floor(Math.random() * nbTradeable.length)];
+          const ci3 = cur3.hand.findIndex(c => c.uid === curCard3.uid);
+          const ni3 = neighbor.hand.findIndex(c => c.uid === nbCard3.uid);
+          cur3.hand[ci3] = nbCard3;
+          neighbor.hand[ni3] = curCard3;
+          // Check infection (secret)
+          if (curCard3.defId === 'infected' && cur3.role === 'thing' && neighbor.role === 'human') neighbor.role = 'infected';
+          if (nbCard3.defId === 'infected' && neighbor.role === 'thing' && cur3.role === 'human') cur3.role = 'infected';
+        }
+      }
+      log(s, 'Oops! A random card was swapped with a neighbor.', 'Уупс! Случайная карта обменялась с соседом.');
+      break;
+    }
+    case 'panic_forgetful': {
+      // All players discard 1 random card
+      s.players.forEach(p => {
+        if (!p.isAlive || p.hand.length === 0) return;
+        const discardable = p.hand.filter(c => c.defId !== 'the_thing' &&
+          !(p.role === 'infected' && c.defId === 'infected' && p.hand.filter(h => h.defId === 'infected').length <= 1));
+        if (discardable.length > 0) {
+          const pick = discardable[Math.floor(Math.random() * discardable.length)];
+          const idx = p.hand.findIndex(c => c.uid === pick.uid);
+          if (idx !== -1) {
+            s.discard.push(p.hand[idx]);
+            p.hand.splice(idx, 1);
+          }
+        }
+      });
+      log(s, 'Forgetful! Everyone discards a random card.', 'Забывчивость! Все сбрасывают случайную карту.');
+      break;
+    }
+    case 'panic_revelations': {
+      // All players show their hand to everyone via a public reveal
+      // We log it and let the client show everyone's cards
+      log(s, 'Revelations! All players must show their hands.', 'Время признаний! Все игроки показывают свои карты.');
+      // Each player's hand is already visible in full to themselves — for other players
+      // we set a special announcement so the UI can render all hands publicly.
+      // (Implementation: same as whisky_reveal but for all players)
+      // For now: just log the event as the actual hand reveal is implicit in sanitization
+      break;
+    }
+    case 'panic_blind_date': {
+      // Two random adjacent players trade a random card each
+      const alivePairs = s.players.filter(p => p.isAlive && p.hand.length > 0);
+      if (alivePairs.length >= 2) {
+        const randomPlayer = alivePairs[Math.floor(Math.random() * alivePairs.length)];
+        const adjPositions = getAdjacentPositions(s, randomPlayer.position);
+        const adjAlive = adjPositions.map(pos => s.players.find(p => p.position === pos && p.isAlive)).filter(Boolean) as Player[];
+        if (adjAlive.length > 0) {
+          const partner = adjAlive[Math.floor(Math.random() * adjAlive.length)];
+          const rTradeable = randomPlayer.hand.filter(c => c.defId !== 'the_thing' &&
+            !(randomPlayer.role === 'infected' && c.defId === 'infected' && randomPlayer.hand.filter(h => h.defId === 'infected').length <= 1));
+          const pTradeable = partner.hand.filter(c => c.defId !== 'the_thing' &&
+            !(partner.role === 'infected' && c.defId === 'infected' && partner.hand.filter(h => h.defId === 'infected').length <= 1));
+          if (rTradeable.length > 0 && pTradeable.length > 0) {
+            const rCard = rTradeable[Math.floor(Math.random() * rTradeable.length)];
+            const pCard = pTradeable[Math.floor(Math.random() * pTradeable.length)];
+            const ri = randomPlayer.hand.findIndex(c => c.uid === rCard.uid);
+            const pi = partner.hand.findIndex(c => c.uid === pCard.uid);
+            randomPlayer.hand[ri] = pCard;
+            partner.hand[pi] = rCard;
+            // Check infection (secret)
+            if (rCard.defId === 'infected' && randomPlayer.role === 'thing' && partner.role === 'human') partner.role = 'infected';
+            if (pCard.defId === 'infected' && partner.role === 'thing' && randomPlayer.role === 'human') randomPlayer.role = 'infected';
+            log(s, `Blind Date! ${randomPlayer.name} and ${partner.name} traded a card.`,
+                `Свидание вслепую! ${randomPlayer.name} и ${partner.name} обменялись картой.`);
+          }
+        }
+      }
       break;
     }
   }

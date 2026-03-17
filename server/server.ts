@@ -244,11 +244,12 @@ function cleanupRooms(): void {
   }
 }
 
-function startRoomGame(room: Room): void {
+function startRoomGame(room: Room, thingInDeck?: boolean): void {
   const playerNames = room.members.map((member) => member.name);
   const game = gameReducer(createInitialState(), {
     type: 'START_GAME',
     playerNames,
+    thingInDeck,
   });
 
   if (game.phase === 'role_reveal') {
@@ -292,6 +293,16 @@ function allowedToDispatch(room: Room, member: RoomMember, action: GameAction): 
     case 'PLAY_DEFENSE':
     case 'DECLINE_DEFENSE':
       return pendingAction?.type === 'trade_defense' && pendingAction.defenderId === member.playerId;
+    case 'PARTY_PASS_CARD':
+      return pendingAction?.type === 'party_pass' &&
+        pendingAction.pendingPlayerIds.includes(member.playerId ?? -1) &&
+        action.playerId === member.playerId;
+    case 'JUST_BETWEEN_US_PICK':
+      return pendingAction?.type === 'just_between_us_pick' &&
+        (pendingAction.playerA === member.playerId || pendingAction.playerB === member.playerId) &&
+        action.playerId === member.playerId;
+    case 'TEMPTATION_RESPOND':
+      return pendingAction?.type === 'temptation_response' && pendingAction.toId === member.playerId;
     case 'CONFIRM_VIEW':
       if (!pendingAction) {
         return false;
@@ -494,7 +505,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (actionSegment === 'start') {
-      const body = await readBody<RoomSessionPayload>(req);
+      const body = await readBody<RoomSessionPayload & { thingInDeck?: boolean }>(req);
       const member = getMember(room, body.sessionId);
 
       if (!member) {
@@ -517,7 +528,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      startRoomGame(room);
+      startRoomGame(room, body.thingInDeck);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
       return;
     }

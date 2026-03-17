@@ -25,6 +25,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [thingInDeck, setThingInDeck] = useState(false);
   // Track latest known state timestamp to prevent stale poll responses from overwriting fresh action responses
   const lastKnownUpdatedAt = useRef(0);
 
@@ -180,7 +181,9 @@ function App() {
           onCopy={updateCopied}
           onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
           onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
-          onStart={() => callRoomEndpoint(`/api/rooms/${room.code}/start`, { sessionId: room.me.sessionId })}
+          thingInDeck={thingInDeck}
+          onThingInDeckChange={setThingInDeck}
+          onStart={() => callRoomEndpoint(`/api/rooms/${room.code}/start`, { sessionId: room.me.sessionId, thingInDeck })}
         />
       )}
 
