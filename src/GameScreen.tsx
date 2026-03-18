@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { getCardDef, getCardName, getCardDescription, getCardImage } from './cards.ts';
 import {
   canDiscardCard,
@@ -194,37 +195,74 @@ export function GameScreen({
             <PlayerCircle game={game} lang={lang} me={me} />
           </div>
 
-          {/* Right sidebar: pending + log */}
+          {/* Right sidebar: pending actions only */}
           <div className="game-sidebar-right">
             <div className="pending-panel">
               <PendingActionPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
             </div>
-            <div className="log-panel">
-              <div className="log-header">{text(lang, 'Журнал событий', 'Event log')}</div>
-              <div className="log-list">
-                {game.log.slice(0, 24).map((entry) => (
-                  <div className="log-entry" key={entry.id}>
-                    {lang === 'ru' ? entry.textRu : entry.text}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* ─ BOTTOM: your hand (cards below the table) ─ */}
-        <div className="game-hand-area">
-          <div className="hand-header">
-            <h3>{text(lang, 'Ваша рука', 'Your hand')}</h3>
-            <span className="hand-count">{me.hand.length} {text(lang, 'карт', 'cards')}</span>
-          </div>
-          <div className="hand-scroll">
-            <PlayerHand game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
-          </div>
-        </div>
+        {/* ─ BOTTOM ROW: hand + log side by side ─ */}
+        <BottomPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
 
       </div>
     </main>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   BOTTOM PANEL (hand + log, both collapsible)
+══════════════════════════════════════════════════════════════════════ */
+function BottomPanel({
+  game,
+  lang,
+  loading,
+  me,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const [handOpen, setHandOpen] = useState(true);
+  const [logOpen, setLogOpen] = useState(false);
+
+  return (
+    <div className="game-bottom-row">
+      {/* Hand section */}
+      <div className={`bottom-section hand-section ${handOpen ? 'open' : 'collapsed'}`}>
+        <button className="section-toggle" onClick={() => setHandOpen(v => !v)} type="button">
+          <span>{text(lang, 'Ваша рука', 'Your hand')}</span>
+          <span className="hand-count">{me.hand.length} {text(lang, 'карт', 'cards')}</span>
+          <span className="toggle-arrow">{handOpen ? '▼' : '▲'}</span>
+        </button>
+        {handOpen && (
+          <div className="section-body hand-scroll">
+            <PlayerHand game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
+          </div>
+        )}
+      </div>
+
+      {/* Log section */}
+      <div className={`bottom-section log-section ${logOpen ? 'open' : 'collapsed'}`}>
+        <button className="section-toggle" onClick={() => setLogOpen(v => !v)} type="button">
+          <span>{text(lang, 'Журнал событий', 'Event log')}</span>
+          <span className="toggle-arrow">{logOpen ? '▼' : '▲'}</span>
+        </button>
+        {logOpen && (
+          <div className="section-body log-body">
+            {game.log.slice(0, 30).map((entry) => (
+              <div className="log-entry" key={entry.id}>
+                {lang === 'ru' ? entry.textRu : entry.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -476,8 +514,6 @@ function CardView({ card, faceUp, lang }: { card: CardInstance; faceUp: boolean;
       {imgSrc && <img alt="" className="card-bg-img" src={imgSrc} />}
       <div className="card-overlay">
         <div className={`card-badge badge-${def.category}`}>{cardCategoryLabel(card, lang)}</div>
-        <div className="card-name">{lang === 'ru' ? def.nameRu : def.name}</div>
-        <div className="card-desc">{lang === 'ru' ? def.descriptionRu : def.description}</div>
       </div>
     </div>
   );

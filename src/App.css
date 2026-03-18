@@ -370,14 +370,7 @@ button, input { font: inherit; }
   background: rgba(6,9,12,.5);
 }
 
-/* ── BOTTOM: hand area ── */
-.game-hand-area {
-  display: flex; flex-direction: column;
-  border-top: 1px solid rgba(255,255,255,.08);
-  max-height: 260px;
-  overflow: hidden;
-  background: rgba(6,9,12,.85);
-}
+/* game-hand-area removed – replaced by game-bottom-row */
 
 /* Status cards – stacked vertically */
 .status-strip { display: flex; flex-direction: column; gap: 4px; }
@@ -495,31 +488,53 @@ button, input { font: inherit; }
 }
 .notice-box p { margin: 0; color: var(--muted); }
 
-/* ── Hand area styling ───────────────────────────────────────────────── */
-
-.hand-header {
-  padding: 7px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.05);
-  display: flex; align-items: center; justify-content: space-between;
-  flex-shrink: 0;
+/* ── Bottom row: hand + log side by side, collapsible ─────────────── */
+.game-bottom-row {
+  display: flex;
+  border-top: 1px solid rgba(255,255,255,.08);
   background: rgba(6,9,12,.85);
+  max-height: 50vh;
+  overflow: hidden;
 }
-.hand-header h3 {
-  margin: 0; font-size: .72rem;
-  text-transform: uppercase; letter-spacing: .14em;
-  color: var(--muted); font-weight: 700;
-}
-.hand-count { font-size: .72rem; color: var(--muted); }
 
-.hand-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px; }
+.bottom-section {
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+.bottom-section.hand-section { flex: 3; }
+.bottom-section.log-section  { flex: 1; border-left: 1px solid rgba(255,255,255,.06); }
+.bottom-section.collapsed { flex: 0 0 auto; }
+
+.section-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  border: none; background: rgba(6,9,12,.95);
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  cursor: pointer;
+  font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--muted);
+  flex-shrink: 0;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.section-toggle:hover { color: var(--text); }
+.toggle-arrow { margin-left: auto; font-size: .55rem; }
+.hand-count { font-size: .72rem; color: var(--muted); font-weight: 400; }
+
+.section-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
+.section-body.hand-scroll { padding: 10px; }
+.section-body.log-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 
 .hand-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 9px;
 }
 .hand-grid.compact {
-  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
 }
 
 .hand-card { display: flex; flex-direction: column; gap: 5px; }
@@ -549,19 +564,7 @@ button, input { font: inherit; }
 .pending-panel .panel-header { margin-bottom: 8px; }
 .pending-panel .panel-header h3 { font-size: .72rem; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
 
-.log-panel {
-  height: 170px; flex-shrink: 0;
-  overflow-y: auto; padding: 8px 10px;
-  background: rgba(0,0,0,.25);
-  border-top: 1px solid rgba(255,255,255,.04);
-}
-.log-header {
-  font-size: .6rem; text-transform: uppercase;
-  letter-spacing: .14em; color: var(--muted);
-  font-weight: 700; opacity: .7; margin-bottom: 5px;
-}
-
-.log-list { display: flex; flex-direction: column; gap: 3px; }
+/* log-panel removed – log is now in bottom row */
 .log-entry {
   font-size: .72rem; color: var(--muted);
   padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04);
@@ -571,13 +574,13 @@ button, input { font: inherit; }
 
 /* ── Cards ───────────────────────────────────────────────────────────── */
 .card, .card-back {
-  min-height: 148px;
   border-radius: var(--radius-card);
   padding: 9px 8px;
-  display: flex; flex-direction: column; justify-content: space-between;
+  display: flex; flex-direction: column; justify-content: flex-end;
   gap: 5px;
   box-shadow: var(--shadow-card);
   position: relative; overflow: hidden;
+  aspect-ratio: 3 / 4;
 }
 
 /* Subtle cross-hatch texture */
@@ -675,28 +678,17 @@ button, input { font: inherit; }
 }
 .card-overlay {
   position: relative; z-index: 1;
-  display: flex; flex-direction: column; justify-content: flex-end;
-  gap: 3px;
-  height: 100%;
-  padding: 8px 8px 9px;
-  background: linear-gradient(
-    to bottom,
-    rgba(0,0,0,.15) 0%,
-    rgba(0,0,0,.35) 40%,
-    rgba(0,0,0,.82) 75%,
-    rgba(0,0,0,.92) 100%
-  );
+  display: flex; align-items: flex-end;
+  padding: 5px 6px;
   border-radius: inherit;
 }
-.card.has-image .card-badge {
+.card.has-image .card-overlay {
   margin-top: auto;
+  background: linear-gradient(to top, rgba(0,0,0,.7) 0%, transparent 100%);
+  padding: 18px 6px 5px;
 }
-.card.has-image .card-name {
+.card.has-image .card-badge {
   text-shadow: 0 1px 4px rgba(0,0,0,.9);
-}
-.card.has-image .card-desc {
-  color: rgba(200,220,240,.7);
-  text-shadow: 0 1px 3px rgba(0,0,0,.8);
 }
 
 /* Promo category → GOLD */
