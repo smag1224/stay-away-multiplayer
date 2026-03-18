@@ -355,7 +355,8 @@ async function serveStatic(
   res: HttpResponse,
 ): Promise<boolean> {
   const requestUrl = new URL(req.url ?? '/', 'http://localhost');
-  const requestedPath = requestUrl.pathname === '/' ? '/index.html' : requestUrl.pathname;
+  const rawPath = requestUrl.pathname === '/' ? '/index.html' : requestUrl.pathname;
+  const requestedPath = decodeURIComponent(rawPath);
   const normalizedPath = path.normalize(requestedPath).replace(/^(\.\.[\\/])+/, '');
   const filePath = path.join(distDir, normalizedPath);
 
