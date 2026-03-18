@@ -452,7 +452,7 @@ const CARD_IMAGES: Record<string, string> = {
 
 export function getCardImage(defId: string): string | null {
   const file = CARD_IMAGES[defId];
-  return file ? `/cards/${encodeURIComponent(file)}` : null;
+  return file ? `/cards/${file}` : null;
 }
 
 export function getCardDef(defId: string): CardDef {
