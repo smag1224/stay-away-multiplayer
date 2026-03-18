@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
+
+const ShowCardTextCtx = createContext(false);
 import { getCardDef, getCardName, getCardDescription, getCardImage } from './cards.ts';
 import {
   canDiscardCard,
@@ -43,6 +45,7 @@ export function GameScreen({
   onLeave: () => void;
   onReset: () => Promise<void>;
 }) {
+  const [showCardText, setShowCardText] = useState(false);
   const current = getCurrentPlayer(game);
   const myTurn = current.id === me.id;
   const summary = pendingSummary(game.pendingAction, game, lang);
@@ -96,9 +99,10 @@ export function GameScreen({
 
   /* ── IN GAME ───────────────────────────────────────────────── */
   return (
+    <ShowCardTextCtx.Provider value={showCardText}>
     <main className="game-screen">
       {/* ── Top bar ── */}
-      <TopBar lang={lang} room={room} onCopy={onCopy} onLeave={onLeave} />
+      <TopBar lang={lang} room={room} onCopy={onCopy} onLeave={onLeave} showCardText={showCardText} onToggleText={() => setShowCardText(v => !v)} />
 
       {/* ── Panic announcement ── */}
       {game.panicAnnouncement && (
@@ -208,6 +212,7 @@ export function GameScreen({
 
       </div>
     </main>
+    </ShowCardTextCtx.Provider>
   );
 }
 
@@ -274,11 +279,15 @@ function TopBar({
   room,
   onCopy,
   onLeave,
+  showCardText,
+  onToggleText,
 }: {
   lang: Lang;
   room: RoomView;
   onCopy: () => Promise<void>;
   onLeave: () => void;
+  showCardText?: boolean;
+  onToggleText?: () => void;
 }) {
   return (
     <div className="top-bar">
@@ -287,6 +296,11 @@ function TopBar({
       <span style={{ fontSize: '.7rem', color: 'var(--muted)' }}>{text(lang, 'Комната', 'Room')}</span>
       <span className="top-bar-room">{room.code}</span>
       <div className="top-bar-actions">
+        {onToggleText && (
+          <button className={`btn small ${showCardText ? 'primary' : 'ghost'}`} onClick={onToggleText} type="button">
+            {text(lang, showCardText ? 'Скрыть текст' : 'Текст карт', showCardText ? 'Hide text' : 'Card text')}
+          </button>
+        )}
         <button className="btn small secondary" onClick={() => void onCopy()} type="button">
           {text(lang, 'Ссылка', 'Copy link')}
         </button>
@@ -498,6 +512,7 @@ function PendingActionPanel({
    CARD VIEW
 ══════════════════════════════════════════════════════════════════════ */
 function CardView({ card, faceUp, lang }: { card: CardInstance; faceUp: boolean; lang: Lang }) {
+  const showText = useContext(ShowCardTextCtx);
   const def = getCardDef(card.defId);
   if (!faceUp) {
     return (
@@ -510,10 +525,16 @@ function CardView({ card, faceUp, lang }: { card: CardInstance; faceUp: boolean;
   const imgSrc = getCardImage(card.defId);
 
   return (
-    <div className={`card cat-${def.category} ${imgSrc ? 'has-image' : ''}`}>
+    <div className={`card cat-${def.category} ${imgSrc ? 'has-image' : ''} ${showText ? 'show-text' : ''}`}>
       {imgSrc && <img alt="" className="card-bg-img" src={imgSrc} />}
       <div className="card-overlay">
         <div className={`card-badge badge-${def.category}`}>{cardCategoryLabel(card, lang)}</div>
+        {showText && (
+          <>
+            <div className="card-name">{lang === 'ru' ? def.nameRu : def.name}</div>
+            <div className="card-desc">{lang === 'ru' ? def.descriptionRu : def.description}</div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -743,7 +764,9 @@ function TradeDefensePanel({
     ? ['fear', 'no_thanks', 'miss']
     : pending.reason === 'flamethrower'
       ? ['no_barbecue']
-      : ['im_fine_here'];
+      : pending.reason === 'analysis'
+        ? ['anti_analysis']
+        : ['im_fine_here'];
 
   const defenseCards = me.hand.filter((c) => allowedIds.includes(c.defId));
   const tradeableCards = me.hand.filter((c) => localTradeCheck(me, c));
@@ -790,7 +813,9 @@ function TradeDefensePanel({
           <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLINE_DEFENSE' })} type="button">
             {pending.reason === 'flamethrower'
               ? text(lang, 'Принять уничтожение', 'Accept elimination')
-              : text(lang, 'Принять перемещение', 'Accept swap')}
+              : pending.reason === 'analysis'
+                ? text(lang, 'Показать карты', 'Allow analysis')
+                : text(lang, 'Принять перемещение', 'Accept swap')}
           </button>
         </div>
       )}

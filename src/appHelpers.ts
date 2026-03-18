@@ -127,7 +127,7 @@ export function stepLabel(step: ViewerGameState['step'], lang: Lang): string {
   }
 }
 
-export function actionReasonLabel(reason: 'trade' | 'flamethrower' | 'swap', lang: Lang): string {
+export function actionReasonLabel(reason: 'trade' | 'flamethrower' | 'swap' | 'analysis', lang: Lang): string {
   switch (reason) {
     case 'trade':
       return text(lang, 'обмен', 'trade');
@@ -135,6 +135,8 @@ export function actionReasonLabel(reason: 'trade' | 'flamethrower' | 'swap', lan
       return text(lang, 'огнемёт', 'flamethrower');
     case 'swap':
       return text(lang, 'перемещение', 'seat swap');
+    case 'analysis':
+      return text(lang, 'анализ', 'analysis');
   }
 }
 

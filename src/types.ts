@@ -103,7 +103,7 @@ export type PendingAction =
       defenderId: number;
       fromId: number;
       offeredCardUid: string;
-      reason: 'trade' | 'flamethrower' | 'swap';
+      reason: 'trade' | 'flamethrower' | 'swap' | 'analysis';
     }
   | { type: 'panic_effect'; cardDefId: string; data?: unknown }
   | { type: 'choose_card_to_give'; targetPlayerId: number }

@@ -30,7 +30,7 @@ export function ConnectScreen({
       <section className="hero-panel">
         <p className="eyebrow">{text(lang, 'Мультиплеерная версия', 'Multiplayer Edition')}</p>
         <h1 className="hero-title">Stay Away!</h1>
-        <p className="version-tag">v1.2b</p>
+        <p className="version-tag">v1.2</p>
         <p className="hero-subtitle">
           {text(
             lang,

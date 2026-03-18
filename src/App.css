@@ -691,6 +691,25 @@ button, input { font: inherit; }
   text-shadow: 0 1px 4px rgba(0,0,0,.9);
 }
 
+/* Show text mode — full overlay with readable text */
+.card.show-text .card-overlay {
+  display: flex; flex-direction: column; justify-content: flex-end;
+  gap: 3px;
+}
+.card.show-text.has-image .card-overlay {
+  background: linear-gradient(to top, rgba(0,0,0,.92) 0%, rgba(0,0,0,.7) 55%, rgba(0,0,0,.3) 100%);
+  padding: 8px 7px 6px;
+  height: 100%;
+}
+.card.show-text .card-name {
+  text-shadow: 0 1px 4px rgba(0,0,0,.9);
+  font-weight: 700;
+}
+.card.show-text .card-desc {
+  color: rgba(200,220,240,.8);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+}
+
 /* Promo category → GOLD */
 .card.cat-promo {
   background: linear-gradient(155deg, #1a1400 0%, #120e00 100%);

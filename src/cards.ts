@@ -214,6 +214,19 @@ export const CARD_DEFS: CardDef[] = [
     copiesByPlayerCount: [1, 1, 2, 2, 3, 3, 3, 4],
   },
 
+  {
+    id: 'anti_analysis',
+    name: 'Anti-Analysis',
+    nameRu: 'Анти-Анализ',
+    category: 'defense',
+    back: 'event',
+    description: 'Cancel the effect of "Analysis" if you are the target. Draw 1 event card.',
+    descriptionRu: 'Отмените действие карты «Анализ» против вас. Возьмите 1 карту события.',
+    copies: 2,
+    minPlayers: 5,
+    copiesByPlayerCount: [0, 1, 1, 1, 2, 2, 2, 2],
+  },
+
   // ── Obstacles ─────────────────────────────────────────────────────────
   {
     id: 'locked_door',
@@ -413,9 +426,19 @@ export const CARD_DEFS: CardDef[] = [
   },
 ];
 
-/** All card images are stored as /cards/{defId}.png */
+const KNOWN_CARD_IMAGES = new Set([
+  'the_thing', 'infected', 'analysis', 'flamethrower', 'suspicion', 'axe',
+  'persistence', 'whisky', 'swap_places', 'watch_your_back', 'temptation',
+  'you_better_run', 'im_fine_here', 'fear', 'no_barbecue', 'miss', 'no_thanks',
+  'locked_door', 'quarantine', 'panic_chain_reaction', 'panic_forgetful',
+  'get_out_of_here', 'panic_party', 'panic_1234', 'panic_one_two',
+  'panic_revelations', 'panic_between_us', 'panic_oops', 'panic_blind_date',
+  'cant_be_friends', 'rotten_ropes', 'lovecraft', 'necronomicon',
+]);
+
+/** Card images are stored as /cards/{defId}.png */
 export function getCardImage(defId: string): string | null {
-  return `/cards/${defId}.png`;
+  return KNOWN_CARD_IMAGES.has(defId) ? `/cards/${defId}.png` : null;
 }
 
 export function getCardDef(defId: string): CardDef {

@@ -624,7 +624,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           ? ['fear', 'no_thanks', 'miss']
           : reason === 'flamethrower'
             ? ['no_barbecue']
-            : ['im_fine_here'];
+            : reason === 'analysis'
+              ? ['anti_analysis']
+              : ['im_fine_here'];
 
       if (!allowedDefenseIds.includes(card.defId)) return s;
 
@@ -702,6 +704,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           }
           break;
         }
+        case 'anti_analysis': {
+          log(s, `${defender.name} played Anti-Analysis! Analysis cancelled.`,
+              `${defender.name} сыграл(а) «Анти-Анализ!» Анализ отменён.`);
+          s.pendingAction = null;
+          if (s.step === 'play_or_discard') {
+            s.step = 'trade';
+            handleTradeStep(s);
+          }
+          break;
+        }
       }
       return s;
     }
@@ -724,6 +736,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           s.step = 'trade';
           handleTradeStep(s);
         }
+      } else if (reason === 'analysis') {
+        log(s,
+          `${defTarget.name} chose not to defend against Analysis.`,
+          `${defTarget.name} решил(а) не защищаться от Анализа.`
+        );
+        s.pendingAction = {
+          type: 'view_hand',
+          targetPlayerId: defTarget.id,
+          cards: [...defTarget.hand],
+          viewerPlayerId: defFrom.id,
+        };
+        return s;
       } else if (reason === 'swap') {
         log(s,
           `${defTarget.name} chose not to defend against the swap.`,
@@ -1289,6 +1313,17 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
 
     case 'analysis': {
       if (!target) break;
+      const hasAntiAnalysis = target.hand.some(c => c.defId === 'anti_analysis');
+      if (hasAntiAnalysis) {
+        s.pendingAction = {
+          type: 'trade_defense',
+          defenderId: target.id,
+          fromId: player.id,
+          offeredCardUid: card.uid,
+          reason: 'analysis',
+        };
+        return;
+      }
       s.pendingAction = {
         type: 'view_hand',
         targetPlayerId: target.id,
