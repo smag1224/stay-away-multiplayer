@@ -1,4 +1,4 @@
-import { getCardDef, getCardName, getCardDescription } from './cards.ts';
+import { getCardDef, getCardName, getCardDescription, getCardImage } from './cards.ts';
 import {
   canDiscardCard,
   canPlayCard,
@@ -469,11 +469,16 @@ function CardView({ card, faceUp, lang }: { card: CardInstance; faceUp: boolean;
     );
   }
 
+  const imgSrc = getCardImage(card.defId);
+
   return (
-    <div className={`card cat-${def.category}`}>
-      <div className={`card-badge badge-${def.category}`}>{cardCategoryLabel(card, lang)}</div>
-      <div className="card-name">{lang === 'ru' ? def.nameRu : def.name}</div>
-      <div className="card-desc">{lang === 'ru' ? def.descriptionRu : def.description}</div>
+    <div className={`card cat-${def.category} ${imgSrc ? 'has-image' : ''}`}>
+      {imgSrc && <img alt="" className="card-bg-img" src={imgSrc} />}
+      <div className="card-overlay">
+        <div className={`card-badge badge-${def.category}`}>{cardCategoryLabel(card, lang)}</div>
+        <div className="card-name">{lang === 'ru' ? def.nameRu : def.name}</div>
+        <div className="card-desc">{lang === 'ru' ? def.descriptionRu : def.description}</div>
+      </div>
     </div>
   );
 }
