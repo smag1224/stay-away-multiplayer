@@ -5,7 +5,8 @@ export type CardCategory =
   | 'action'
   | 'defense'
   | 'obstacle'
-  | 'panic';
+  | 'panic'
+  | 'promo';
 
 export type CardBack = 'event' | 'panic';
 
@@ -121,7 +122,13 @@ export type PendingAction =
   | { type: 'party_pass'; pendingPlayerIds: number[]; chosen: { playerId: number; cardUid: string }[]; direction: 1 | -1 }
   | { type: 'temptation_response'; fromId: number; toId: number; offeredCardUid: string }
   | { type: 'just_between_us'; targets: number[] }
-  | { type: 'just_between_us_pick'; playerA: number; playerB: number; cardUidA: string | null; cardUidB: string | null };
+  | { type: 'just_between_us_pick'; playerA: number; playerB: number; cardUidA: string | null; cardUidB: string | null }
+  | { type: 'panic_choose_target'; panicDefId: string; targets: number[] }
+  | { type: 'blind_date_swap' }
+  | { type: 'forgetful_discard'; remaining: number }
+  | { type: 'panic_trade'; targetPlayerId: number }
+  | { type: 'panic_trade_response'; fromId: number; toId: number; offeredCardUid: string }
+  | { type: 'revelations_round'; currentRevealerIdx: number; revealOrder: number[] };
 
 // ── Game State ──────────────────────────────────────────────────────────────
 
@@ -167,4 +174,10 @@ export type GameAction =
   | { type: 'JUST_BETWEEN_US_PICK'; cardUid: string; playerId: number }
   | { type: 'TEMPTATION_RESPOND'; cardUid: string }
   | { type: 'DECLINE_DEFENSE' }
-  | { type: 'SET_LANG'; lang: 'en' | 'ru' };
+  | { type: 'SET_LANG'; lang: 'en' | 'ru' }
+  | { type: 'PANIC_SELECT_TARGET'; targetPlayerId: number }
+  | { type: 'BLIND_DATE_PICK'; cardUid: string }
+  | { type: 'FORGETFUL_DISCARD_PICK'; cardUid: string }
+  | { type: 'PANIC_TRADE_SELECT'; targetPlayerId: number; cardUid: string }
+  | { type: 'PANIC_TRADE_RESPOND'; cardUid: string }
+  | { type: 'REVELATIONS_RESPOND'; show: boolean };

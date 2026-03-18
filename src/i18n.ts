@@ -75,6 +75,7 @@ const translations: Record<string, Record<Lang, string>> = {
   'card.defense': { en: 'Defense', ru: 'Защита' },
   'card.obstacle': { en: 'Obstacle', ru: 'Препятствие' },
   'card.infection': { en: 'Infection', ru: 'Заражение' },
+  'card.promo': { en: 'Promo', ru: 'Промо' },
 
   // Lang
   'lang.switch': { en: 'RU', ru: 'EN' },

@@ -182,7 +182,17 @@ function canViewerSeePendingAction(
     case 'panic_effect':
       return currentPlayer(game).id === viewerId;
     case 'just_between_us':
+    case 'panic_choose_target':
+    case 'blind_date_swap':
+    case 'forgetful_discard':
+    case 'panic_trade':
       return currentPlayer(game).id === viewerId;
+    case 'panic_trade_response':
+      return viewerId === pendingAction.fromId || viewerId === pendingAction.toId;
+    case 'revelations_round': {
+      const revIdx = pendingAction.revealOrder[pendingAction.currentRevealerIdx];
+      return game.players[revIdx]?.id === viewerId;
+    }
     default:
       return false;
   }

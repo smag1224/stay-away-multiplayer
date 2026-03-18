@@ -134,7 +134,6 @@ function drawEventCard(state: GameState): CardInstance | null {
 /** Get valid targets for a card play */
 export function getValidTargets(state: GameState, cardDefId: string): number[] {
   const cur = currentPlayer(state);
-  const def = getCardDef(cardDefId);
   const adjacent = getAdjacentPositions(state, cur.position);
 
   switch (cardDefId) {
@@ -149,7 +148,6 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         .map(p => p.id);
     }
     case 'axe': {
-      // Can target self (remove own quarantine) or adjacent (remove quarantine/door)
       const targets: number[] = [];
       if (cur.inQuarantine) targets.push(cur.id);
       adjacent.forEach(pos => {
@@ -163,7 +161,6 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
       return targets;
     }
     case 'swap_places': {
-      // Adjacent, not quarantine, not behind locked door
       return adjacent
         .filter(pos => {
           const p = playerAtPosition(state, pos);
@@ -171,7 +168,6 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         })
         .map(pos => playerAtPosition(state, pos)!.id);
     }
-    case 'get_out_of_here':
     case 'you_better_run': {
       // Any alive player not in quarantine (doors ignored)
       return state.players
@@ -179,7 +175,6 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         .map(p => p.id);
     }
     case 'quarantine': {
-      // Self or adjacent
       const targets = [cur.id];
       adjacent
         .filter(pos => !hasDoorBetween(state, cur.position, pos))
@@ -189,9 +184,7 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         });
       return targets;
     }
-    case 'locked_door':
-    case 'rotten_ropes': {
-      // Adjacent positions only
+    case 'locked_door': {
       return adjacent
         .filter(pos => !hasDoorBetween(state, cur.position, pos))
         .map(pos => playerAtPosition(state, pos)!)
@@ -199,19 +192,22 @@ export function getValidTargets(state: GameState, cardDefId: string): number[] {
         .map(p => p.id);
     }
     case 'temptation': {
-      // Any alive, not in quarantine
       return state.players
         .filter(p => p.isAlive && p.id !== cur.id && !p.inQuarantine)
+        .map(p => p.id);
+    }
+    case 'lovecraft':
+    case 'necronomicon': {
+      return state.players
+        .filter(p => p.isAlive && p.id !== cur.id)
         .map(p => p.id);
     }
     case 'whisky':
     case 'watch_your_back':
     case 'persistence': {
-      // Self-targeted, no target selection needed
       return [];
     }
     default:
-      if (def.category === 'defense') return [];
       return [];
   }
 }
@@ -224,19 +220,23 @@ export function canPlayCard(state: GameState, cardDefId: string): boolean {
   // Cannot play infection cards
   if (def.category === 'infection') return false;
 
-  // Cannot play defense cards during action phase (only during trade)
+  // Cannot play defense cards during action phase
   if (def.category === 'defense' && state.step !== 'trade_response') return false;
 
+  // Cannot play panic cards from hand (they auto-play when drawn)
+  if (def.category === 'panic') return false;
+
   // Quarantined players cannot play events
-  if (cur.inQuarantine && def.category !== 'panic') return false;
+  if (cur.inQuarantine) return false;
 
   // Self-targeted cards always playable
   if (['whisky', 'watch_your_back', 'persistence'].includes(cardDefId)) return true;
 
   // Cards requiring targets need at least one valid target
   const targets = getValidTargets(state, cardDefId);
-  if (['flamethrower', 'analysis', 'suspicion', 'swap_places', 'get_out_of_here',
-       'you_better_run', 'quarantine', 'locked_door', 'rotten_ropes', 'temptation'].includes(cardDefId)) {
+  if (['flamethrower', 'analysis', 'suspicion', 'swap_places',
+       'you_better_run', 'quarantine', 'locked_door', 'temptation',
+       'lovecraft', 'necronomicon'].includes(cardDefId)) {
     return targets.length > 0;
   }
 
@@ -249,10 +249,8 @@ export function canDiscardCard(_state: GameState, player: Player, cardUid: strin
   const card = player.hand.find(c => c.uid === cardUid);
   if (!card) return false;
 
-  // The Thing card can NEVER be discarded
   if (card.defId === 'the_thing') return false;
 
-  // Infected players must keep at least 1 Infected! card
   if (player.role === 'infected' && card.defId === 'infected') {
     const infectedCount = player.hand.filter(c => c.defId === 'infected').length;
     if (infectedCount <= 1) return false;
@@ -267,21 +265,16 @@ export function canTradeCard(state: GameState, player: Player, cardUid: string):
   const card = player.hand.find(c => c.uid === cardUid);
   if (!card) return false;
 
-  // The Thing card can NEVER be traded
   if (card.defId === 'the_thing') return false;
 
-  // Only The Thing can offer Infected! cards
   if (card.defId === 'infected' && player.role !== 'thing') {
-    // Infected can give back to The Thing only
     if (player.role === 'infected') {
-      // Check if trading with The Thing
       const partner = getTradePartner(state);
       if (partner && partner.role === 'thing') return true;
     }
     return false;
   }
 
-  // Infected must keep at least 1 Infected! card
   if (player.role === 'infected' && card.defId === 'infected') {
     const infectedCount = player.hand.filter(c => c.defId === 'infected').length;
     if (infectedCount <= 1) return false;
@@ -296,7 +289,6 @@ function buildDeck(playerCount: number): { deck: CardInstance[]; thingCard: Card
   const cards: CardInstance[] = [];
   let thingCard: CardInstance | null = null;
 
-  // copiesByPlayerCount index: 0=4p, 1=5p, 2=6p, 3=7p, 4=8p, 5=9p, 6=10p, 7=11p
   const countIdx = Math.min(Math.max(playerCount - 4, 0), 7);
 
   for (const def of CARD_DEFS) {
@@ -347,7 +339,6 @@ export function createInitialState(): GameState {
 // ── Reduce ──────────────────────────────────────────────────────────────────
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
-  // Clone state (shallow is fine for most fields, deep clone players/deck/etc.)
   const s: GameState = {
     ...state,
     players: state.players.map(p => ({ ...p, hand: [...p.hand] })),
@@ -371,7 +362,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const count = names.length;
       const { deck, thingCard } = buildDeck(count);
 
-      // Separate event and panic cards for initial deal
       const eventCards = deck.filter(c => getCardDef(c.defId).back === 'event' && c.defId !== 'infected');
       const infectedCards = deck.filter(c => c.defId === 'infected');
       const panicCards = deck.filter(c => getCardDef(c.defId).back === 'panic');
@@ -388,8 +378,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }));
 
       if (action.thingInDeck) {
-        // "Thing in deck" variant: deal 4 regular event cards to each player,
-        // shuffle The Thing into the draw deck — any player may draw it during play.
         const dealPool = shuffle([...eventCards]);
         for (let i = 0; i < count; i++) {
           for (let j = 0; j < 4; j++) {
@@ -397,12 +385,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             if (card) players[i].hand.push(card);
           }
         }
-        // Remaining event cards + The Thing + infected + panic = main deck
         const mainDeck = [...dealPool, thingCard, ...infectedCards, ...panicCards];
         shuffle(mainDeck);
         s.deck = mainDeck;
       } else {
-        // Standard variant: one player is pre-assigned as The Thing, gets the The Thing card
         const thingPlayerIdx = Math.floor(Math.random() * count);
         players[thingPlayerIdx].role = 'thing';
         shuffle(eventCards);
@@ -422,7 +408,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           }
         }
 
-        // Remaining event cards + all infected + all panic = main deck
         const mainDeck = [...eventCards, ...infectedCards, ...panicCards];
         shuffle(mainDeck);
         s.deck = mainDeck;
@@ -454,8 +439,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'DRAW_CARD': {
       if (s.step !== 'draw') return s;
-      if (s.pendingAction) return s; // Don't draw while a pending action is active
-      s.panicAnnouncement = null; // Clear previous panic announcement
+      if (s.pendingAction) return s;
+      s.panicAnnouncement = null;
       const cur = currentPlayer(s);
       const card = drawFromDeck(s);
       if (!card) return s;
@@ -463,7 +448,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const def = getCardDef(card.defId);
 
       if (def.back === 'panic') {
-        // Panic card: play immediately, show announcement to all players
         log(s,
           `${cur.name} drew panic card: ${def.name}`,
           `${cur.name} вытянул(а) панику: ${def.nameRu}`
@@ -471,27 +455,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         s.panicAnnouncement = card.defId;
         applyPanicEffect(s, card);
         s.discard.push(card);
-        // After panic, draw again (unless a pending action like just_between_us needs resolution first)
         if (!s.pendingAction) {
-          s.step = 'draw'; // Player draws again after panic
+          s.step = 'draw';
         }
-        // If pendingAction was set by panic (e.g. just_between_us), step stays 'draw'
-        // and we wait for the pending action to resolve before allowing the next draw
       } else if (card.defId === 'the_thing') {
-        // Drew The Thing from deck — this player is now The Thing
         cur.role = 'thing';
         cur.hand.push(card);
         log(s, `${cur.name} drew a card.`, `${cur.name} взял(а) карту.`);
         s.step = 'play_or_discard';
       } else {
-        // Event card: add to hand
         cur.hand.push(card);
         log(s,
           `${cur.name} drew a card.`,
           `${cur.name} взял(а) карту.`
         );
 
-        // If quarantined: must discard 1 card (can't play)
         if (cur.inQuarantine) {
           s.pendingAction = { type: 'choose_card_to_discard' };
           s.step = 'play_or_discard';
@@ -529,25 +507,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const card = cur.hand[cardIdx];
       const def = getCardDef(card.defId);
 
-      // If card needs a target and none provided, show target selection
       if (needsTarget(card.defId) && action.targetPlayerId === undefined) {
         const targets = getValidTargets(s, card.defId);
         if (targets.length === 0) return s;
         if (targets.length === 1) {
-          // Auto-select single target
           return gameReducer(state, { ...action, targetPlayerId: targets[0] });
         }
         s.pendingAction = { type: 'choose_target', cardUid: card.uid, cardDefId: card.defId, targets };
         return s;
       }
 
-      // Remove card from hand
       cur.hand.splice(cardIdx, 1);
-
-      // Apply effect
       applyCardEffect(s, cur, card, action.targetPlayerId);
 
-      // Discard played card (unless it's an obstacle that stays on table)
       if (def.category !== 'obstacle') {
         s.discard.push(card);
       }
@@ -557,7 +529,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         `${cur.name} сыграл(а) ${def.nameRu}${action.targetPlayerId !== undefined ? ` на ${getPlayer(s, action.targetPlayerId).name}` : ''}.`
       );
 
-      // Check if we need to stay in play_or_discard (Persistence allows extra plays)
       if (s.step === 'play_or_discard' && !s.pendingAction) {
         s.step = 'trade';
         handleTradeStep(s);
@@ -584,7 +555,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return s;
       }
 
-      // Check for obstacles
       if (cur.inQuarantine || partner.inQuarantine ||
           hasDoorBetween(s, cur.position, partner.position)) {
         s.step = 'end_turn';
@@ -613,10 +583,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const from = getPlayer(s, fromId);
       const defender = getPlayer(s, defenderId);
 
-      // Check responder can trade this card
       if (!canTradeCard(s, defender, action.cardUid)) return s;
 
-      // Execute the swap
       const fromCardIdx = from.hand.findIndex(c => c.uid === offeredCardUid);
       const defCardIdx = defender.hand.findIndex(c => c.uid === action.cardUid);
       if (fromCardIdx === -1 || defCardIdx === -1) return s;
@@ -626,13 +594,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       from.hand[fromCardIdx] = defCard;
       defender.hand[defCardIdx] = fromCard;
 
-      // Check infection (no log — infection is secret)
-      if (fromCard.defId === 'infected' && from.role === 'thing' && defender.role === 'human') {
-        defender.role = 'infected';
-      }
-      if (defCard.defId === 'infected' && defender.role === 'thing' && from.role === 'human') {
-        from.role = 'infected';
-      }
+      checkInfection(from, defender, fromCard, defCard);
 
       log(s,
         `${from.name} and ${defender.name} traded cards.`,
@@ -659,35 +621,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const allowedDefenseIds =
         reason === 'trade'
-          ? ['fear', 'no_thanks', 'miss', 'cant_be_friends']
+          ? ['fear', 'no_thanks', 'miss']
           : reason === 'flamethrower'
             ? ['no_barbecue']
             : ['im_fine_here'];
 
       if (!allowedDefenseIds.includes(card.defId)) return s;
 
-      // Remove defense card and discard
       defender.hand.splice(cardIdx, 1);
       s.discard.push(card);
 
-      // Draw replacement event card for defender
       const replacement = drawEventCard(s);
       if (replacement) defender.hand.push(replacement);
 
       switch (card.defId) {
-        case 'no_thanks':
-        case 'cant_be_friends': {
-          const cardNameLog = card.defId === 'cant_be_friends' ? 'Can\'t We Be Friends?' : 'No Thanks!';
-          const cardNameRuLog = card.defId === 'cant_be_friends' ? '«Давай дружить?»' : '«Нет, спасибо!»';
-          log(s, `${defender.name} played ${cardNameLog} Trade refused.`,
-              `${defender.name} сыграл(а) ${cardNameRuLog} Обмен отклонён.`);
+        case 'no_thanks': {
+          log(s, `${defender.name} played No Thanks! Trade refused.`,
+              `${defender.name} сыграл(а) «Нет уж, спасибо!» Обмен отклонён.`);
           s.pendingAction = null;
           s.step = 'end_turn';
           advanceTurn(s);
           break;
         }
         case 'fear': {
-          // Defender sees the offered card
           const from = getPlayer(s, fromId);
           const offeredCard = from.hand.find(c => c.uid === offeredCardUid);
           if (offeredCard) {
@@ -705,7 +661,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         case 'miss': {
           log(s, `${defender.name} played Miss! Next player must trade instead.`,
               `${defender.name} сыграл(а) «Мимо!» Следующий игрок обменивается.`);
-          // Find next player after defender in turn direction
           const alivePos = alivePositions(s);
           const defPosIdx = alivePos.indexOf(defender.position);
           const nextIdx = (defPosIdx + s.direction + alivePos.length) % alivePos.length;
@@ -739,7 +694,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
         case 'im_fine_here': {
           log(s, `${defender.name} played I'm Fine Here! Swap cancelled.`,
-              `${defender.name} сыграл(а) «Мне и тут хорошо!» Обмен местами отменён.`);
+              `${defender.name} сыграл(а) «Мне и здесь неплохо!» Обмен местами отменён.`);
           s.pendingAction = null;
           if (s.step === 'play_or_discard') {
             s.step = 'trade';
@@ -752,7 +707,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'DECLINE_DEFENSE': {
-      // Defender chooses NOT to play their defense card (e.g. No Barbecue, I'm Fine Here)
       if (!s.pendingAction || s.pendingAction.type !== 'trade_defense') return s;
       const { fromId, defenderId, reason } = s.pendingAction;
       const defFrom = getPlayer(s, fromId);
@@ -761,7 +715,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       s.pendingAction = null;
 
       if (reason === 'flamethrower') {
-        // Defender accepts elimination
         log(s,
           `${defTarget.name} chose not to defend against Flamethrower.`,
           `${defTarget.name} решил(а) не защищаться от Огнемёта.`
@@ -772,7 +725,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           handleTradeStep(s);
         }
       } else if (reason === 'swap') {
-        // Defender accepts the seat swap
         log(s,
           `${defTarget.name} chose not to defend against the swap.`,
           `${defTarget.name} решил(а) не защищаться от перемещения.`
@@ -794,15 +746,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'CONFIRM_VIEW': {
       s.pendingAction = null;
       if (s.step === 'trade_response') {
-        // After viewing during trade (e.g. Fear defense), advance turn
         s.step = 'end_turn';
         advanceTurn(s);
       } else if (s.step === 'play_or_discard') {
-        // After viewing during play phase (e.g. Analysis, Whisky), move to trade
         s.step = 'trade';
         handleTradeStep(s);
       } else if (s.step === 'end_turn') {
-        // Fallback: if somehow stuck at end_turn with a view, advance
         advanceTurn(s);
       }
       // If step is 'draw', do nothing — player will draw again
@@ -811,7 +760,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'PERSISTENCE_PICK': {
       const cur = currentPlayer(s);
-      // This is handled via pending action with drawn cards
       if (s.pendingAction?.type === 'persistence_pick') {
         const { drawnCards } = s.pendingAction;
         const keep = drawnCards.find(c => c.uid === action.keepUid);
@@ -820,8 +768,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           drawnCards.filter(c => c.uid !== action.keepUid).forEach(c => s.discard.push(c));
         }
         s.pendingAction = null;
-        // Explicitly keep step at play_or_discard so the player can play or discard another card
-        // (Persistence allows: keep 1 card, then play or discard 1 card from hand)
         s.step = 'play_or_discard';
       }
       return s;
@@ -833,26 +779,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const humans = s.players.filter(p => p.isAlive && p.role === 'human');
       if (humans.length === 0) {
-        // Correct declaration
         const infected = s.players.filter(p => p.isAlive && p.role === 'infected');
         const eliminated = s.players.filter(p => !p.isAlive);
         if (infected.length === 0 && eliminated.length === 0) {
-          // Impossible scenario, but handle: only The Thing
           s.winner = 'thing_solo';
           s.winnerPlayerIds = [cur.id];
         } else if (eliminated.length === 0) {
-          // All infected, nobody eliminated → only The Thing wins
           s.winner = 'thing_solo';
           s.winnerPlayerIds = [cur.id];
         } else {
-          // The Thing + surviving infected win
           s.winner = 'thing';
           s.winnerPlayerIds = [cur.id, ...infected.map(p => p.id)];
         }
         log(s, 'The Thing declares victory — no humans remain!',
             'Нечто объявляет победу — людей больше нет!');
       } else {
-        // Wrong declaration — humans win!
         s.winner = 'humans';
         s.winnerPlayerIds = humans.map(p => p.id);
         log(s, 'The Thing declared victory incorrectly — Humans win!',
@@ -867,32 +808,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const cur = currentPlayer(s);
       const target = getPlayer(s, s.pendingAction.targetPlayerId);
 
-      // Find the card to trade from current player
       const cardIdx = cur.hand.findIndex(c => c.uid === action.cardUid);
       if (cardIdx === -1) return s;
 
       const curCard = cur.hand[cardIdx];
+      if (!validateTradeCard(cur, target, curCard)) return s;
 
-      // ── Infection validation for Temptation ──
-      // The Thing card can never be traded
-      if (curCard.defId === 'the_thing') return s;
-
-      // Only The Thing can pass Infected cards to non-Thing players
-      if (curCard.defId === 'infected') {
-        if (cur.role === 'thing') {
-          // Thing can infect anyone via Temptation
-        } else if (cur.role === 'infected') {
-          // Infected can only give Infected back to The Thing
-          if (target.role !== 'thing') return s;
-          // Must keep at least 1 Infected card
-          if (cur.hand.filter(c => c.defId === 'infected').length <= 1) return s;
-        } else {
-          // Humans cannot pass Infected cards to anyone
-          return s;
-        }
-      }
-
-      // Now wait for the target player to choose their card
       s.pendingAction = {
         type: 'temptation_response',
         fromId: cur.id,
@@ -908,40 +829,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const from = getPlayer(s, fromId);
       const target = getPlayer(s, toId);
 
-      // Validate the offered card is still in from's hand
       const fromCardIdx = from.hand.findIndex(c => c.uid === offeredCardUid);
       if (fromCardIdx === -1) return s;
       const fromCard = from.hand[fromCardIdx];
 
-      // Validate the card the target wants to give
       const targetCardIdx = target.hand.findIndex(c => c.uid === action.cardUid);
       if (targetCardIdx === -1) return s;
       const targetCard = target.hand[targetCardIdx];
 
-      // Validate target can give this card (same rules as Temptation offering)
-      if (targetCard.defId === 'the_thing') return s;
-      if (targetCard.defId === 'infected') {
-        if (target.role === 'thing') {
-          // Thing can pass Infected
-        } else if (target.role === 'infected') {
-          if (from.role !== 'thing') return s;
-          if (target.hand.filter(c => c.defId === 'infected').length <= 1) return s;
-        } else {
-          return s; // Humans can't give Infected
-        }
-      }
+      if (!validateTradeCard(target, from, targetCard)) return s;
 
-      // Execute the swap
       from.hand[fromCardIdx] = targetCard;
       target.hand[targetCardIdx] = fromCard;
 
-      // Check infection (secret — no log)
-      if (fromCard.defId === 'infected' && from.role === 'thing' && target.role === 'human') {
-        target.role = 'infected';
-      }
-      if (targetCard.defId === 'infected' && target.role === 'thing' && from.role === 'human') {
-        from.role = 'infected';
-      }
+      checkInfection(from, target, fromCard, targetCard);
 
       s.tradeSkipped = true;
       s.pendingAction = null;
@@ -962,10 +863,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const pa = s.pendingAction;
       const { playerId, cardUid } = action;
 
-      // Check this player still needs to submit
       if (!pa.pendingPlayerIds.includes(playerId)) return s;
 
-      // Validate card belongs to this player and is tradeable
       const player = getPlayer(s, playerId);
       const cardIdx = player.hand.findIndex(c => c.uid === cardUid);
       if (cardIdx === -1) return s;
@@ -974,11 +873,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (card.defId === 'infected' && player.role === 'infected' &&
           player.hand.filter(c => c.defId === 'infected').length <= 1) return s;
 
-      // Record choice
       pa.chosen.push({ playerId, cardUid });
       pa.pendingPlayerIds = pa.pendingPlayerIds.filter(id => id !== playerId);
 
-      // When everyone has chosen, execute all passes simultaneously
       if (pa.pendingPlayerIds.length === 0) {
         const direction = pa.direction;
         const alivePos = s.players.filter(p => p.isAlive).map(p => p.position).sort((a, b) => a - b);
@@ -993,14 +890,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           const passedCard = passer.hand[idx];
           passer.hand.splice(idx, 1);
           nextPlayer.hand.push(passedCard);
-          // Check infection (secret)
           if (passedCard.defId === 'infected' && passer.role === 'thing' && nextPlayer.role === 'human') {
             nextPlayer.role = 'infected';
           }
         }
         s.pendingAction = null;
-        log(s, 'Party! Everyone passed a card to their neighbor.', 'Вечеринка! Все передали карту соседу.');
-        s.step = 'draw';
+        log(s, 'Chain Reaction! Everyone passed a card.', 'Цепная реакция! Все передали карту.');
+        // Chain reaction ends turn
+        s.step = 'end_turn';
+        advanceTurn(s);
       }
       return s;
     }
@@ -1027,7 +925,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return s;
       }
 
-      // Both players now choose their own card
       s.pendingAction = {
         type: 'just_between_us_pick',
         playerA: player1,
@@ -1055,10 +952,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       } else if (playerId === pa.playerB && pa.cardUidB === null) {
         pa.cardUidB = cardUid;
       } else {
-        return s; // Already submitted
+        return s;
       }
 
-      // Execute when both have chosen
       if (pa.cardUidA !== null && pa.cardUidB !== null) {
         const first = getPlayer(s, pa.playerA);
         const second = getPlayer(s, pa.playerB);
@@ -1071,13 +967,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         first.hand[firstIdx] = secondCard;
         second.hand[secondIdx] = firstCard;
 
-        // Check infection (secret)
-        if (firstCard.defId === 'infected' && first.role === 'thing' && second.role === 'human') {
-          second.role = 'infected';
-        }
-        if (secondCard.defId === 'infected' && second.role === 'thing' && first.role === 'human') {
-          first.role = 'infected';
-        }
+        checkInfection(first, second, firstCard, secondCard);
 
         s.pendingAction = null;
         s.step = 'draw';
@@ -1089,6 +979,173 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return s;
     }
 
+    // ── New panic action handlers ──────────────────────────────────────
+
+    case 'PANIC_SELECT_TARGET': {
+      if (!s.pendingAction || s.pendingAction.type !== 'panic_choose_target') return s;
+      const { panicDefId, targets } = s.pendingAction;
+      if (!targets.includes(action.targetPlayerId)) return s;
+      s.pendingAction = null;
+      resolvePanicTarget(s, panicDefId, action.targetPlayerId);
+      return s;
+    }
+
+    case 'BLIND_DATE_PICK': {
+      if (!s.pendingAction || s.pendingAction.type !== 'blind_date_swap') return s;
+      const cur = currentPlayer(s);
+      const cardIdx = cur.hand.findIndex(c => c.uid === action.cardUid);
+      if (cardIdx === -1) return s;
+      const card = cur.hand[cardIdx];
+      if (card.defId === 'the_thing') return s;
+      if (card.defId === 'infected' && cur.role === 'infected' &&
+          cur.hand.filter(c => c.defId === 'infected').length <= 1) return s;
+
+      // Draw top event card from deck (skip panics)
+      const drawn = drawEventCard(s);
+      if (drawn) {
+        cur.hand[cardIdx] = drawn;
+        s.discard.push(card);
+      }
+
+      s.pendingAction = null;
+      log(s, `${cur.name} swapped a card with the deck (Blind Date).`,
+          `${cur.name} обменял(а) карту с колодой (Свидание вслепую).`);
+      // Blind date ends turn
+      s.step = 'end_turn';
+      advanceTurn(s);
+      return s;
+    }
+
+    case 'FORGETFUL_DISCARD_PICK': {
+      if (!s.pendingAction || s.pendingAction.type !== 'forgetful_discard') return s;
+      const cur = currentPlayer(s);
+      const cardIdx = cur.hand.findIndex(c => c.uid === action.cardUid);
+      if (cardIdx === -1) return s;
+      if (!canDiscardCard(s, cur, action.cardUid)) return s;
+
+      const [discarded] = cur.hand.splice(cardIdx, 1);
+      s.discard.push(discarded);
+
+      const remaining = s.pendingAction.remaining - 1;
+      if (remaining > 0 && cur.hand.filter(c => canDiscardCard(s, cur, c.uid)).length > 0) {
+        s.pendingAction = { type: 'forgetful_discard', remaining };
+      } else {
+        // Draw 3 event cards
+        for (let i = 0; i < 3; i++) {
+          const drawn = drawEventCard(s);
+          if (drawn) cur.hand.push(drawn);
+        }
+        s.pendingAction = null;
+        log(s, `${cur.name} discarded and drew new cards (Forgetful).`,
+            `${cur.name} сбросил(а) и взял(а) новые карты (Забывчивость).`);
+        s.step = 'draw';
+      }
+      return s;
+    }
+
+    case 'PANIC_TRADE_SELECT': {
+      if (!s.pendingAction || s.pendingAction.type !== 'panic_trade') return s;
+      const cur = currentPlayer(s);
+      const target = getPlayer(s, s.pendingAction.targetPlayerId);
+
+      const cardIdx = cur.hand.findIndex(c => c.uid === action.cardUid);
+      if (cardIdx === -1) return s;
+      const curCard = cur.hand[cardIdx];
+      if (!validateTradeCard(cur, target, curCard)) return s;
+
+      s.pendingAction = {
+        type: 'panic_trade_response',
+        fromId: cur.id,
+        toId: target.id,
+        offeredCardUid: curCard.uid,
+      };
+      return s;
+    }
+
+    case 'PANIC_TRADE_RESPOND': {
+      if (!s.pendingAction || s.pendingAction.type !== 'panic_trade_response') return s;
+      const { fromId, toId, offeredCardUid } = s.pendingAction;
+      const from = getPlayer(s, fromId);
+      const target = getPlayer(s, toId);
+
+      const fromCardIdx = from.hand.findIndex(c => c.uid === offeredCardUid);
+      if (fromCardIdx === -1) return s;
+      const fromCard = from.hand[fromCardIdx];
+
+      const targetCardIdx = target.hand.findIndex(c => c.uid === action.cardUid);
+      if (targetCardIdx === -1) return s;
+      const targetCard = target.hand[targetCardIdx];
+
+      if (!validateTradeCard(target, from, targetCard)) return s;
+
+      from.hand[fromCardIdx] = targetCard;
+      target.hand[targetCardIdx] = fromCard;
+
+      checkInfection(from, target, fromCard, targetCard);
+
+      s.pendingAction = null;
+      log(s,
+        `${from.name} and ${target.name} traded cards (Can't We Be Friends?).`,
+        `${from.name} и ${target.name} обменялись картами (Давай дружить?).`
+      );
+      s.step = 'draw';
+      return s;
+    }
+
+    case 'REVELATIONS_RESPOND': {
+      if (!s.pendingAction || s.pendingAction.type !== 'revelations_round') return s;
+      const pa = s.pendingAction;
+      const revealer = s.players[pa.revealOrder[pa.currentRevealerIdx]];
+
+      if (action.show) {
+        // Show this player's hand to all
+        const hasInfected = revealer.hand.some(c => c.defId === 'infected');
+        log(s,
+          `${revealer.name} showed their hand during Revelations.`,
+          `${revealer.name} показал(а) свои карты во время Времени признаний.`
+        );
+        if (hasInfected) {
+          log(s, 'An Infected card was revealed! Revelations end.',
+              'Обнаружена карта «Заражение!»! Время признаний завершено.');
+          // Show this player's hand
+          s.pendingAction = {
+            type: 'whisky_reveal',
+            playerId: revealer.id,
+            cards: [...revealer.hand],
+            viewerPlayerId: revealer.id,
+            public: true,
+          };
+          return s;
+        }
+        // Show hand then continue
+        s.pendingAction = {
+          type: 'whisky_reveal',
+          playerId: revealer.id,
+          cards: [...revealer.hand],
+          viewerPlayerId: revealer.id,
+          public: true,
+        };
+        // After confirm, we need to continue revelations — store next index
+        // We'll handle this in CONFIRM_VIEW by checking if revelations should continue
+        return s;
+      } else {
+        // Player passes
+        log(s,
+          `${revealer.name} chose not to show their hand.`,
+          `${revealer.name} решил(а) не показывать карты.`
+        );
+        const nextIdx = pa.currentRevealerIdx + 1;
+        if (nextIdx >= pa.revealOrder.length) {
+          s.pendingAction = null;
+          log(s, 'Revelations complete.', 'Время признаний завершено.');
+          s.step = 'draw';
+        } else {
+          s.pendingAction = { ...pa, currentRevealerIdx: nextIdx };
+        }
+        return s;
+      }
+    }
+
     default:
       return s;
   }
@@ -1098,8 +1155,33 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
 function needsTarget(defId: string): boolean {
   return ['flamethrower', 'analysis', 'axe', 'suspicion', 'swap_places',
-          'get_out_of_here', 'you_better_run', 'quarantine', 'locked_door',
-          'rotten_ropes', 'temptation'].includes(defId);
+          'you_better_run', 'quarantine', 'locked_door', 'temptation',
+          'lovecraft', 'necronomicon'].includes(defId);
+}
+
+/** Validate if a player can give a specific card in a trade/temptation context */
+function validateTradeCard(giver: Player, _receiver: Player, card: CardInstance): boolean {
+  if (card.defId === 'the_thing') return false;
+  if (card.defId === 'infected') {
+    if (giver.role === 'thing') return true;
+    if (giver.role === 'infected') {
+      if (_receiver.role !== 'thing') return false;
+      if (giver.hand.filter(c => c.defId === 'infected').length <= 1) return false;
+      return true;
+    }
+    return false;
+  }
+  return true;
+}
+
+/** Check and apply infection after a card swap */
+function checkInfection(p1: Player, p2: Player, cardFromP1: CardInstance, cardFromP2: CardInstance): void {
+  if (cardFromP1.defId === 'infected' && p1.role === 'thing' && p2.role === 'human') {
+    p2.role = 'infected';
+  }
+  if (cardFromP2.defId === 'infected' && p2.role === 'thing' && p1.role === 'human') {
+    p1.role = 'infected';
+  }
 }
 
 function handleTradeStep(s: GameState): void {
@@ -1112,7 +1194,6 @@ function handleTradeStep(s: GameState): void {
   const cur = currentPlayer(s);
   const partner = getTradePartner(s);
 
-  // Skip trade if obstacles prevent it
   if (!partner || cur.inQuarantine || partner.inQuarantine ||
       hasDoorBetween(s, cur.position, partner.position)) {
     log(s, 'Trade skipped due to obstacles.', 'Обмен пропущен из-за препятствий.');
@@ -1122,7 +1203,6 @@ function handleTradeStep(s: GameState): void {
 }
 
 function advanceTurn(s: GameState): void {
-  // Decrease quarantine counters
   const cur = currentPlayer(s);
   if (cur.inQuarantine) {
     cur.quarantineTurnsLeft--;
@@ -1132,20 +1212,17 @@ function advanceTurn(s: GameState): void {
     }
   }
 
-  // Move to next player
   s.currentPlayerIndex = nextPlayerIndex(s);
   s.step = 'draw';
   s.tradeSkipped = false;
   s.pendingAction = null;
 
-  // Skip dead players
   let safety = 0;
   while (!s.players[s.currentPlayerIndex].isAlive && safety < s.players.length) {
     s.currentPlayerIndex = nextPlayerIndex(s);
     safety++;
   }
 
-  // Check if game should end (1 player left)
   const alive = s.players.filter(p => p.isAlive);
   if (alive.length <= 1) {
     s.phase = 'game_over';
@@ -1160,7 +1237,6 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
   switch (card.defId) {
     case 'flamethrower': {
       if (!target) break;
-      // Check for No Barbecue defense
       const hasDefense = target.hand.some(c => c.defId === 'no_barbecue');
       if (hasDefense) {
         s.pendingAction = {
@@ -1170,7 +1246,7 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
           offeredCardUid: card.uid,
           reason: 'flamethrower',
         };
-        return; // Wait for defense response
+        return;
       }
       eliminatePlayer(s, target);
       break;
@@ -1229,7 +1305,6 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
 
     case 'swap_places': {
       if (!target) break;
-      // Check for "I'm Fine Here" defense
       const hasFineHere = target.hand.some(c => c.defId === 'im_fine_here');
       if (hasFineHere) {
         s.pendingAction = {
@@ -1245,7 +1320,7 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
       break;
     }
 
-    case 'get_out_of_here': {
+    case 'you_better_run': {
       if (!target) break;
       const hasFineHere2 = target.hand.some(c => c.defId === 'im_fine_here');
       if (hasFineHere2) {
@@ -1264,7 +1339,6 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
 
     case 'temptation': {
       if (!target) break;
-      // The Temptation card is already spent; now choose which remaining card to offer.
       s.pendingAction = {
         type: 'choose_card_to_give',
         targetPlayerId: target.id,
@@ -1275,16 +1349,13 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
     case 'axe': {
       if (!target) break;
       if (target.id === player.id) {
-        // Remove own quarantine
         player.inQuarantine = false;
         player.quarantineTurnsLeft = 0;
       } else {
-        // Remove target quarantine or door between
         if (target.inQuarantine) {
           target.inQuarantine = false;
           target.quarantineTurnsLeft = 0;
         } else {
-          // Remove door between positions
           s.doors = s.doors.filter(
             d => !((d.between[0] === player.position && d.between[1] === target.position) ||
                    (d.between[0] === target.position && d.between[1] === player.position))
@@ -1307,33 +1378,23 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
       break;
     }
 
-    case 'you_better_run': {
-      // Swap with any non-quarantined player, ignoring doors
+    // ── Promo cards ──
+    case 'lovecraft': {
+      // Look at any chosen player's hand (like Analysis but any player)
       if (!target) break;
-      const hasFineHere3 = target.hand.some(c => c.defId === 'im_fine_here');
-      if (hasFineHere3) {
-        s.pendingAction = {
-          type: 'trade_defense',
-          defenderId: target.id,
-          fromId: player.id,
-          offeredCardUid: card.uid,
-          reason: 'swap',
-        };
-        return;
-      }
-      swapPositions(s, player, target);
+      s.pendingAction = {
+        type: 'view_hand',
+        targetPlayerId: target.id,
+        cards: [...target.hand],
+        viewerPlayerId: player.id,
+      };
       break;
     }
 
-    case 'rotten_ropes': {
-      // Place a locked door between two adjacent players
+    case 'necronomicon': {
+      // Eliminate any chosen player (no defense possible)
       if (!target) break;
-      s.doors.push({ between: [player.position, target.position] });
-      break;
-    }
-
-    case 'cant_be_friends': {
-      // Defense card — played from hand as reaction, not as an action card
+      eliminatePlayer(s, target);
       break;
     }
   }
@@ -1341,7 +1402,6 @@ function applyCardEffect(s: GameState, player: Player, card: CardInstance, targe
 
 function eliminatePlayer(s: GameState, player: Player): void {
   player.isAlive = false;
-  // Discard all cards face-down
   s.discard.push(...player.hand);
   player.hand = [];
 
@@ -1350,7 +1410,6 @@ function eliminatePlayer(s: GameState, player: Player): void {
     `${player.name} уничтожен(а)!`
   );
 
-  // Check if The Thing was eliminated
   if (player.role === 'thing') {
     const humans = s.players.filter(p => p.isAlive && p.role === 'human');
     s.winner = 'humans';
@@ -1365,205 +1424,258 @@ function swapPositions(s: GameState, p1: Player, p2: Player): void {
   const temp = p1.position;
   p1.position = p2.position;
   p2.position = temp;
-  // Update seats array
   s.seats[p1.position] = p1.id;
   s.seats[p2.position] = p2.id;
 }
 
-function assignPlayersToPositions(s: GameState, assignments: Array<{ playerId: number; position: number }>): void {
-  assignments.forEach(({ playerId, position }) => {
-    const player = getPlayer(s, playerId);
-    player.position = position;
-    s.seats[position] = playerId;
-  });
-}
+// ── Panic Effects ───────────────────────────────────────────────────────────
 
 function applyPanicEffect(s: GameState, card: CardInstance): void {
+  const cur = currentPlayer(s);
+
   switch (card.defId) {
-    case 'panic_doors_open': {
-      s.doors = [];
-      log(s, 'All locked doors removed!', 'Все заблокированные двери убраны!');
-      break;
-    }
-    case 'panic_quarantine_lifted': {
-      s.players.forEach(p => {
-        p.inQuarantine = false;
-        p.quarantineTurnsLeft = 0;
-      });
-      log(s, 'All quarantines removed!', 'Все карантины сняты!');
-      break;
-    }
-    case 'panic_musical_chairs': {
-      const alive = s.players.filter(p => p.isAlive);
-      const positions = alive.map(p => p.position).sort((a, b) => a - b);
-      const assignments = positions.map((position, index) => {
-        const fromIndex = (index - s.direction + positions.length) % positions.length;
-        const player = alive.find(p => p.position === positions[fromIndex])!;
-        return { playerId: player.id, position };
-      });
-      assignPlayersToPositions(s, assignments);
-      log(s, 'Musical chairs! Everyone shifts one seat.', 'Музыкальные стулья! Все сдвинулись на одно место.');
-      break;
-    }
+    // ── ...Три, четыре... — remove all locked doors ──
     case 'panic_1234': {
-      const alive = s.players.filter(p => p.isAlive);
-      const positions = alive.map(p => p.position).sort((a, b) => a - b);
-      if (positions.length >= 2) {
-        const cur = currentPlayer(s);
-        const curIdx = positions.indexOf(cur.position);
-        const block = Array.from({ length: Math.min(4, positions.length) }, (_, offset) =>
-          positions[(curIdx + s.direction * (offset + 1) + positions.length * 4) % positions.length]
-        );
-        const uniqueBlock = Array.from(new Set(block));
-        if (uniqueBlock.length >= 2) {
-          const assignments = uniqueBlock.map((position, index) => {
-            const fromIndex = (index + s.direction + uniqueBlock.length) % uniqueBlock.length;
-            const player = alive.find(p => p.position === uniqueBlock[fromIndex])!;
-            return { playerId: player.id, position };
-          });
-          assignPlayersToPositions(s, assignments);
-        }
-      }
-      log(s, 'One, Two... Three, Four... Players shuffling!',
-          'Раз, два... три, четыре... Игроки перемещаются!');
+      s.doors = [];
+      log(s, 'All locked doors removed! (...Three, Four...)',
+          'Все заколоченные двери убраны! (...Три, четыре...)');
       break;
     }
-    case 'panic_party':
+
+    // ── Раз, два... — swap with 3rd player left or right ──
+    case 'panic_one_two': {
+      const alive = s.players.filter(p => p.isAlive);
+      const alivePos = alive.map(p => p.position).sort((a, b) => a - b);
+      const curIdx = alivePos.indexOf(cur.position);
+      if (curIdx === -1 || alivePos.length < 4) {
+        log(s, 'One, Two... — not enough players for swap.', 'Раз, два... — недостаточно игроков.');
+        break;
+      }
+      // 3rd player to the left
+      const leftIdx = (curIdx - 3 + alivePos.length) % alivePos.length;
+      const leftPlayer = alive.find(p => p.position === alivePos[leftIdx]);
+      // 3rd player to the right
+      const rightIdx = (curIdx + 3) % alivePos.length;
+      const rightPlayer = alive.find(p => p.position === alivePos[rightIdx]);
+
+      const targets: number[] = [];
+      if (leftPlayer && !leftPlayer.inQuarantine && leftPlayer.id !== cur.id) targets.push(leftPlayer.id);
+      if (rightPlayer && !rightPlayer.inQuarantine && rightPlayer.id !== cur.id && rightPlayer.id !== leftPlayer?.id) targets.push(rightPlayer.id);
+
+      if (targets.length === 0) {
+        log(s, 'One, Two... — no valid targets (quarantine).', 'Раз, два... — нет доступных целей (карантин).');
+      } else if (targets.length === 1) {
+        // Auto-swap
+        swapPositions(s, cur, getPlayer(s, targets[0]));
+        log(s, `One, Two... ${cur.name} swapped seats!`, `Раз, два... ${cur.name} поменялся(-ась) местами!`);
+      } else {
+        s.pendingAction = { type: 'panic_choose_target', panicDefId: 'panic_one_two', targets };
+      }
+      break;
+    }
+
+    // ── И это вы называете вечеринкой? — remove obstacles + pair swap ──
+    case 'panic_party': {
+      // Remove all quarantine and doors
+      s.players.forEach(p => { p.inQuarantine = false; p.quarantineTurnsLeft = 0; });
+      s.doors = [];
+      log(s, 'Party! All quarantine and locked doors removed!',
+          'Вечеринка! Все карантины и двери убраны!');
+
+      // Pair swap starting from current player clockwise
+      const alive = s.players.filter(p => p.isAlive);
+      const sorted = alive.slice().sort((a, b) => {
+        // Order starting from current player position clockwise
+        const aOff = (a.position - cur.position + s.players.length) % s.players.length;
+        const bOff = (b.position - cur.position + s.players.length) % s.players.length;
+        return aOff - bOff;
+      });
+      // Swap in pairs: 0↔1, 2↔3, etc.
+      for (let i = 0; i + 1 < sorted.length; i += 2) {
+        swapPositions(s, sorted[i], sorted[i + 1]);
+      }
+      if (sorted.length >= 2) {
+        log(s, 'Players swapped seats in pairs!', 'Игроки попарно поменялись местами!');
+      }
+      break;
+    }
+
+    // ── Цепная реакция — all pass card in turn direction ──
     case 'panic_chain_reaction': {
-      // All players must choose 1 card to pass to their neighbor
       const alive = s.players.filter(p => p.isAlive && p.hand.length > 0);
       if (alive.length < 2) break;
-      // chain_reaction passes in opposite direction
-      const passDir: 1 | -1 = card.defId === 'panic_chain_reaction' ? (s.direction === 1 ? -1 : 1) : s.direction;
+      // Pass in turn direction (ignoring quarantine/doors per card description)
       s.pendingAction = {
         type: 'party_pass',
         pendingPlayerIds: alive.map(p => p.id),
         chosen: [],
-        direction: passDir,
+        direction: s.direction,
       };
       break;
     }
+
+    // ── Только между нами... — show cards to adjacent player ──
     case 'panic_between_us': {
-      const alive = s.players.filter(p => p.isAlive);
-      if (alive.length >= 2) {
+      const adjacent = getAdjacentPositions(s, cur.position);
+      const targets = adjacent
+        .map(pos => playerAtPosition(s, pos))
+        .filter((p): p is Player => !!p && p.isAlive)
+        .map(p => p.id);
+      if (targets.length === 0) {
+        log(s, 'Just Between Us — no adjacent players.', 'Только между нами — нет соседних игроков.');
+      } else if (targets.length === 1) {
+        // Auto-select
         s.pendingAction = {
-          type: 'just_between_us',
-          targets: alive.map(p => p.id),
+          type: 'view_hand',
+          targetPlayerId: targets[0],
+          cards: [...cur.hand],
+          viewerPlayerId: targets[0],
+          public: false,
         };
+        log(s, `${cur.name} shows cards to ${getPlayer(s, targets[0]).name} (Just Between Us).`,
+            `${cur.name} показывает карты ${getPlayer(s, targets[0]).name} (Только между нами).`);
+      } else {
+        s.pendingAction = { type: 'panic_choose_target', panicDefId: 'panic_between_us', targets };
       }
       break;
     }
-    case 'panic_quiet_night': {
-      log(s, 'Quiet Night — no talking until next turn!',
-          'Тихая ночь — никаких разговоров до следующего хода!');
-      break;
-    }
-    case 'panic_one_two': {
-      // Next 2 players shift one seat in turn direction
-      const alive2 = s.players.filter(p => p.isAlive);
-      const pos2 = alive2.map(p => p.position).sort((a, b) => a - b);
-      if (pos2.length >= 2) {
-        const cur2 = currentPlayer(s);
-        const curIdx2 = pos2.indexOf(cur2.position);
-        const block2 = Array.from({ length: Math.min(2, pos2.length) }, (_, offset) =>
-          pos2[(curIdx2 + s.direction * (offset + 1) + pos2.length * 4) % pos2.length]
-        );
-        const unique2 = Array.from(new Set(block2));
-        if (unique2.length >= 2) {
-          const assignments2 = unique2.map((position, index) => {
-            const fromIndex = (index + s.direction + unique2.length) % unique2.length;
-            const player = alive2.find(p => p.position === unique2[fromIndex])!;
-            return { playerId: player.id, position };
-          });
-          assignPlayersToPositions(s, assignments2);
-        }
-      }
-      log(s, 'One, Two... Players swapping!', 'Раз, два... Игроки перемещаются!');
-      break;
-    }
+
+    // ── Упс! — show all cards to everyone ──
     case 'panic_oops': {
-      // Current player randomly swaps one card with a random neighbor
-      const cur3 = currentPlayer(s);
-      const neighbors = getAdjacentPositions(s, cur3.position).map(pos =>
-        s.players.find(p => p.position === pos && p.isAlive)
-      ).filter(Boolean) as Player[];
-      if (neighbors.length > 0) {
-        const neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
-        const curTradeable = cur3.hand.filter(c => c.defId !== 'the_thing' &&
-          !(cur3.role === 'infected' && c.defId === 'infected' && cur3.hand.filter(h => h.defId === 'infected').length <= 1));
-        const nbTradeable = neighbor.hand.filter(c => c.defId !== 'the_thing' &&
-          !(neighbor.role === 'infected' && c.defId === 'infected' && neighbor.hand.filter(h => h.defId === 'infected').length <= 1));
-        if (curTradeable.length > 0 && nbTradeable.length > 0) {
-          const curCard3 = curTradeable[Math.floor(Math.random() * curTradeable.length)];
-          const nbCard3 = nbTradeable[Math.floor(Math.random() * nbTradeable.length)];
-          const ci3 = cur3.hand.findIndex(c => c.uid === curCard3.uid);
-          const ni3 = neighbor.hand.findIndex(c => c.uid === nbCard3.uid);
-          cur3.hand[ci3] = nbCard3;
-          neighbor.hand[ni3] = curCard3;
-          // Check infection (secret)
-          if (curCard3.defId === 'infected' && cur3.role === 'thing' && neighbor.role === 'human') neighbor.role = 'infected';
-          if (nbCard3.defId === 'infected' && neighbor.role === 'thing' && cur3.role === 'human') cur3.role = 'infected';
-        }
-      }
-      log(s, 'Oops! A random card was swapped with a neighbor.', 'Уупс! Случайная карта обменялась с соседом.');
+      s.pendingAction = {
+        type: 'whisky_reveal',
+        playerId: cur.id,
+        cards: [...cur.hand],
+        viewerPlayerId: cur.id,
+        public: true,
+      };
+      log(s, `Oops! ${cur.name} shows all cards to everyone!`,
+          `Упс! ${cur.name} показывает все карты всем!`);
       break;
     }
-    case 'panic_forgetful': {
-      // All players discard 1 random card
-      s.players.forEach(p => {
-        if (!p.isAlive || p.hand.length === 0) return;
-        const discardable = p.hand.filter(c => c.defId !== 'the_thing' &&
-          !(p.role === 'infected' && c.defId === 'infected' && p.hand.filter(h => h.defId === 'infected').length <= 1));
-        if (discardable.length > 0) {
-          const pick = discardable[Math.floor(Math.random() * discardable.length)];
-          const idx = p.hand.findIndex(c => c.uid === pick.uid);
-          if (idx !== -1) {
-            s.discard.push(p.hand[idx]);
-            p.hand.splice(idx, 1);
-          }
-        }
-      });
-      log(s, 'Forgetful! Everyone discards a random card.', 'Забывчивость! Все сбрасывают случайную карту.');
-      break;
-    }
-    case 'panic_revelations': {
-      // All players show their hand to everyone via a public reveal
-      // We log it and let the client show everyone's cards
-      log(s, 'Revelations! All players must show their hands.', 'Время признаний! Все игроки показывают свои карты.');
-      // Each player's hand is already visible in full to themselves — for other players
-      // we set a special announcement so the UI can render all hands publicly.
-      // (Implementation: same as whisky_reveal but for all players)
-      // For now: just log the event as the actual hand reveal is implicit in sanitization
-      break;
-    }
+
+    // ── Свидание вслепую — swap card with deck top ──
     case 'panic_blind_date': {
-      // Two random adjacent players trade a random card each
-      const alivePairs = s.players.filter(p => p.isAlive && p.hand.length > 0);
-      if (alivePairs.length >= 2) {
-        const randomPlayer = alivePairs[Math.floor(Math.random() * alivePairs.length)];
-        const adjPositions = getAdjacentPositions(s, randomPlayer.position);
-        const adjAlive = adjPositions.map(pos => s.players.find(p => p.position === pos && p.isAlive)).filter(Boolean) as Player[];
-        if (adjAlive.length > 0) {
-          const partner = adjAlive[Math.floor(Math.random() * adjAlive.length)];
-          const rTradeable = randomPlayer.hand.filter(c => c.defId !== 'the_thing' &&
-            !(randomPlayer.role === 'infected' && c.defId === 'infected' && randomPlayer.hand.filter(h => h.defId === 'infected').length <= 1));
-          const pTradeable = partner.hand.filter(c => c.defId !== 'the_thing' &&
-            !(partner.role === 'infected' && c.defId === 'infected' && partner.hand.filter(h => h.defId === 'infected').length <= 1));
-          if (rTradeable.length > 0 && pTradeable.length > 0) {
-            const rCard = rTradeable[Math.floor(Math.random() * rTradeable.length)];
-            const pCard = pTradeable[Math.floor(Math.random() * pTradeable.length)];
-            const ri = randomPlayer.hand.findIndex(c => c.uid === rCard.uid);
-            const pi = partner.hand.findIndex(c => c.uid === pCard.uid);
-            randomPlayer.hand[ri] = pCard;
-            partner.hand[pi] = rCard;
-            // Check infection (secret)
-            if (rCard.defId === 'infected' && randomPlayer.role === 'thing' && partner.role === 'human') partner.role = 'infected';
-            if (pCard.defId === 'infected' && partner.role === 'thing' && randomPlayer.role === 'human') randomPlayer.role = 'infected';
-            log(s, `Blind Date! ${randomPlayer.name} and ${partner.name} traded a card.`,
-                `Свидание вслепую! ${randomPlayer.name} и ${partner.name} обменялись картой.`);
-          }
+      if (cur.hand.length === 0) break;
+      s.pendingAction = { type: 'blind_date_swap' };
+      break;
+    }
+
+    // ── Забывчивость — discard 3, draw 3 ──
+    case 'panic_forgetful': {
+      const discardable = cur.hand.filter(c => canDiscardCard(s, cur, c.uid));
+      const toDiscard = Math.min(3, discardable.length);
+      if (toDiscard === 0) {
+        // Nothing to discard, just draw 3
+        for (let i = 0; i < 3; i++) {
+          const drawn = drawEventCard(s);
+          if (drawn) cur.hand.push(drawn);
         }
+        log(s, `${cur.name} drew new cards (Forgetful).`, `${cur.name} взял(а) новые карты (Забывчивость).`);
+      } else {
+        s.pendingAction = { type: 'forgetful_discard', remaining: toDiscard };
       }
+      break;
+    }
+
+    // ── Время признаний — sequential voluntary reveal ──
+    case 'panic_revelations': {
+      const alive = s.players.filter(p => p.isAlive);
+      if (alive.length < 2) break;
+      // Build reveal order starting from current player in turn direction
+      const alivePos = alive.map(p => p.position).sort((a, b) => a - b);
+      const curPosIdx = alivePos.indexOf(cur.position);
+      const revealOrder: number[] = [];
+      for (let i = 0; i < alive.length; i++) {
+        const posIdx = (curPosIdx + i * s.direction + alivePos.length * alive.length) % alivePos.length;
+        const player = alive.find(p => p.position === alivePos[posIdx]);
+        if (player) revealOrder.push(s.players.indexOf(player));
+      }
+      s.pendingAction = { type: 'revelations_round', currentRevealerIdx: 0, revealOrder };
+      log(s, 'Revelations! Each player decides whether to show their hand.',
+          'Время признаний! Каждый игрок решает, показывать ли карты.');
+      break;
+    }
+
+    // ── Убирайся прочь! (panic) — swap seats with any non-quarantined ──
+    case 'get_out_of_here': {
+      const targets = s.players
+        .filter(p => p.isAlive && p.id !== cur.id && !p.inQuarantine)
+        .map(p => p.id);
+      if (targets.length === 0) {
+        log(s, 'Get Out of Here! — no valid targets.', 'Убирайся прочь! — нет доступных целей.');
+      } else if (targets.length === 1) {
+        swapPositions(s, cur, getPlayer(s, targets[0]));
+        log(s, `${cur.name} swapped seats (Get Out of Here!)`, `${cur.name} поменялся(-ась) местами (Убирайся прочь!)`);
+      } else {
+        s.pendingAction = { type: 'panic_choose_target', panicDefId: 'get_out_of_here', targets };
+      }
+      break;
+    }
+
+    // ── Давай дружить? (panic) — swap card with any non-quarantined ──
+    case 'cant_be_friends': {
+      const targets = s.players
+        .filter(p => p.isAlive && p.id !== cur.id && !p.inQuarantine)
+        .map(p => p.id);
+      if (targets.length === 0) {
+        log(s, "Can't We Be Friends? — no valid targets.", 'Давай дружить? — нет доступных целей.');
+      } else if (targets.length === 1) {
+        s.pendingAction = { type: 'panic_trade', targetPlayerId: targets[0] };
+      } else {
+        s.pendingAction = { type: 'panic_choose_target', panicDefId: 'cant_be_friends', targets };
+      }
+      break;
+    }
+
+    // ── Старые верёвки (panic) — remove all quarantine ──
+    case 'rotten_ropes': {
+      s.players.forEach(p => { p.inQuarantine = false; p.quarantineTurnsLeft = 0; });
+      log(s, 'Rotten Ropes! All quarantines removed!', 'Старые верёвки! Все карантины сняты!');
+      break;
+    }
+  }
+}
+
+/** Resolve a panic card effect after target was selected */
+function resolvePanicTarget(s: GameState, panicDefId: string, targetPlayerId: number): void {
+  const cur = currentPlayer(s);
+  const target = getPlayer(s, targetPlayerId);
+
+  switch (panicDefId) {
+    case 'panic_one_two': {
+      if (!target.inQuarantine) {
+        swapPositions(s, cur, target);
+        log(s, `One, Two... ${cur.name} swapped with ${target.name}!`,
+            `Раз, два... ${cur.name} поменялся(-ась) с ${target.name}!`);
+      } else {
+        log(s, `One, Two... ${target.name} is in quarantine, no swap.`,
+            `Раз, два... ${target.name} на карантине, обмен не произошёл.`);
+      }
+      s.step = 'draw';
+      break;
+    }
+    case 'panic_between_us': {
+      s.pendingAction = {
+        type: 'view_hand',
+        targetPlayerId: targetPlayerId,
+        cards: [...cur.hand],
+        viewerPlayerId: targetPlayerId,
+        public: false,
+      };
+      log(s, `${cur.name} shows cards to ${target.name} (Just Between Us).`,
+          `${cur.name} показывает карты ${target.name} (Только между нами).`);
+      break;
+    }
+    case 'get_out_of_here': {
+      swapPositions(s, cur, target);
+      log(s, `${cur.name} swapped seats with ${target.name} (Get Out of Here!)`,
+          `${cur.name} поменялся(-ась) местами с ${target.name} (Убирайся прочь!)`);
+      s.step = 'draw';
+      break;
+    }
+    case 'cant_be_friends': {
+      s.pendingAction = { type: 'panic_trade', targetPlayerId: targetPlayerId };
       break;
     }
   }

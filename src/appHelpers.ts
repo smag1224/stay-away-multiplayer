@@ -79,9 +79,13 @@ export async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T>
 
 export function localTradeCheck(player: ViewerPlayerState, card: CardInstance): boolean {
   if (card.defId === 'the_thing') return false;
-  if (player.role === 'infected' && card.defId === 'infected') {
-    const infectedCount = player.hand.filter((item) => item.defId === 'infected').length;
-    return infectedCount > 1;
+  if (card.defId === 'infected') {
+    if (player.role === 'thing') return true;
+    if (player.role === 'infected') {
+      const infectedCount = player.hand.filter((item) => item.defId === 'infected').length;
+      return infectedCount > 1;
+    }
+    return false;
   }
   return true;
 }
@@ -209,6 +213,8 @@ export function cardCategoryLabel(card: CardInstance, lang: Lang): string {
       return text(lang, 'Препятствие', 'Obstacle');
     case 'panic':
       return text(lang, 'Паника', 'Panic');
+    case 'promo':
+      return text(lang, 'Промо', 'Promo');
   }
 }
 

@@ -4,8 +4,9 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5173
+      "runtimeArgs": ["run", "dev", "--", "--host"],
+      "port": 5173,
+      "cwd": "C:\\Users\\smag1\\OneDrive\\Рабочий стол\\НЕЧТО\\stay-away-multiplayer"
     }
   ]
 }

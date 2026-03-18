@@ -434,6 +434,18 @@ function PendingActionPanel({
     return <PartyPassPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
   if (pending.type === 'temptation_response')
     return <TemptationResponsePanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  if (pending.type === 'panic_choose_target')
+    return <PanicTargetPanel game={game} lang={lang} loading={loading} pending={pending} onAction={onAction} />;
+  if (pending.type === 'blind_date_swap')
+    return <BlindDatePanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />;
+  if (pending.type === 'forgetful_discard')
+    return <ForgetfulPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  if (pending.type === 'panic_trade')
+    return <PanicTradePanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  if (pending.type === 'panic_trade_response')
+    return <PanicTradeResponsePanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  if (pending.type === 'revelations_round')
+    return <RevelationsPanel game={game} lang={lang} loading={loading} me={me} pending={pending} onAction={onAction} />;
 
   return (
     <InfoPanel
@@ -1004,6 +1016,289 @@ function JustBetweenUsPanel({
             {p1.name} ↔ {p2.name}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PANIC TARGET PANEL (for panic cards needing target selection)
+══════════════════════════════════════════════════════════════════════ */
+function PanicTargetPanel({
+  game,
+  lang,
+  loading,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  pending: Extract<PendingAction, { type: 'panic_choose_target' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const cardName = getCardName(pending.panicDefId, lang);
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Паника — выберите цель', 'Panic — choose target')}</h3></div>
+      <p className="helper-text">{cardName}</p>
+      <div className="stack-actions" style={{ marginTop: '8px' }}>
+        {pending.targets.map((tid) => (
+          <button className="btn secondary" disabled={loading} key={tid} onClick={() => void onAction({ type: 'PANIC_SELECT_TARGET', targetPlayerId: tid })} type="button">
+            {game.players.find((p) => p.id === tid)?.name ?? tid}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   BLIND DATE PANEL (pick card to swap with deck)
+══════════════════════════════════════════════════════════════════════ */
+function BlindDatePanel({
+  lang,
+  loading,
+  me,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const canGive = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected' && me.role === 'infected') {
+      return me.hand.filter((c) => c.defId === 'infected').length > 1;
+    }
+    return true;
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Свидание вслепую', 'Blind Date')}</h3></div>
+      <p className="helper-text">{text(lang, 'Выберите карту для обмена с колодой.', 'Pick a card to swap with the deck.')}</p>
+      <div className="hand-grid compact">
+        {me.hand.map((card) => {
+          const allowed = canGive(card);
+          return (
+            <div className="hand-card" key={card.uid}>
+              <CardView card={card} faceUp lang={lang} />
+              <button className="btn small accent" disabled={!allowed || loading} onClick={() => void onAction({ type: 'BLIND_DATE_PICK', cardUid: card.uid })} type="button">
+                {text(lang, 'Обменять', 'Swap')}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   FORGETFUL PANEL (discard cards)
+══════════════════════════════════════════════════════════════════════ */
+function ForgetfulPanel({
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'forgetful_discard' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Забывчивость', 'Forgetful')}</h3></div>
+      <p className="helper-text">
+        {text(lang, `Сбросьте ещё ${pending.remaining} карт(у).`, `Discard ${pending.remaining} more card(s).`)}
+      </p>
+      <div className="hand-grid compact">
+        {me.hand.map((card) => {
+          const allowed = card.defId !== 'the_thing' &&
+            !(me.role === 'infected' && card.defId === 'infected' && me.hand.filter(c => c.defId === 'infected').length <= 1);
+          return (
+            <div className="hand-card" key={card.uid}>
+              <CardView card={card} faceUp lang={lang} />
+              <button className="btn small secondary" disabled={!allowed || loading} onClick={() => void onAction({ type: 'FORGETFUL_DISCARD_PICK', cardUid: card.uid })} type="button">
+                {text(lang, 'Сбросить', 'Discard')}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PANIC TRADE PANEL (Can't We Be Friends? — pick card to give)
+══════════════════════════════════════════════════════════════════════ */
+function PanicTradePanel({
+  game,
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'panic_trade' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const target = game.players.find((p) => p.id === pending.targetPlayerId);
+  const canGive = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected') {
+      if (me.role === 'thing') return true;
+      if (me.role === 'infected') return me.hand.filter((c) => c.defId === 'infected').length > 1;
+      return false;
+    }
+    return true;
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Давай дружить?', "Can't We Be Friends?")}</h3></div>
+      <p className="helper-text">
+        {text(lang, `Выберите карту для обмена с ${target?.name ?? '?'}`, `Pick card to trade with ${target?.name ?? '?'}`)}
+      </p>
+      <div className="hand-grid compact">
+        {me.hand.map((card) => {
+          const allowed = canGive(card);
+          return (
+            <div className="hand-card" key={card.uid}>
+              <CardView card={card} faceUp lang={lang} />
+              <button className="btn small accent" disabled={!allowed || loading} onClick={() => void onAction({ type: 'PANIC_TRADE_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid })} type="button">
+                {text(lang, 'Отдать', 'Give')}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PANIC TRADE RESPONSE PANEL
+══════════════════════════════════════════════════════════════════════ */
+function PanicTradeResponsePanel({
+  game,
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'panic_trade_response' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const isTarget = me.id === pending.toId;
+  const fromPlayer = game.players.find((p) => p.id === pending.fromId);
+
+  const canGive = (card: { defId: string }) => {
+    if (card.defId === 'the_thing') return false;
+    if (card.defId === 'infected') {
+      if (me.role === 'thing') return true;
+      if (me.role === 'infected') return me.hand.filter((c) => c.defId === 'infected').length > 1;
+      return false;
+    }
+    return true;
+  };
+
+  if (!isTarget) {
+    return (
+      <InfoPanel
+        title={text(lang, 'Давай дружить?', "Can't We Be Friends?")}
+        body={text(
+          lang,
+          `${game.players.find((p) => p.id === pending.toId)?.name ?? '?'} выбирает карту…`,
+          `${game.players.find((p) => p.id === pending.toId)?.name ?? '?'} is choosing…`,
+        )}
+      />
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Давай дружить? — ваш ход', "Can't We Be Friends? — your turn")}</h3></div>
+      <p className="helper-text">
+        {text(lang, `${fromPlayer?.name ?? '?'} предлагает обмен.`, `${fromPlayer?.name ?? '?'} wants to trade.`)}
+      </p>
+      <div className="hand-grid compact">
+        {me.hand.map((card) => {
+          const allowed = canGive(card);
+          return (
+            <div className="hand-card" key={card.uid}>
+              <CardView card={card} faceUp lang={lang} />
+              <button className="btn small accent" disabled={!allowed || loading} onClick={() => void onAction({ type: 'PANIC_TRADE_RESPOND', cardUid: card.uid })} type="button">
+                {text(lang, 'Отдать', 'Give')}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   REVELATIONS PANEL
+══════════════════════════════════════════════════════════════════════ */
+function RevelationsPanel({
+  game,
+  lang,
+  loading,
+  me,
+  pending,
+  onAction,
+}: {
+  game: ViewerGameState;
+  lang: Lang;
+  loading: boolean;
+  me: ViewerPlayerState;
+  pending: Extract<PendingAction, { type: 'revelations_round' }>;
+  onAction: (action: GameAction) => Promise<void>;
+}) {
+  const revealerIdx = pending.revealOrder[pending.currentRevealerIdx];
+  const revealer = game.players[revealerIdx];
+  const isMyTurn = revealer?.id === me.id;
+
+  if (!isMyTurn) {
+    return (
+      <InfoPanel
+        title={text(lang, 'Время признаний', 'Revelations')}
+        body={text(lang, `${revealer?.name ?? '?'} решает, показывать ли карты…`, `${revealer?.name ?? '?'} is deciding…`)}
+      />
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-header"><h3>{text(lang, 'Время признаний', 'Revelations')}</h3></div>
+      <p className="helper-text">{text(lang, 'Показать свои карты всем?', 'Show your cards to everyone?')}</p>
+      <div className="stack-actions" style={{ marginTop: '8px' }}>
+        <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'REVELATIONS_RESPOND', show: true })} type="button">
+          {text(lang, 'Показать', 'Show')}
+        </button>
+        <button className="btn secondary" disabled={loading} onClick={() => void onAction({ type: 'REVELATIONS_RESPOND', show: false })} type="button">
+          {text(lang, 'Пропустить', 'Pass')}
+        </button>
       </div>
     </div>
   );
