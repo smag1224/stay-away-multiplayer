@@ -333,19 +333,50 @@ button, input { font: inherit; }
 /* ── 3-column game body ──────────────────────────────────────────────── */
 .game-body {
   flex: 1;
-  display: grid;
-  grid-template-columns: 220px 1fr 250px;
+  display: flex; flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
-/* ── LEFT: board info ────────────────────────────────────────────────── */
-.game-left {
+/* ── TOP ROW: sidebar-left + table + sidebar-right ── */
+.game-top-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 250px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-sidebar-left {
   display: flex; flex-direction: column; gap: 8px;
   padding: 10px;
   border-right: 1px solid rgba(255,255,255,.05);
   overflow-y: auto; overflow-x: hidden;
   background: rgba(6,9,12,.7);
+}
+
+.game-table-center {
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+.game-table-center .player-circle {
+  max-width: 380px;
+  max-height: 380px;
+}
+
+.game-sidebar-right {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: rgba(6,9,12,.5);
+}
+
+/* ── BOTTOM: hand area ── */
+.game-hand-area {
+  display: flex; flex-direction: column;
+  border-top: 1px solid rgba(255,255,255,.08);
+  max-height: 260px;
+  overflow: hidden;
+  background: rgba(6,9,12,.85);
 }
 
 /* Status cards – stacked vertically */
@@ -464,11 +495,7 @@ button, input { font: inherit; }
 }
 .notice-box p { margin: 0; color: var(--muted); }
 
-/* ── CENTER: your hand ───────────────────────────────────────────────── */
-.game-center {
-  display: flex; flex-direction: column; overflow: hidden;
-  border-right: 1px solid rgba(255,255,255,.05);
-}
+/* ── Hand area styling ───────────────────────────────────────────────── */
 
 .hand-header {
   padding: 7px 12px;
@@ -498,12 +525,7 @@ button, input { font: inherit; }
 .hand-card { display: flex; flex-direction: column; gap: 5px; }
 .hand-card-actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
-/* ── RIGHT: pending + log ────────────────────────────────────────────── */
-.game-right {
-  display: flex; flex-direction: column; overflow: hidden;
-  background: rgba(6,9,12,.5);
-}
-
+/* ── RIGHT sidebar: pending + log ────────────────────────────────────── */
 .pending-panel {
   flex: 1; overflow-y: auto;
   border-bottom: 1px solid rgba(255,255,255,.05);

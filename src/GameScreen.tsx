@@ -111,114 +111,115 @@ export function GameScreen({
         </div>
       )}
 
-      {/* ── 3-column body ── */}
+      {/* ── Main body: table center, cards below ── */}
       <div className="game-body">
 
-        {/* ─ LEFT: status + circle + deck + actions ─ */}
-        <div className="game-left">
-          {/* Status */}
-          <div className="status-strip">
-            <div className="status-card">
-              <span>{text(lang, 'Вы', 'You')}</span>
-              <strong>{me.name}</strong>
-              <small>{roleLabel(me.role, lang)}</small>
+        {/* ─ TOP ROW: status + table + info ─ */}
+        <div className="game-top-row">
+          {/* Left sidebar: status + deck */}
+          <div className="game-sidebar-left">
+            <div className="status-strip">
+              <div className="status-card">
+                <span>{text(lang, 'Вы', 'You')}</span>
+                <strong>{me.name}</strong>
+                <small>{roleLabel(me.role, lang)}</small>
+              </div>
+              <div className="status-card">
+                <span>{text(lang, 'Этап', 'Step')}</span>
+                <strong>{stepLabel(game.step, lang)}</strong>
+                <small>
+                  {game.direction === 1
+                    ? text(lang, '↻ По часовой', '↻ Clockwise')
+                    : text(lang, '↺ Против', '↺ Counter-CW')}
+                </small>
+              </div>
+              <div className={`status-card ${myTurn ? 'active' : ''}`}>
+                <span>{text(lang, 'Состояние', 'Status')}</span>
+                <strong>{myTurn ? text(lang, 'Ваш ход', 'Your turn') : text(lang, 'Ожидание', 'Waiting')}</strong>
+                <small>
+                  {myTurn
+                    ? text(lang, 'Вы можете действовать.', 'You can act.')
+                    : summary ?? text(lang, `Ход: ${current.name}`, `Turn: ${current.name}`)}
+                </small>
+              </div>
             </div>
-            <div className="status-card">
-              <span>{text(lang, 'Этап', 'Step')}</span>
-              <strong>{stepLabel(game.step, lang)}</strong>
-              <small>
-                {game.direction === 1
-                  ? text(lang, '↻ По часовой', '↻ Clockwise')
-                  : text(lang, '↺ Против', '↺ Counter-CW')}
-              </small>
+
+            <div className="deck-row">
+              <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''}`}>
+                <span>{text(lang, 'Колода', 'Deck')}</span>
+                <strong>{game.deck.length}</strong>
+              </div>
+              <div className="deck-stack discard">
+                <span>{text(lang, 'Сброс', 'Discard')}</span>
+                <strong>{game.discard.length}</strong>
+              </div>
             </div>
-            <div className={`status-card ${myTurn ? 'active' : ''}`}>
-              <span>{text(lang, 'Состояние', 'Status')}</span>
-              <strong>{myTurn ? text(lang, 'Ваш ход', 'Your turn') : text(lang, 'Ожидание', 'Waiting')}</strong>
-              <small>
-                {myTurn
-                  ? text(lang, 'Вы можете действовать.', 'You can act.')
-                  : summary ?? text(lang, `Ход: ${current.name}`, `Turn: ${current.name}`)}
-              </small>
+
+            <div className="action-row">
+              {myTurn && game.step === 'draw' && !game.pendingAction && (
+                <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
+                  {text(lang, '🃏 Взять карту', '🃏 Draw card')}
+                </button>
+              )}
+              {myTurn && me.role === 'thing' && game.step !== 'draw' && (
+                <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLARE_VICTORY' })} type="button">
+                  {text(lang, '☣ Объявить победу', '☣ Declare victory')}
+                </button>
+              )}
+              {myTurn && game.step === 'end_turn' && (
+                <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'END_TURN' })} type="button">
+                  {text(lang, '→ Завершить ход', '→ End turn')}
+                </button>
+              )}
             </div>
+
+            {(summary || pendingOwnerName) && (
+              <div className="notice-box">
+                <strong>{text(lang, 'На столе', 'Table state')}</strong>
+                <p>
+                  {summary ?? text(
+                    lang,
+                    `Ожидается: ${pendingOwnerName}`,
+                    `Waiting for: ${pendingOwnerName}`,
+                  )}
+                </p>
+              </div>
+            )}
+
+            {error && <p className="error-text" style={{ fontSize: '.76rem', margin: 0 }}>{error}</p>}
           </div>
 
-          {/* Player circle */}
-          <PlayerCircle game={game} lang={lang} me={me} />
-
-          {/* Deck / discard */}
-          <div className="deck-row">
-            <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''}`}>
-              <span>{text(lang, 'Колода', 'Deck')}</span>
-              <strong>{game.deck.length}</strong>
-            </div>
-            <div className="deck-stack discard">
-              <span>{text(lang, 'Сброс', 'Discard')}</span>
-              <strong>{game.discard.length}</strong>
-            </div>
+          {/* Center: player circle (table) */}
+          <div className="game-table-center">
+            <PlayerCircle game={game} lang={lang} me={me} />
           </div>
 
-          {/* Action buttons */}
-          <div className="action-row">
-            {myTurn && game.step === 'draw' && !game.pendingAction && (
-              <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
-                {text(lang, '🃏 Взять карту', '🃏 Draw card')}
-              </button>
-            )}
-            {myTurn && me.role === 'thing' && game.step !== 'draw' && (
-              <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLARE_VICTORY' })} type="button">
-                {text(lang, '☣ Объявить победу', '☣ Declare victory')}
-              </button>
-            )}
-            {myTurn && game.step === 'end_turn' && (
-              <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'END_TURN' })} type="button">
-                {text(lang, '→ Завершить ход', '→ End turn')}
-              </button>
-            )}
-          </div>
-
-          {/* Notice */}
-          {(summary || pendingOwnerName) && (
-            <div className="notice-box">
-              <strong>{text(lang, 'На столе', 'Table state')}</strong>
-              <p>
-                {summary ?? text(
-                  lang,
-                  `Ожидается: ${pendingOwnerName}`,
-                  `Waiting for: ${pendingOwnerName}`,
-                )}
-              </p>
+          {/* Right sidebar: pending + log */}
+          <div className="game-sidebar-right">
+            <div className="pending-panel">
+              <PendingActionPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
             </div>
-          )}
-
-          {error && <p className="error-text" style={{ fontSize: '.76rem', margin: 0 }}>{error}</p>}
+            <div className="log-panel">
+              <div className="log-header">{text(lang, 'Журнал событий', 'Event log')}</div>
+              <div className="log-list">
+                {game.log.slice(0, 24).map((entry) => (
+                  <div className="log-entry" key={entry.id}>
+                    {lang === 'ru' ? entry.textRu : entry.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* ─ CENTER: your hand ─ */}
-        <div className="game-center">
+        {/* ─ BOTTOM: your hand (cards below the table) ─ */}
+        <div className="game-hand-area">
           <div className="hand-header">
             <h3>{text(lang, 'Ваша рука', 'Your hand')}</h3>
             <span className="hand-count">{me.hand.length} {text(lang, 'карт', 'cards')}</span>
           </div>
           <div className="hand-scroll">
             <PlayerHand game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
-          </div>
-        </div>
-
-        {/* ─ RIGHT: pending + log ─ */}
-        <div className="game-right">
-          <div className="pending-panel">
-            <PendingActionPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
-          </div>
-          <div className="log-panel">
-            <div className="log-header">{text(lang, 'Журнал событий', 'Event log')}</div>
-            <div className="log-list">
-              {game.log.slice(0, 24).map((entry) => (
-                <div className="log-entry" key={entry.id}>
-                  {lang === 'ru' ? entry.textRu : entry.text}
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 

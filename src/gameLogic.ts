@@ -594,7 +594,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       from.hand[fromCardIdx] = defCard;
       defender.hand[defCardIdx] = fromCard;
 
-      checkInfection(from, defender, fromCard, defCard);
+      checkInfection(s, from, defender, fromCard, defCard);
 
       log(s,
         `${from.name} and ${defender.name} traded cards.`,
@@ -842,7 +842,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       from.hand[fromCardIdx] = targetCard;
       target.hand[targetCardIdx] = fromCard;
 
-      checkInfection(from, target, fromCard, targetCard);
+      checkInfection(s, from, target, fromCard, targetCard);
 
       s.tradeSkipped = true;
       s.pendingAction = null;
@@ -870,8 +870,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (cardIdx === -1) return s;
       const card = player.hand[cardIdx];
       if (card.defId === 'the_thing') return s;
-      if (card.defId === 'infected' && player.role === 'infected' &&
-          player.hand.filter(c => c.defId === 'infected').length <= 1) return s;
+
+      // Chain reaction infection rules:
+      // - Only 'thing' can freely pass infected cards
+      // - 'infected' can pass infected only if they have 2+ AND next player is 'thing'
+      // - 'human' cannot pass infected cards at all
+      if (card.defId === 'infected') {
+        if (player.role === 'human') return s;
+        if (player.role === 'infected') {
+          const infectedCount = player.hand.filter(c => c.defId === 'infected').length;
+          if (infectedCount <= 1) return s;
+          // Can only pass to 'thing' (next player in direction)
+          const alivePositions = s.players.filter(p => p.isAlive).map(p => p.position).sort((a, b) => a - b);
+          const posIdx = alivePositions.indexOf(player.position);
+          const nextPosIdx = (posIdx + pa.direction + alivePositions.length) % alivePositions.length;
+          const nextPlayer = s.players.find(p => p.position === alivePositions[nextPosIdx] && p.isAlive);
+          if (!nextPlayer || nextPlayer.role !== 'thing') return s;
+        }
+      }
 
       pa.chosen.push({ playerId, cardUid });
       pa.pendingPlayerIds = pa.pendingPlayerIds.filter(id => id !== playerId);
@@ -893,6 +909,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (passedCard.defId === 'infected' && passer.role === 'thing' && nextPlayer.role === 'human') {
             nextPlayer.role = 'infected';
           }
+        }
+        // Check 4-infection death for all alive players
+        for (const p of s.players.filter(pl => pl.isAlive)) {
+          checkInfectionOverload(s, p);
         }
         s.pendingAction = null;
         log(s, 'Chain Reaction! Everyone passed a card.', 'Цепная реакция! Все передали карту.');
@@ -967,7 +987,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         first.hand[firstIdx] = secondCard;
         second.hand[secondIdx] = firstCard;
 
-        checkInfection(first, second, firstCard, secondCard);
+        checkInfection(s, first, second, firstCard, secondCard);
 
         s.pendingAction = null;
         s.step = 'draw';
@@ -1081,7 +1101,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       from.hand[fromCardIdx] = targetCard;
       target.hand[targetCardIdx] = fromCard;
 
-      checkInfection(from, target, fromCard, targetCard);
+      checkInfection(s, from, target, fromCard, targetCard);
 
       s.pendingAction = null;
       log(s,
@@ -1175,12 +1195,27 @@ function validateTradeCard(giver: Player, _receiver: Player, card: CardInstance)
 }
 
 /** Check and apply infection after a card swap */
-function checkInfection(p1: Player, p2: Player, cardFromP1: CardInstance, cardFromP2: CardInstance): void {
+function checkInfection(s: GameState, p1: Player, p2: Player, cardFromP1: CardInstance, cardFromP2: CardInstance): void {
   if (cardFromP1.defId === 'infected' && p1.role === 'thing' && p2.role === 'human') {
     p2.role = 'infected';
   }
   if (cardFromP2.defId === 'infected' && p2.role === 'thing' && p1.role === 'human') {
     p1.role = 'infected';
+  }
+  checkInfectionOverload(s, p1);
+  checkInfectionOverload(s, p2);
+}
+
+/** If a player has 4+ infection cards, they die */
+function checkInfectionOverload(s: GameState, player: Player): void {
+  if (!player.isAlive) return;
+  const infectedCount = player.hand.filter(c => c.defId === 'infected').length;
+  if (infectedCount >= 4) {
+    log(s,
+      `${player.name} accumulated ${infectedCount} infections and is eliminated!`,
+      `${player.name} накопил(а) ${infectedCount} заражения и выбывает из игры!`
+    );
+    eliminatePlayer(s, player);
   }
 }
 
