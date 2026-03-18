@@ -413,46 +413,9 @@ export const CARD_DEFS: CardDef[] = [
   },
 ];
 
-/** Map defId → card image filename in /cards/ */
-const CARD_IMAGES: Record<string, string> = {
-  the_thing: 'нечто__p01_r3c3.png',
-  infected: 'заражение__p01_r3c2.png',
-  analysis: 'анализ__p03_r1c1.png',
-  flamethrower: 'огнемет__p03_r2c3.png',
-  suspicion: 'подозрение__p04_r2c2.png',
-  axe: 'топор__p04_r3c1.png',
-  persistence: 'упорство__p05_r1c3.png',
-  whisky: 'виски__p05_r2c3.png',
-  swap_places: 'меняемся_местами__p06_r2c2.png',
-  watch_your_back: 'гляди_по_сторонам__p06_r3c1.png',
-  temptation: 'соблазн__p07_r2c1.png',
-  you_better_run: 'сматывай_удочки__p07_r3c3.png',
-  im_fine_here: 'мне_и_здес_неплохо__p08_r1c2.png',
-  fear: 'страх__p08_r2c3.png',
-  no_barbecue: 'никакого_шашлыка__p09_r1c1.png',
-  miss: 'мимо__p09_r2c1.png',
-  no_thanks: 'нет_уж_спасибо__p09_r3c2.png',
-  locked_door: 'заколоченная_двер__p10_r2c2.png',
-  quarantine: 'карантин__p10_r3c1.png',
-  panic_chain_reaction: 'цепная_реакция__p11_r1c1.png',
-  panic_forgetful: 'забывчивост__p11_r1c2.png',
-  get_out_of_here: 'убирайся_проч__p11_r1c3.png',
-  panic_party: 'и_это_вы_называете_вечеринкой__p11_r2c2.png',
-  panic_1234: 'три_четыре__p11_r3c1.png',
-  panic_one_two: 'раз_два__p11_r3c3.png',
-  panic_revelations: 'время_признаний__p12_r1c1.png',
-  panic_between_us: 'толко_между_нами__p12_r1c3.png',
-  panic_oops: 'упс__p12_r2c1.png',
-  panic_blind_date: 'свидание_вслепую__p12_r2c3.png',
-  cant_be_friends: 'давай_дружит__p12_r3c2.png',
-  rotten_ropes: 'старые_веревки__p13_r1c2.png',
-  lovecraft: 'г_ф_лавкрафт__p10_r1c1.png',
-  necronomicon: 'некрономикон__p10_r1c2.png',
-};
-
+/** All card images are stored as /cards/{defId}.png */
 export function getCardImage(defId: string): string | null {
-  const file = CARD_IMAGES[defId];
-  return file ? `/cards/${file}` : null;
+  return `/cards/${defId}.png`;
 }
 
 export function getCardDef(defId: string): CardDef {
