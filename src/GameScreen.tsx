@@ -196,12 +196,18 @@ export function GameScreen({
 
           {/* Center: player circle (table) */}
           <div className="game-table-center">
+            <div aria-hidden="true" className="table-scene table-scene-left" />
+            <div aria-hidden="true" className="table-scene table-scene-right" />
+            <div aria-hidden="true" className="table-scene table-scene-bottom" />
             <PlayerCircle game={game} lang={lang} me={me} />
           </div>
 
           {/* Right sidebar: pending actions only */}
           <div className="game-sidebar-right">
             <div className="pending-panel">
+              <div className="pending-panel-title">
+                {text(lang, 'Активное действие', 'Active action')}
+              </div>
               <PendingActionPanel game={game} lang={lang} loading={loading} me={me} onAction={onAction} />
             </div>
           </div>
@@ -343,7 +349,7 @@ function PlayerCircle({
             key={player.id}
             style={{ left: `${x}%`, top: `${y}%` }}
           >
-            <div className="player-avatar">{player.name.charAt(0).toUpperCase()}</div>
+            <div className="player-avatar">{player.position + 1}</div>
             <div className="player-meta">
               <strong>{player.name}</strong>
               <span>
