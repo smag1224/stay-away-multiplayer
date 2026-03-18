@@ -429,7 +429,7 @@ export const CARD_DEFS: CardDef[] = [
 const KNOWN_CARD_IMAGES = new Set([
   'the_thing', 'infected', 'analysis', 'flamethrower', 'suspicion', 'axe',
   'persistence', 'whisky', 'swap_places', 'watch_your_back', 'temptation',
-  'you_better_run', 'im_fine_here', 'fear', 'no_barbecue', 'miss', 'no_thanks',
+  'you_better_run', 'im_fine_here', 'fear', 'no_barbecue', 'miss', 'no_thanks', 'anti_analysis',
   'locked_door', 'quarantine', 'panic_chain_reaction', 'panic_forgetful',
   'get_out_of_here', 'panic_party', 'panic_1234', 'panic_one_two',
   'panic_revelations', 'panic_between_us', 'panic_oops', 'panic_blind_date',
