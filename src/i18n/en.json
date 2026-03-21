@@ -1,0 +1,278 @@
+{
+  "connect": {
+    "yourName": "Your name",
+    "nameExample": "e.g. Alex",
+    "createRoom": "Create room",
+    "orJoinByCode": "or join by code",
+    "roomCode": "Room code",
+    "joinRoom": "Join room",
+    "linkCopied": "Link copied.",
+    "errorEnterName": "Enter your name.",
+    "errorEnterNameAndCode": "Enter both your name and the room code.",
+    "players": "Players",
+    "you": "(you)",
+    "host": "host",
+    "offline": "offline",
+    "settings": "Settings",
+    "shuffleThingDeck": "Shuffle \"The Thing\" into deck",
+    "gameMode": "Game mode",
+    "modeStandard": "Standard",
+    "modeThingInDeck": "Thing in deck",
+    "modeAnomaly": "Anomaly",
+    "modeHint_standard": "The Thing card goes directly to a random player's hand.",
+    "modeHint_thing_in_deck": "The Thing is shuffled into the deck — nobody knows who will draw it.",
+    "modeHint_anomaly": "The Thing's position is decided randomly. Strong cards (flamethrower, analysis, etc.) are shuffled into the deck from the start.",
+    "startMatch": "Start match",
+    "resetRoom": "Reset room",
+    "onlyHostStart": "Only the host can start the match.",
+    "roomStatus": "{{count}} in room · {{needed}} to start",
+    "copyLink": "Copy link",
+    "leave": "Leave",
+    "briefingLabel": "Station briefing",
+    "tagline": "Paranoia, hidden roles, and card trades inside one compromised base.",
+    "summary": "Assemble the crew, share the invite, and make the match feel tense before the first turn even begins.",
+    "playersRange": "4-12 players",
+    "hiddenRoles": "Hidden roles",
+    "mobileReady": "Phone + laptop friendly",
+    "briefingRolesTitle": "Who is among us?",
+    "briefingRolesBody": "One player becomes The Thing. Everyone else has to identify it before the infection spreads around the table.",
+    "briefingTradeTitle": "Trades decide everything",
+    "briefingTradeBody": "Every turn creates suspicion: cards move to neighbors, defenses ruin plans, and bluffing is as strong as tactics.",
+    "briefingBurnTitle": "The flamethrower is final",
+    "briefingBurnBody": "Humans only win if they burn the right target. One mistake can decide the whole match.",
+    "accessTerminal": "Access terminal",
+    "accessTitle": "Create a room or connect to an existing one",
+    "createHint": "Enter your name first. The host gets the room code and a share link immediately.",
+    "joinHint": "If you already have the code, type it in manually or open the invite link directly.",
+    "readyToStart": "Ready to launch",
+    "awaitingPlayers": "Waiting for players",
+    "playersStat": "Crew",
+    "hostStat": "Host",
+    "startStat": "Launch",
+    "startStatReady": "Can start now",
+    "startStatWaiting": "Need {{count}} more",
+    "playerRoster": "Who is already on station",
+    "online": "online",
+    "hostControls": "Lobby controls",
+    "waitingForHost": "Waiting for host",
+    "shareLinkLabel": "Invite link",
+    "shareHint": "Copy the link and send it to the rest of the players. The room code is already embedded.",
+    "startReady": "Minimum crew assembled. You can start the match now.",
+    "startNeedPlayers": "You need {{count}} more player(s) before the match can start."
+  },
+  "errors": {
+    "requestTimeout": "The request timed out. Check the connection and try again."
+  },
+  "game": {
+    "matchFinished": "Match finished",
+    "humansWin": "🧍 Humans win",
+    "thingWinsAlone": "☣ The Thing wins alone",
+    "thingWins": "☣ The Thing wins",
+    "alive": "✓ Alive",
+    "eliminated": "✗ Eliminated",
+    "newMatch": "New match",
+    "hostReturnLobby": "The host can return everyone to lobby.",
+    "panic": "Panic!",
+    "you": "You",
+    "step": "Step",
+    "clockwise": "↻ Clockwise",
+    "counterCW": "↺ Counter-CW",
+    "status": "Status",
+    "yourTurn": "Your turn",
+    "waiting": "Waiting",
+    "youCanAct": "You can act.",
+    "turnOf": "Turn: {{name}}",
+    "deck": "Deck",
+    "discard": "Discard",
+    "drawCard": "🃏 Draw card",
+    "declareVictory": "☣ Declare victory",
+    "endTurn": "→ End turn",
+    "tableState": "Table state",
+    "waitingFor": "Waiting for: {{name}}",
+    "infectedAlertTitle": "You are infected",
+    "infectedAlertBody": "Keep it hidden from the humans: you are now playing for The Thing.",
+    "commandDeck": "Command deck",
+    "stationIntel": "Station intel",
+    "activePlayer": "Active player",
+    "aliveNow": "Alive now",
+    "latestEvents": "Latest events",
+    "log": "Log"
+  },
+  "role": {
+    "human": "Human",
+    "thing": "The Thing",
+    "infected": "Infected",
+    "hidden": "Hidden"
+  },
+  "step": {
+    "draw": "Draw a card",
+    "playOrDiscard": "Play or discard a card",
+    "trade": "Trade with a neighbor",
+    "tradeResponse": "Waiting for a response",
+    "endTurn": "End the turn"
+  },
+  "actionReason": {
+    "trade": "trade",
+    "temptation": "temptation",
+    "flamethrower": "flamethrower",
+    "swap": "seat swap",
+    "analysis": "analysis"
+  },
+  "pending": {
+    "privateReveal": "A private card reveal is in progress.",
+    "chooseTarget": "A target must be chosen.",
+    "chooseCardDiscard": "A card must be discarded.",
+    "chooseCardTrade": "Choose a card to exchange.",
+    "chooseCardKeep": "Choose which card to keep.",
+    "chooseAdjacentPlayers": "Choose two adjacent players for a forced trade.",
+    "tradeDefenseDeciding": "{{name}} is deciding how to respond to the {{reason}}."
+  },
+  "category": {
+    "infection": "Infection",
+    "action": "Action",
+    "defense": "Defense",
+    "obstacle": "Obstacle",
+    "panic": "Panic",
+    "promo": "Promo"
+  },
+  "topbar": {
+    "room": "Room",
+    "language": "Language",
+    "hideText": "Hide text",
+    "cardText": "Card text",
+    "copyLink": "Copy link",
+    "leave": "Leave"
+  },
+  "panel": {
+    "yourHand": "Your hand",
+    "cards": "cards",
+    "eventLog": "Event log",
+    "direction": "direction",
+    "cardsShort": "{{count}}c",
+    "activeAction": "Active action",
+    "noActivePrompts": "No active prompts.",
+    "noResponseNeeded": "No response needed from you."
+  },
+  "card": {
+    "panicBack": "Panic",
+    "eventBack": "Event"
+  },
+  "action": {
+    "choice": "Choice",
+    "revealed": "Revealed",
+    "play": "Play",
+    "discard": "Discard",
+    "offer": "Offer",
+    "discardBtn": "Discard",
+    "defend": "Defend",
+    "give": "Give",
+    "giveAlt": "Give",
+    "pick": "Pick",
+    "pass": "Pass",
+    "swap": "Swap",
+    "keep": "Keep",
+    "confirm": "Confirm",
+    "show": "Show",
+    "skip": "Pass",
+    "acceptElimination": "Accept elimination",
+    "allowAnalysis": "Allow analysis",
+    "acceptSwap": "Accept swap"
+  },
+  "target": {
+    "chooseTarget": "Choose target",
+    "chooseDiscard": "Choose discard",
+    "panicChooseTarget": "Panic — choose target",
+    "tapPlayerIcon": "Tap a highlighted player icon: {{names}}"
+  },
+  "blindDate": {
+    "title": "Blind Date",
+    "description": "Pick a card to swap with the deck."
+  },
+  "forgetful": {
+    "title": "Forgetful",
+    "description": "Discard {{count}} more card(s)."
+  },
+  "persistence": {
+    "title": "Persistence"
+  },
+  "temptation": {
+    "title": "Temptation",
+    "giveCardTo": "Give card → {{name}}",
+    "yourTurn": "Temptation — your turn",
+    "offersExchange": "{{name}} wants to trade.",
+    "offeredToYou": "Offered to you:",
+    "choosing": "{{name}} is choosing…"
+  },
+  "justBetweenUs": {
+    "title": "Just Between Us",
+    "pickPair": "Pick two adjacent players.",
+    "choosing": "{{a}} and {{b}} choosing…",
+    "waitingPartner": "Chosen. Waiting for {{name}}…",
+    "tradeWith": "Trade with {{name}}."
+  },
+  "reveal": {
+    "title": "Card reveal",
+    "showsAll": "{{name}} shows cards to all.",
+    "cardsOf": "{{name}}'s cards",
+    "otherMustConfirm": "Another player must confirm."
+  },
+  "suspicion": {
+    "title": "Suspicion",
+    "description": "Choose a face-down card and confirm your selection.",
+    "desktopDescription": "Choose a card directly from the suspect's fan and confirm your selection.",
+    "confirm": "Confirm choice",
+    "pickCard": "Select card {{index}}"
+  },
+  "tradeDefense": {
+    "title": "Respond",
+    "defense": "Defense",
+    "acceptTrade": "Accept trade"
+  },
+  "party": {
+    "title": "🎉 Party!",
+    "chosenWaiting": "Chosen. Waiting for others…",
+    "passCard": "Pass a card to your neighbor.",
+    "waiting": "Waiting ({{count}} left)"
+  },
+  "panicTrade": {
+    "title": "Can't We Be Friends?",
+    "pickCard": "Pick card to trade with {{name}}",
+    "yourTurn": "Can't We Be Friends? — your turn",
+    "offersExchange": "{{name}} wants to trade.",
+    "choosing": "{{name}} is choosing…"
+  },
+  "revelations": {
+    "title": "Revelations",
+    "deciding": "{{name}} is deciding…",
+    "showCards": "Show your cards to everyone?"
+  },
+  "tableScene": {
+    "mode": {
+      "trade": "Trade",
+      "swap": "Forced swap",
+      "temptation": "Temptation",
+      "panic_trade": "Can't We Be Friends?"
+    },
+    "slot": {
+      "initiator": "Initiator",
+      "target": "Target"
+    },
+    "placeholder": {
+      "targetSeat": "Target seat",
+      "waiting": "Waiting for reply"
+    },
+    "status": {
+      "blocked": "Exchange blocked",
+      "resolved": "Exchange resolved"
+    },
+    "phase": {
+      "initiatorCardSelected": "{{name}} places a card in the center",
+      "waitingTargetResponse": "{{name}} is deciding how to respond",
+      "targetDefenseRevealed": "{{name}} reveals a defense",
+      "targetCardSelected": "{{name}} adds a card to the center",
+      "exchangeAnimating": "Cards are crossing the table",
+      "exchangeResolved": "Cards reached their new owners",
+      "exchangeBlocked": "Defense stopped the exchange"
+    }
+  }
+}

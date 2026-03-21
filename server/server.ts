@@ -9,6 +9,7 @@ import {
   currentPlayer,
   gameReducer,
 } from '../src/gameLogic.ts';
+import { allowsActionForPendingAction } from '../src/pendingActionGuards.ts';
 import type {
   GameAction,
   GameState,
@@ -21,7 +22,6 @@ import type {
   RoomActionPayload,
   RoomSessionPayload,
   RoomView,
-  ViewerGameState,
   ViewerPlayerState,
 } from '../src/multiplayer.ts';
 
@@ -40,6 +40,8 @@ type Room = {
   members: RoomMember[];
   game: GameState | null;
   updatedAt: number;
+  /** Ephemeral animation override — set on specific player actions, expires automatically */
+  tableAnimOverride?: { event: import('../src/multiplayer.ts').TableAnimEvent; expiresAt: number } | null;
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,6 +51,10 @@ const distDir = path.join(rootDir, 'dist');
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? '0.0.0.0';
 const rooms = new Map<string, Room>();
+
+// SSE subscribers: roomCode → Set of { res, sessionId }
+type SseClient = { res: ServerResponse<IncomingMessage>; sessionId: string };
+const sseClients = new Map<string, Set<SseClient>>();
 
 type HttpRequest = IncomingMessage;
 type HttpResponse = ServerResponse<IncomingMessage>;
@@ -128,11 +134,31 @@ function clonePendingAction<T extends PendingAction | null>(pendingAction: T): T
   return JSON.parse(JSON.stringify(pendingAction)) as T;
 }
 
-function clonePlayerForViewer(player: Player, viewerId: number | null, revealRoles: boolean): ViewerPlayerState {
+function makeSceneId(prefix: string, ...parts: Array<string | number | undefined>): string {
+  return [prefix, ...parts]
+    .filter((part): part is string | number => part !== undefined)
+    .join(':');
+}
+
+function clonePlayerForViewer(
+  player: Player,
+  viewer: Player | null,
+  viewerId: number | null,
+  revealRoles: boolean,
+): ViewerPlayerState {
   return {
     id: player.id,
     name: player.name,
     role: revealRoles || player.id === viewerId ? player.role : null,
+    avatarId: player.avatarId,
+    canReceiveInfectedCardFromMe:
+      viewer == null || viewer.id === player.id
+        ? false
+        : viewer.role === 'thing'
+          ? true
+          : viewer.role === 'infected'
+            ? player.role === 'thing'
+            : false,
     hand: player.id === viewerId ? [...player.hand] : [],
     handCount: player.hand.length,
     isAlive: player.isAlive,
@@ -165,6 +191,8 @@ function canViewerSeePendingAction(
       return pendingAction.fromId === viewerId || pendingAction.toId === viewerId;
     case 'trade_defense':
       return pendingAction.defenderId === viewerId;
+    case 'suspicion_pick':
+      return true;
     case 'view_hand':
     case 'view_card':
     case 'whisky_reveal':
@@ -211,16 +239,93 @@ function sanitizePendingAction(
     return null;
   }
 
+  if (pendingAction.type === 'suspicion_pick') {
+    return clonePendingAction(pendingAction);
+  }
+
   return clonePendingAction(pendingAction);
 }
 
-function sanitizeGame(game: GameState, viewerId: number | null): ViewerGameState {
+/** Build a lightweight public animation hint.
+ *  Checks room-level ephemeral overrides first (set by specific player actions),
+ *  then falls back to the current pending action. No private card data included. */
+function buildTableAnim(
+  game: GameState,
+  room: Room,
+): import('../src/multiplayer.ts').TableAnimEvent | null {
+  // Ephemeral override (e.g. "defense card just played", "cards swapping")
+  if (room.tableAnimOverride && room.tableAnimOverride.expiresAt > Date.now()) {
+    return room.tableAnimOverride.event;
+  }
+
+  const pa = game.pendingAction;
+  if (!pa) return null;
+
+  // Exchange being negotiated — show the initiator card in the centre and wait for the target.
+  if (pa.type === 'trade_offer') {
+    return {
+      type: 'exchange_pending',
+      sceneId: makeSceneId('trade-offer', pa.fromId, pa.toId, pa.offeredCardUid),
+      initiatorId: pa.fromId,
+      targetId: pa.toId,
+      mode: 'trade',
+    };
+  }
+  if (pa.type === 'temptation_response') {
+    return {
+      type: 'exchange_pending',
+      sceneId: makeSceneId('temptation', pa.fromId, pa.toId, pa.offeredCardUid),
+      initiatorId: pa.fromId,
+      targetId: pa.toId,
+      mode: 'temptation',
+    };
+  }
+  if (pa.type === 'panic_trade_response') {
+    return {
+      type: 'exchange_pending',
+      sceneId: makeSceneId('panic-trade', pa.fromId, pa.toId, pa.offeredCardUid),
+      initiatorId: pa.fromId,
+      targetId: pa.toId,
+      mode: 'panic_trade',
+    };
+  }
+  if (pa.type === 'trade_defense') {
+    if (pa.reason === 'trade' || pa.reason === 'swap' || pa.reason === 'temptation') {
+      return {
+        type: 'exchange_pending',
+        sceneId: makeSceneId(`trade-defense-${pa.reason}`, pa.fromId, pa.defenderId, pa.offeredCardUid),
+        initiatorId: pa.fromId,
+        targetId: pa.defenderId,
+        mode: pa.reason,
+      };
+    }
+    // flamethrower / analysis — show the attack card while defender decides
+    return { type: 'card', sceneId: makeSceneId('pending-card', pa.reason, pa.defenderId), cardDefId: pa.reason };
+  }
+
+  // Card being played (targeting phase) or persistence
+  if (pa.type === 'choose_target')       return { type: 'card', sceneId: makeSceneId('choose-target', pa.cardDefId, pa.cardUid), cardDefId: pa.cardDefId };
+  if (pa.type === 'persistence_pick')    return { type: 'card', sceneId: 'persistence-pick', cardDefId: 'persistence' };
+  if (pa.type === 'panic_choose_target') return { type: 'card', sceneId: makeSceneId('panic-target', pa.panicDefId), cardDefId: pa.panicDefId };
+  if (pa.type === 'temptation_target')   return { type: 'card', sceneId: makeSceneId('temptation-target', pa.cardUid), cardDefId: 'temptation' };
+  if (pa.type === 'blind_date_swap')     return { type: 'card', sceneId: 'blind-date', cardDefId: 'panic_blind_date' };
+  if (pa.type === 'panic_trade')         return { type: 'card', sceneId: 'panic-trade-card', cardDefId: 'cant_be_friends' };
+  if (pa.type === 'forgetful_discard')   return { type: 'card', sceneId: makeSceneId('forgetful', pa.remaining), cardDefId: 'panic_forgetful' };
+  if (pa.type === 'revelations_round')   return { type: 'card', sceneId: makeSceneId('revelations', pa.currentRevealerIdx), cardDefId: 'panic_revelations' };
+  if (pa.type === 'party_pass')          return { type: 'card', sceneId: makeSceneId('party-pass', pa.chosen.length, pa.pendingPlayerIds.length), cardDefId: 'panic_chain_reaction' };
+
+  return null;
+}
+
+function sanitizeGame(game: GameState, viewerId: number | null, room: Room): import('../src/multiplayer.ts').ViewerGameState {
   const revealRoles = game.phase === 'game_over';
+  const viewer = viewerId === null ? null : game.players.find((player) => player.id === viewerId) ?? null;
 
   return {
     ...game,
-    players: game.players.map((player) => clonePlayerForViewer(player, viewerId, revealRoles)),
+    players: game.players.map((player) => clonePlayerForViewer(player, viewer, viewerId, revealRoles)),
     pendingAction: sanitizePendingAction(game.pendingAction, game, viewerId),
+    tableAnim: buildTableAnim(game, room),
   };
 }
 
@@ -241,7 +346,7 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
       connected: roomMember.connected,
       joinedAt: roomMember.joinedAt,
     })),
-    game: room.game ? sanitizeGame(room.game, member.playerId) : null,
+    game: room.game ? sanitizeGame(room.game, member.playerId, room) : null,
     hostAddress: createHostAddress(req),
     updatedAt: room.updatedAt,
   };
@@ -251,22 +356,43 @@ function touchRoom(room: Room): void {
   room.updatedAt = now();
 }
 
+/** Push room state to all SSE subscribers for this room */
+function broadcastRoom(room: Room, req: HttpRequest): void {
+  const clients = sseClients.get(room.code);
+  if (!clients || clients.size === 0) return;
+
+  for (const client of clients) {
+    const member = getMember(room, client.sessionId);
+    if (!member) continue;
+    const view = roomView(room, member, req);
+    const data = JSON.stringify({ ok: true, data: view });
+    client.res.write(`data: ${data}\n\n`);
+  }
+}
+
 function cleanupRooms(): void {
   const cutoff = now() - 1000 * 60 * 60 * 12;
 
   for (const [code, room] of rooms.entries()) {
     if (room.updatedAt < cutoff) {
       rooms.delete(code);
+      // Close SSE connections for deleted rooms
+      const clients = sseClients.get(code);
+      if (clients) {
+        for (const client of clients) client.res.end();
+        sseClients.delete(code);
+      }
     }
   }
 }
 
-function startRoomGame(room: Room, thingInDeck?: boolean): void {
+function startRoomGame(room: Room, thingInDeck?: boolean, chaosMode?: boolean): void {
   const playerNames = room.members.map((member) => member.name);
   const game = gameReducer(createInitialState(), {
     type: 'START_GAME',
     playerNames,
     thingInDeck,
+    chaosMode,
   });
 
   if (game.phase === 'role_reveal') {
@@ -301,25 +427,42 @@ function allowedToDispatch(room: Room, member: RoomMember, action: GameAction): 
   const pendingAction = room.game.pendingAction;
   const currentId = currentPlayerId(room);
 
+  if (!allowsActionForPendingAction(pendingAction, action)) {
+    return false;
+  }
+
   switch (action.type) {
     case 'SET_LANG':
     case 'START_GAME':
     case 'REVEAL_NEXT':
       return false;
     case 'RESPOND_TRADE':
+      return pendingAction?.type === 'trade_defense' &&
+        pendingAction.reason === 'trade' &&
+        pendingAction.defenderId === member.playerId;
     case 'PLAY_DEFENSE':
-    case 'DECLINE_DEFENSE':
       return pendingAction?.type === 'trade_defense' && pendingAction.defenderId === member.playerId;
+    case 'DECLINE_DEFENSE':
+      return pendingAction?.type === 'trade_defense' &&
+        ['flamethrower', 'analysis', 'swap'].includes(pendingAction.reason) &&
+        pendingAction.defenderId === member.playerId;
     case 'PARTY_PASS_CARD':
       return pendingAction?.type === 'party_pass' &&
         pendingAction.pendingPlayerIds.includes(member.playerId ?? -1) &&
         action.playerId === member.playerId;
+    case 'SUSPICION_PREVIEW_CARD':
+    case 'SUSPICION_CONFIRM_CARD':
+      return pendingAction?.type === 'suspicion_pick' &&
+        pendingAction.viewerPlayerId === member.playerId;
     case 'JUST_BETWEEN_US_PICK':
       return pendingAction?.type === 'just_between_us_pick' &&
         (pendingAction.playerA === member.playerId || pendingAction.playerB === member.playerId) &&
         action.playerId === member.playerId;
     case 'TEMPTATION_RESPOND':
-      return pendingAction?.type === 'temptation_response' && pendingAction.toId === member.playerId;
+      return (
+        (pendingAction?.type === 'temptation_response' && pendingAction.toId === member.playerId) ||
+        (pendingAction?.type === 'trade_defense' && pendingAction.reason === 'temptation' && pendingAction.defenderId === member.playerId)
+      );
     case 'CONFIRM_VIEW':
       if (!pendingAction) {
         return false;
@@ -331,6 +474,8 @@ function allowedToDispatch(room: Room, member: RoomMember, action: GameAction): 
         return pendingAction.playerId === member.playerId;
       }
       return currentId === member.playerId;
+    case 'END_TURN':
+      return currentId === member.playerId && room.game.step === 'end_turn';
     default:
       return currentId === member.playerId;
   }
@@ -345,7 +490,108 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
     return 'It is not your turn for this action.';
   }
 
+  // Capture the card being played BEFORE the reducer removes it from the hand
+  let playedCardDefId: string | null = null;
+  let playedDefenseDefId: string | null = null;
+  if (action.type === 'PLAY_CARD') {
+    const cur = room.game.players[room.game.currentPlayerIndex];
+    const card = cur?.hand.find(c => c.uid === action.cardUid);
+    playedCardDefId = card?.defId ?? null;
+  }
+  const pendingDefense = room.game.pendingAction?.type === 'trade_defense' ? room.game.pendingAction : null;
+  if (action.type === 'PLAY_DEFENSE' && pendingDefense) {
+    const defender = room.game.players.find(player => player.id === pendingDefense.defenderId);
+    const defenseCard = defender?.hand.find(card => card.uid === action.cardUid);
+    playedDefenseDefId = defenseCard?.defId ?? null;
+  }
+
+  const prevPA = room.game.pendingAction;
   room.game = gameReducer(room.game, action);
+
+  // Set ephemeral animation overrides based on what just happened
+  if (action.type === 'PLAY_DEFENSE' && prevPA?.type === 'trade_defense') {
+    if (playedDefenseDefId) {
+      if (prevPA.reason === 'trade' || prevPA.reason === 'swap' || prevPA.reason === 'temptation') {
+        // Show: initiator face-down offer + revealed defense card, then keep a blocked state briefly.
+        room.tableAnimOverride = {
+          event: {
+            type: 'exchange_blocked',
+            sceneId: makeSceneId('exchange-blocked', prevPA.reason, prevPA.fromId, prevPA.defenderId, action.cardUid),
+            initiatorId: prevPA.fromId,
+            targetId: prevPA.defenderId,
+            mode: prevPA.reason,
+            defenseCardDefId: playedDefenseDefId,
+          },
+          expiresAt: Date.now() + 3200,
+        };
+      } else {
+        // Flamethrower / analysis defense — just show the defense card face-up
+        room.tableAnimOverride = {
+          event: { type: 'card', sceneId: makeSceneId('defense-card', action.cardUid), cardDefId: playedDefenseDefId },
+          expiresAt: Date.now() + 2500,
+        };
+      }
+    }
+  } else if (action.type === 'RESPOND_TRADE' && prevPA?.type === 'trade_defense' && prevPA.reason === 'trade') {
+    // Defender accepted — show both cards in the centre, then animate them to the opposite owners.
+    room.tableAnimOverride = {
+      event: {
+        type: 'exchange_ready',
+        sceneId: makeSceneId('exchange-ready', prevPA.reason, prevPA.fromId, prevPA.defenderId, prevPA.offeredCardUid, action.cardUid),
+        initiatorId: prevPA.fromId,
+        targetId: prevPA.defenderId,
+        mode: 'trade',
+      },
+      expiresAt: Date.now() + 3000,
+    };
+  } else if (
+    action.type === 'TEMPTATION_RESPOND' &&
+    (
+      prevPA?.type === 'temptation_response' ||
+      (prevPA?.type === 'trade_defense' && prevPA.reason === 'temptation')
+    )
+  ) {
+    const fromId = prevPA.fromId;
+    const targetId = prevPA.type === 'trade_defense' ? prevPA.defenderId : prevPA.toId;
+    const offeredCardUid = prevPA.offeredCardUid;
+    room.tableAnimOverride = {
+      event: {
+        type: 'exchange_ready',
+        sceneId: makeSceneId('temptation-ready', fromId, targetId, offeredCardUid, action.cardUid),
+        initiatorId: fromId,
+        targetId: targetId,
+        mode: 'temptation',
+      },
+      expiresAt: Date.now() + 3000,
+    };
+  } else if (action.type === 'PANIC_TRADE_RESPOND' && prevPA?.type === 'panic_trade_response') {
+    room.tableAnimOverride = {
+      event: {
+        type: 'exchange_ready',
+        sceneId: makeSceneId('panic-ready', prevPA.fromId, prevPA.toId, prevPA.offeredCardUid, action.cardUid),
+        initiatorId: prevPA.fromId,
+        targetId: prevPA.toId,
+        mode: 'panic_trade',
+      },
+      expiresAt: Date.now() + 3000,
+    };
+  } else if (action.type === 'PLAY_CARD' && playedCardDefId) {
+    // Show the played card face-up in centre for all players to see (~2.5 s)
+    room.tableAnimOverride = {
+      event: { type: 'card', sceneId: makeSceneId('played-card', action.cardUid, playedCardDefId), cardDefId: playedCardDefId },
+      expiresAt: Date.now() + 2500,
+    };
+  } else if (action.type === 'SELECT_TARGET' || action.type === 'PANIC_SELECT_TARGET') {
+    // Resolves target selection — keep whatever card override was set by the preceding PLAY_CARD
+  } else {
+    // Only clear the override if it has already expired naturally.
+    // This prevents actions by OTHER players (e.g. DRAW_CARD on the next turn)
+    // from wiping the animation mid-display.
+    if (!room.tableAnimOverride || room.tableAnimOverride.expiresAt <= Date.now()) {
+      room.tableAnimOverride = null;
+    }
+  }
+
   touchRoom(room);
   return null;
 }
@@ -394,8 +640,10 @@ async function serveStatic(
   }
 }
 
+// Clean up stale rooms every 5 minutes instead of on every request
+setInterval(cleanupRooms, 5 * 60 * 1000);
+
 const server = createServer(async (req, res) => {
-  cleanupRooms();
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -449,6 +697,46 @@ const server = createServer(async (req, res) => {
 
       rooms.set(room.code, room);
       sendJson(res, 200, { ok: true, data: roomView(room, room.members[0], req) });
+      return;
+    }
+
+    // SSE stream endpoint: GET /api/rooms/{CODE}/stream?sessionId=...
+    const streamMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)\/stream$/i);
+    if (req.method === 'GET' && streamMatch) {
+      const streamRoom = getRoom(streamMatch[1]);
+      if (!streamRoom) { notFound(res, 'Room not found.'); return; }
+      const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
+      const member = getMember(streamRoom, sessionId);
+      if (!member) { badRequest(res, 'Session not found.'); return; }
+
+      member.connected = true;
+      member.lastSeenAt = now();
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+
+      // Send initial state
+      const initial = JSON.stringify({ ok: true, data: roomView(streamRoom, member, req) });
+      res.write(`data: ${initial}\n\n`);
+
+      // Register SSE client
+      const client: SseClient = { res, sessionId };
+      if (!sseClients.has(streamRoom.code)) sseClients.set(streamRoom.code, new Set());
+      sseClients.get(streamRoom.code)!.add(client);
+
+      // Keep-alive ping every 30s
+      const keepAlive = setInterval(() => res.write(': ping\n\n'), 30_000);
+
+      req.on('close', () => {
+        clearInterval(keepAlive);
+        sseClients.get(streamRoom.code)?.delete(client);
+        member.connected = false;
+        member.lastSeenAt = now();
+      });
       return;
     }
 
@@ -514,6 +802,7 @@ const server = createServer(async (req, res) => {
       room.members.push(member);
       touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
       return;
     }
 
@@ -523,7 +812,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (actionSegment === 'start') {
-      const body = await readBody<RoomSessionPayload & { thingInDeck?: boolean }>(req);
+      const body = await readBody<RoomSessionPayload & { thingInDeck?: boolean; chaosMode?: boolean }>(req);
       const member = getMember(room, body.sessionId);
 
       if (!member) {
@@ -546,8 +835,9 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      startRoomGame(room, body.thingInDeck);
+      startRoomGame(room, body.thingInDeck, body.chaosMode);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
       return;
     }
 
@@ -567,6 +857,7 @@ const server = createServer(async (req, res) => {
 
       resetRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
       return;
     }
 
@@ -586,6 +877,7 @@ const server = createServer(async (req, res) => {
       }
 
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
       return;
     }
 

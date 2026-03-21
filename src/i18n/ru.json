@@ -1,0 +1,278 @@
+{
+  "connect": {
+    "yourName": "Ваше имя",
+    "nameExample": "Например, Антон",
+    "createRoom": "Создать комнату",
+    "orJoinByCode": "или войти по коду",
+    "roomCode": "Код комнаты",
+    "joinRoom": "Присоединиться",
+    "linkCopied": "Ссылка скопирована.",
+    "errorEnterName": "Введите своё имя.",
+    "errorEnterNameAndCode": "Введите имя и код комнаты.",
+    "players": "Игроки",
+    "you": "(вы)",
+    "host": "хост",
+    "offline": "офлайн",
+    "settings": "Настройки",
+    "shuffleThingDeck": "Замешать «Нечто» в колоду",
+    "gameMode": "Режим игры",
+    "modeStandard": "Стандарт",
+    "modeThingInDeck": "Нечто в колоде",
+    "modeAnomaly": "Аномалия",
+    "modeHint_standard": "Нечто сразу попадает в руку случайному игроку.",
+    "modeHint_thing_in_deck": "Нечто перемешивается в колоду — игроки не знают, у кого оно появится.",
+    "modeHint_anomaly": "Позиция Нечто определяется случайно. Сильные карты (огнемёт, анализ и др.) замешаны в колоду с самого начала.",
+    "startMatch": "Начать партию",
+    "resetRoom": "Сбросить комнату",
+    "onlyHostStart": "Только хост может начать партию.",
+    "roomStatus": "{{count}} в комнате · {{needed}} до старта",
+    "copyLink": "Скопировать ссылку",
+    "leave": "Выйти",
+    "briefingLabel": "Сводка станции",
+    "tagline": "Паранойя, скрытые роли и обмены картами на одной заражённой базе.",
+    "summary": "Соберите экипаж, разошлите ссылку и запускайте партию так, чтобы каждый игрок чувствовал напряжение ещё до первого хода.",
+    "playersRange": "4–12 игроков",
+    "hiddenRoles": "Скрытые роли",
+    "mobileReady": "Телефон + ноутбук ок",
+    "briefingRolesTitle": "Кто среди нас?",
+    "briefingRolesBody": "Один игрок становится Нечто. Остальные пытаются вычислить его до того, как заражение расползётся по кругу.",
+    "briefingTradeTitle": "Обмены решают всё",
+    "briefingTradeBody": "Каждый ход создаёт подозрение: карты уходят соседям, защиты ломают планы, а ложь работает не хуже тактики.",
+    "briefingBurnTitle": "Огнемёт как приговор",
+    "briefingBurnBody": "Люди побеждают только если успевают точно вычислить цель. Ошибка часто решает весь матч.",
+    "accessTerminal": "Терминал доступа",
+    "accessTitle": "Создайте комнату или подключитесь к существующей",
+    "createHint": "Сначала введите имя. Хост сразу получит код комнаты и ссылку для остальных.",
+    "joinHint": "Если код уже есть, введите его вручную или просто откройте приглашение по ссылке.",
+    "readyToStart": "Готово к запуску",
+    "awaitingPlayers": "Ждём игроков",
+    "playersStat": "Состав",
+    "hostStat": "Хост",
+    "startStat": "Старт",
+    "startStatReady": "Можно начинать",
+    "startStatWaiting": "Нужно ещё {{count}}",
+    "playerRoster": "Кто уже на станции",
+    "online": "в сети",
+    "hostControls": "Управление лобби",
+    "waitingForHost": "Ожидание хоста",
+    "shareLinkLabel": "Ссылка-приглашение",
+    "shareHint": "Скопируйте ссылку и отправьте её игрокам. Код уже встроен внутрь.",
+    "startReady": "Минимальный состав собран. Можно начинать партию.",
+    "startNeedPlayers": "Для старта нужно ещё {{count}} игрок(а)."
+  },
+  "errors": {
+    "requestTimeout": "Запрос завис. Проверьте соединение и попробуйте ещё раз."
+  },
+  "game": {
+    "matchFinished": "Партия завершена",
+    "humansWin": "🧍 Люди победили",
+    "thingWinsAlone": "☣ Нечто победило в одиночку",
+    "thingWins": "☣ Нечто победило",
+    "alive": "✓ Жив",
+    "eliminated": "✗ Уничтожен",
+    "newMatch": "Новая партия",
+    "hostReturnLobby": "Хост может вернуть всех в лобби.",
+    "panic": "Паника!",
+    "you": "Вы",
+    "step": "Этап",
+    "clockwise": "↻ По часовой",
+    "counterCW": "↺ Против",
+    "status": "Состояние",
+    "yourTurn": "Ваш ход",
+    "waiting": "Ожидание",
+    "youCanAct": "Вы можете действовать.",
+    "turnOf": "Ход: {{name}}",
+    "deck": "Колода",
+    "discard": "Сброс",
+    "drawCard": "🃏 Взять карту",
+    "declareVictory": "☣ Объявить победу",
+    "endTurn": "→ Завершить ход",
+    "tableState": "На столе",
+    "waitingFor": "Ожидается: {{name}}",
+    "infectedAlertTitle": "Вы заражены",
+    "infectedAlertBody": "Скрывайте это от людей: теперь вы играете на стороне Нечто.",
+    "commandDeck": "Командный пост",
+    "stationIntel": "Обстановка",
+    "activePlayer": "Сейчас ходит",
+    "aliveNow": "В живых",
+    "latestEvents": "Последние события",
+    "log": "Журнал"
+  },
+  "role": {
+    "human": "Человек",
+    "thing": "Нечто",
+    "infected": "Заражённый",
+    "hidden": "Скрыто"
+  },
+  "step": {
+    "draw": "Возьмите карту",
+    "playOrDiscard": "Сыграйте или сбросьте карту",
+    "trade": "Обмен с соседом",
+    "tradeResponse": "Ожидается ответ на действие",
+    "endTurn": "Завершите ход"
+  },
+  "actionReason": {
+    "trade": "обмен",
+    "temptation": "соблазн",
+    "flamethrower": "огнемёт",
+    "swap": "перемещение",
+    "analysis": "анализ"
+  },
+  "pending": {
+    "privateReveal": "Открыт приватный просмотр карт.",
+    "chooseTarget": "Нужно выбрать цель.",
+    "chooseCardDiscard": "Нужно выбрать карту для сброса.",
+    "chooseCardTrade": "Нужно выбрать карту для обмена.",
+    "chooseCardKeep": "Нужно выбрать карту, которую оставить.",
+    "chooseAdjacentPlayers": "Нужно выбрать двух соседних игроков для обязательного обмена.",
+    "tradeDefenseDeciding": "{{name}} решает, как ответить на {{reason}}."
+  },
+  "category": {
+    "infection": "Заражение",
+    "action": "Действие",
+    "defense": "Защита",
+    "obstacle": "Препятствие",
+    "panic": "Паника",
+    "promo": "Промо"
+  },
+  "topbar": {
+    "room": "Комната",
+    "language": "Язык",
+    "hideText": "Скрыть текст",
+    "cardText": "Текст карт",
+    "copyLink": "Ссылка",
+    "leave": "Выйти"
+  },
+  "panel": {
+    "yourHand": "Ваша рука",
+    "cards": "карт",
+    "eventLog": "Журнал событий",
+    "direction": "направление",
+    "cardsShort": "{{count}}к",
+    "activeAction": "Активное действие",
+    "noActivePrompts": "Нет активных запросов.",
+    "noResponseNeeded": "Ответ не требуется."
+  },
+  "card": {
+    "panicBack": "Паника",
+    "eventBack": "Событие"
+  },
+  "action": {
+    "choice": "На выбор",
+    "revealed": "Показана",
+    "play": "Сыграть",
+    "discard": "Сброс",
+    "offer": "Обмен",
+    "discardBtn": "Сбросить",
+    "defend": "Защититься",
+    "give": "Дать",
+    "giveAlt": "Отдать",
+    "pick": "Выбрать",
+    "pass": "Передать",
+    "swap": "Обменять",
+    "keep": "Оставить",
+    "confirm": "Подтвердить",
+    "show": "Показать",
+    "skip": "Пропустить",
+    "acceptElimination": "Принять уничтожение",
+    "allowAnalysis": "Показать карты",
+    "acceptSwap": "Принять перемещение"
+  },
+  "target": {
+    "chooseTarget": "Выберите цель",
+    "chooseDiscard": "Выберите сброс",
+    "panicChooseTarget": "Паника — выберите цель",
+    "tapPlayerIcon": "Нажмите на подсвеченную иконку игрока: {{names}}"
+  },
+  "blindDate": {
+    "title": "Свидание вслепую",
+    "description": "Выберите карту для обмена с колодой."
+  },
+  "forgetful": {
+    "title": "Забывчивость",
+    "description": "Сбросьте ещё {{count}} карт(у)."
+  },
+  "persistence": {
+    "title": "Настойчивость"
+  },
+  "temptation": {
+    "title": "Соблазн",
+    "giveCardTo": "Отдать карту → {{name}}",
+    "yourTurn": "Соблазн — ваш ход",
+    "offersExchange": "{{name}} предлагает обмен.",
+    "offeredToYou": "Вам предлагают:",
+    "choosing": "{{name}} выбирает карту…"
+  },
+  "justBetweenUs": {
+    "title": "Только между нами",
+    "pickPair": "Выберите пару соседних игроков.",
+    "choosing": "{{a}} и {{b}} выбирают…",
+    "waitingPartner": "Выбрано. Ждём {{name}}…",
+    "tradeWith": "Обмен с {{name}}."
+  },
+  "reveal": {
+    "title": "Просмотр карт",
+    "showsAll": "{{name}} показывает карты всем.",
+    "cardsOf": "Карты: {{name}}",
+    "otherMustConfirm": "Другой игрок должен подтвердить."
+  },
+  "suspicion": {
+    "title": "Подозрение",
+    "description": "Выберите карту рубашкой вверх и подтвердите выбор.",
+    "desktopDescription": "Выберите карту прямо в веере подозреваемого и подтвердите выбор.",
+    "confirm": "Подтвердить выбор",
+    "pickCard": "Выбрать карту {{index}}"
+  },
+  "tradeDefense": {
+    "title": "Ответ на действие",
+    "defense": "Защита",
+    "acceptTrade": "Принять обмен"
+  },
+  "party": {
+    "title": "🎉 Вечеринка!",
+    "chosenWaiting": "Выбрано. Ждём остальных…",
+    "passCard": "Передайте карту соседу.",
+    "waiting": "Ждём ({{count}} ост.)"
+  },
+  "panicTrade": {
+    "title": "Давай дружить?",
+    "pickCard": "Выберите карту для обмена с {{name}}",
+    "yourTurn": "Давай дружить? — ваш ход",
+    "offersExchange": "{{name}} предлагает обмен.",
+    "choosing": "{{name}} выбирает карту…"
+  },
+  "revelations": {
+    "title": "Время признаний",
+    "deciding": "{{name}} решает, показывать ли карты…",
+    "showCards": "Показать свои карты всем?"
+  },
+  "tableScene": {
+    "mode": {
+      "trade": "Обмен",
+      "swap": "Принудительное действие",
+      "temptation": "Соблазн",
+      "panic_trade": "Давай дружить?"
+    },
+    "slot": {
+      "initiator": "Инициатор",
+      "target": "Цель"
+    },
+    "placeholder": {
+      "targetSeat": "Место цели",
+      "waiting": "Ожидание ответа"
+    },
+    "status": {
+      "blocked": "Обмен заблокирован",
+      "resolved": "Обмен завершён"
+    },
+    "phase": {
+      "initiatorCardSelected": "{{name}} кладёт карту в центр",
+      "waitingTargetResponse": "{{name}} решает, как ответить",
+      "targetDefenseRevealed": "{{name}} раскрывает защиту",
+      "targetCardSelected": "{{name}} добавляет карту в центр",
+      "exchangeAnimating": "Карты пересекают стол",
+      "exchangeResolved": "Карты дошли до новых владельцев",
+      "exchangeBlocked": "Защита остановила обмен"
+    }
+  }
+}

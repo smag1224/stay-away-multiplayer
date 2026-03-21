@@ -1,3 +1,4 @@
+import i18n from 'i18next';
 import { getCardDef } from './cards.ts';
 import type {
   CardInstance,
@@ -16,6 +17,7 @@ export type Lang = 'en' | 'ru';
 
 export const SESSION_STORAGE_KEY = 'stay-away-multiplayer-session';
 export const LANG_STORAGE_KEY = 'stay-away-multiplayer-lang';
+const API_TIMEOUT_MS = 8000;
 
 export function readStoredSession(): SessionInfo | null {
   const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
@@ -53,13 +55,27 @@ export function text(lang: Lang, ru: string, en: string): string {
 }
 
 export async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(input, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(i18n.t('errors.requestTimeout'));
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const raw = await response.text();
   let payload: ApiResponse<T>;
@@ -77,20 +93,22 @@ export async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T>
   return payload.data;
 }
 
-export function localTradeCheck(player: ViewerPlayerState, card: CardInstance): boolean {
+export function localTradeCheck(player: ViewerPlayerState, card: CardInstance, receiver?: ViewerPlayerState | null): boolean {
   if (card.defId === 'the_thing') return false;
   if (card.defId === 'infected') {
-    if (player.role === 'thing') return true;
+    if (player.role === 'thing') {
+      return receiver ? receiver.canReceiveInfectedCardFromMe : true;
+    }
     if (player.role === 'infected') {
       const infectedCount = player.hand.filter((item) => item.defId === 'infected').length;
-      return infectedCount > 1;
+      return infectedCount > 1 && Boolean(receiver?.canReceiveInfectedCardFromMe);
     }
     return false;
   }
   return true;
 }
 
-export function getCurrentPlayer(game: ViewerGameState): ViewerPlayerState {
+export function getCurrentPlayer(game: ViewerGameState): ViewerPlayerState | undefined {
   return game.players[game.currentPlayerIndex];
 }
 
@@ -99,44 +117,46 @@ export function getViewerPlayer(game: ViewerGameState, playerId: number | null):
   return game.players.find((player) => player.id === playerId) ?? null;
 }
 
-export function roleLabel(role: string | null, lang: Lang): string {
+export function roleLabel(role: string | null, _lang?: Lang): string {
   switch (role) {
     case 'human':
-      return text(lang, 'Человек', 'Human');
+      return i18n.t('role.human');
     case 'thing':
-      return text(lang, 'Нечто', 'The Thing');
+      return i18n.t('role.thing');
     case 'infected':
-      return text(lang, 'Заражённый', 'Infected');
+      return i18n.t('role.infected');
     default:
-      return text(lang, 'Скрыто', 'Hidden');
+      return i18n.t('role.hidden');
   }
 }
 
-export function stepLabel(step: ViewerGameState['step'], lang: Lang): string {
+export function stepLabel(step: ViewerGameState['step'], _lang?: Lang): string {
   switch (step) {
     case 'draw':
-      return text(lang, 'Возьмите карту', 'Draw a card');
+      return i18n.t('step.draw');
     case 'play_or_discard':
-      return text(lang, 'Сыграйте или сбросьте карту', 'Play or discard a card');
+      return i18n.t('step.playOrDiscard');
     case 'trade':
-      return text(lang, 'Обмен с соседом', 'Trade with a neighbor');
+      return i18n.t('step.trade');
     case 'trade_response':
-      return text(lang, 'Ожидается ответ на действие', 'Waiting for a response');
+      return i18n.t('step.tradeResponse');
     case 'end_turn':
-      return text(lang, 'Завершите ход', 'End the turn');
+      return i18n.t('step.endTurn');
   }
 }
 
-export function actionReasonLabel(reason: 'trade' | 'flamethrower' | 'swap' | 'analysis', lang: Lang): string {
+export function actionReasonLabel(reason: 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis', _lang?: Lang): string {
   switch (reason) {
     case 'trade':
-      return text(lang, 'обмен', 'trade');
+      return i18n.t('actionReason.trade');
+    case 'temptation':
+      return i18n.t('actionReason.temptation');
     case 'flamethrower':
-      return text(lang, 'огнемёт', 'flamethrower');
+      return i18n.t('actionReason.flamethrower');
     case 'swap':
-      return text(lang, 'перемещение', 'seat swap');
+      return i18n.t('actionReason.swap');
     case 'analysis':
-      return text(lang, 'анализ', 'analysis');
+      return i18n.t('actionReason.analysis');
   }
 }
 
@@ -162,33 +182,32 @@ export function extractPendingOwner(pendingAction: PendingAction | null): number
 export function pendingSummary(
   pendingAction: PendingAction | null,
   game: ViewerGameState,
-  lang: Lang,
+  _lang?: Lang,
 ): string | null {
   if (!pendingAction) return null;
 
   switch (pendingAction.type) {
     case 'trade_defense': {
       const defender = game.players.find((player) => player.id === pendingAction.defenderId);
-      return text(
-        lang,
-        `${defender?.name ?? 'Игрок'} решает, как ответить на ${actionReasonLabel(pendingAction.reason, lang)}.`,
-        `${defender?.name ?? 'A player'} is deciding how to respond to the ${actionReasonLabel(pendingAction.reason, lang)}.`,
-      );
+      return i18n.t('pending.tradeDefenseDeciding', {
+        name: defender?.name ?? i18n.t('role.hidden'),
+        reason: actionReasonLabel(pendingAction.reason),
+      });
     }
     case 'view_hand':
     case 'view_card':
     case 'whisky_reveal':
-      return text(lang, 'Открыт приватный просмотр карт.', 'A private card reveal is in progress.');
+      return i18n.t('pending.privateReveal');
     case 'choose_target':
-      return text(lang, 'Нужно выбрать цель.', 'A target must be chosen.');
+      return i18n.t('pending.chooseTarget');
     case 'choose_card_to_discard':
-      return text(lang, 'Нужно выбрать карту для сброса.', 'A card must be discarded.');
+      return i18n.t('pending.chooseCardDiscard');
     case 'choose_card_to_give':
-      return text(lang, 'Нужно выбрать карту для обмена.', 'Choose a card to exchange.');
+      return i18n.t('pending.chooseCardTrade');
     case 'persistence_pick':
-      return text(lang, 'Нужно выбрать карту, которую оставить.', 'Choose which card to keep.');
+      return i18n.t('pending.chooseCardKeep');
     case 'just_between_us':
-      return text(lang, 'Нужно выбрать двух соседних игроков для обязательного обмена.', 'Choose two adjacent players for a forced trade.');
+      return i18n.t('pending.chooseAdjacentPlayers');
     default:
       return null;
   }
@@ -202,21 +221,21 @@ export function copyToClipboard(value: string): Promise<void> {
   return Promise.reject(new Error('Clipboard API unavailable.'));
 }
 
-export function cardCategoryLabel(card: CardInstance, lang: Lang): string {
+export function cardCategoryLabel(card: CardInstance, _lang?: Lang): string {
   const def = getCardDef(card.defId);
   switch (def.category) {
     case 'infection':
-      return text(lang, 'Заражение', 'Infection');
+      return i18n.t('category.infection');
     case 'action':
-      return text(lang, 'Действие', 'Action');
+      return i18n.t('category.action');
     case 'defense':
-      return text(lang, 'Защита', 'Defense');
+      return i18n.t('category.defense');
     case 'obstacle':
-      return text(lang, 'Препятствие', 'Obstacle');
+      return i18n.t('category.obstacle');
     case 'panic':
-      return text(lang, 'Паника', 'Panic');
+      return i18n.t('category.panic');
     case 'promo':
-      return text(lang, 'Промо', 'Promo');
+      return i18n.t('category.promo');
   }
 }
 

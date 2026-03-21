@@ -24,3 +24,19 @@ dist-ssr
 *.sw?
 CLAUDEAWAY/
 CODEXNECHTO/
+
+# Dev utility scripts
+copy_assets.cjs
+copy_assets.js
+extract.js
+split_components.js
+mockups/
+
+# Local tooling / verification artifacts
+.playwright-artifacts/
+.claude/settings.local.json
+*.dev.log
+*.dev.err.log
+tmp-*.png
+*layout-verification*.png
+*mobile-background-pass*.png

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { ConnectScreen, LobbyScreen } from './ConnectLobby.tsx';
 import { GameScreen } from './GameScreen.tsx';
@@ -7,17 +8,16 @@ import {
   api,
   copyToClipboard,
   getViewerPlayer,
-  readStoredLang,
   readStoredSession,
-  text,
   writeStoredLang,
   writeStoredSession,
-  type Lang,
 } from './appHelpers.ts';
+import type { Lang } from './appHelpers.ts';
 import './App.css';
 
 function App() {
-  const [lang, setLang] = useState<Lang>(() => readStoredLang());
+  const { i18n } = useTranslation();
+  const lang = i18n.language as Lang;
   const [session, setSession] = useState<SessionInfo | null>(() => readStoredSession());
   const [room, setRoom] = useState<RoomView | null>(null);
   const [name, setName] = useState('');
@@ -25,13 +25,15 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [thingInDeck, setThingInDeck] = useState(false);
+  const [gameMode, setGameMode] = useState<'standard' | 'thing_in_deck' | 'anomaly'>('standard');
   // Track latest known state timestamp to prevent stale poll responses from overwriting fresh action responses
   const lastKnownUpdatedAt = useRef(0);
 
-  useEffect(() => {
-    writeStoredLang(lang);
-  }, [lang]);
+  const toggleLang = () => {
+    const next: Lang = lang === 'ru' ? 'en' : 'ru';
+    void i18n.changeLanguage(next);
+    writeStoredLang(next);
+  };
 
   useEffect(() => {
     if (!session) {
@@ -39,38 +41,54 @@ function App() {
       lastKnownUpdatedAt.current = 0;
       return;
     }
+    const activeSession = session;
 
     let cancelled = false;
 
-    const refresh = async () => {
-      try {
-        const nextRoom = await api<RoomView>(`/api/rooms/${session.roomCode}?sessionId=${session.sessionId}`);
-        if (cancelled) return;
-        // Only accept poll responses that are at least as fresh as our last known state
-        // This prevents stale GET responses from overwriting a recent action POST response
-        if (nextRoom.updatedAt >= lastKnownUpdatedAt.current) {
-          setRoom(nextRoom);
-          lastKnownUpdatedAt.current = nextRoom.updatedAt;
-          setError(null);
-        }
-      } catch (refreshError) {
-        if (cancelled) return;
-        const message = refreshError instanceof Error ? refreshError.message : String(refreshError);
-        setError(message);
-        if (message.includes('Room not found') || message.includes('Session not found')) {
-          writeStoredSession(null);
-          setSession(null);
-          setRoom(null);
-        }
+    const handleRoomData = (nextRoom: RoomView) => {
+      if (cancelled) return;
+      if (nextRoom.updatedAt >= lastKnownUpdatedAt.current) {
+        setRoom(nextRoom);
+        lastKnownUpdatedAt.current = nextRoom.updatedAt;
+        setError(null);
       }
     };
 
-    void refresh();
-    const intervalId = window.setInterval(refresh, 1200);
+    const handleError = (message: string) => {
+      if (cancelled) return;
+      setError(message);
+      if (message.includes('Room not found') || message.includes('Session not found')) {
+        writeStoredSession(null);
+        setSession(null);
+        setRoom(null);
+      }
+    };
+
+    let pollInterval: number | null = null;
+
+    function startPolling() {
+      if (pollInterval || cancelled) return;
+      const refresh = async () => {
+        try {
+          const nextRoom = await api<RoomView>(`/api/rooms/${activeSession.roomCode}?sessionId=${activeSession.sessionId}`);
+          handleRoomData(nextRoom);
+        } catch (e) {
+          handleError(e instanceof Error ? e.message : String(e));
+        }
+      };
+      void refresh();
+      pollInterval = window.setInterval(refresh, 1200);
+    }
+
+    // We intentionally use polling instead of SSE here.
+    // During local multiplayer testing with many browser windows/tabs,
+    // EventSource can hit per-origin connection limits and stall actions
+    // like "start game", leaving the lobby stuck in a loading state.
+    startPolling();
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      if (pollInterval) window.clearInterval(pollInterval);
     };
   }, [session]);
 
@@ -82,6 +100,7 @@ function App() {
   }, [room]);
 
   const game = room?.game ?? null;
+  const showFloatingLangToggle = !session || !room || !game;
   const me = useMemo(
     () => (game ? getViewerPlayer(game, room?.me.playerId ?? null) : null),
     [game, room?.me.playerId],
@@ -124,21 +143,22 @@ function App() {
 
   return (
     <div className="app-shell">
-      <button className="lang-toggle" onClick={() => setLang((prev) => (prev === 'ru' ? 'en' : 'ru'))} type="button">
-        {lang === 'ru' ? 'EN' : 'RU'}
-      </button>
+      {showFloatingLangToggle && (
+        <button className="lang-toggle" onClick={toggleLang} type="button">
+          {lang === 'ru' ? 'EN' : 'RU'}
+        </button>
+      )}
 
       {!session && (
         <ConnectScreen
           copied={copied}
           error={error}
           joinCode={joinCode}
-          lang={lang}
           loading={loading}
           name={name}
           onCreateRoom={async () => {
             const trimmedName = name.trim();
-            if (!trimmedName) return setError(text(lang, 'Введите своё имя.', 'Enter your name.'));
+            if (!trimmedName) return setError(i18n.t('connect.errorEnterName'));
             setLoading(true);
             try {
               const nextRoom = await api<RoomView>('/api/rooms/create', { method: 'POST', body: JSON.stringify({ name: trimmedName }) });
@@ -153,7 +173,7 @@ function App() {
           onJoinRoom={async () => {
             const trimmedName = name.trim();
             const roomCode = joinCode.trim().toUpperCase();
-            if (!trimmedName || !roomCode) return setError(text(lang, 'Введите имя и код комнаты.', 'Enter both your name and the room code.'));
+            if (!trimmedName || !roomCode) return setError(i18n.t('connect.errorEnterNameAndCode'));
             setLoading(true);
             try {
               const nextRoom = await api<RoomView>(`/api/rooms/${roomCode}/join`, { method: 'POST', body: JSON.stringify({ name: trimmedName }) });
@@ -174,16 +194,19 @@ function App() {
         <LobbyScreen
           copied={copied}
           error={error}
-          lang={lang}
           loading={loading}
           room={room}
           shareUrl={shareUrl}
           onCopy={updateCopied}
           onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
           onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
-          thingInDeck={thingInDeck}
-          onThingInDeckChange={setThingInDeck}
-          onStart={() => callRoomEndpoint(`/api/rooms/${room.code}/start`, { sessionId: room.me.sessionId, thingInDeck })}
+          gameMode={gameMode}
+          onGameModeChange={setGameMode}
+          onStart={() => callRoomEndpoint(`/api/rooms/${room.code}/start`, {
+            sessionId: room.me.sessionId,
+            thingInDeck: gameMode === 'thing_in_deck',
+            chaosMode: gameMode === 'anomaly',
+          })}
         />
       )}
 
@@ -191,9 +214,9 @@ function App() {
         <GameScreen
           error={error}
           game={game}
-          lang={lang}
           loading={loading}
           me={me}
+          onToggleLang={toggleLang}
           room={room}
           onAction={(action) => callRoomEndpoint(`/api/rooms/${room.code}/action`, { sessionId: room.me.sessionId, action })}
           onCopy={updateCopied}

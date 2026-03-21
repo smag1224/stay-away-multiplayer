@@ -39,6 +39,7 @@ export interface Player {
   id: number;
   name: string;
   role: Role;
+  avatarId: string;
   hand: CardInstance[];
   handCount?: number;
   isAlive: boolean;
@@ -77,6 +78,8 @@ export interface LogEntry {
   text: string;
   textRu: string;
   timestamp: number;
+  /** defId of the card that was played — set only for PLAY_CARD log entries, used by animation */
+  cardDefId?: string;
 }
 
 // ── Pending Action (for modals) ─────────────────────────────────────────────
@@ -97,13 +100,20 @@ export type PendingAction =
       viewerPlayerId: number;
       public?: boolean;
     }
+  | {
+      type: 'suspicion_pick';
+      targetPlayerId: number;
+      viewerPlayerId: number;
+      selectableCardUids: string[];
+      previewCardUid: string | null;
+    }
   | { type: 'trade_offer'; fromId: number; toId: number; offeredCardUid: string }
   | {
       type: 'trade_defense';
       defenderId: number;
       fromId: number;
       offeredCardUid: string;
-      reason: 'trade' | 'flamethrower' | 'swap' | 'analysis';
+      reason: 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis';
     }
   | { type: 'panic_effect'; cardDefId: string; data?: unknown }
   | { type: 'choose_card_to_give'; targetPlayerId: number }
@@ -155,11 +165,13 @@ export interface GameState {
 // ── Action Payloads ─────────────────────────────────────────────────────────
 
 export type GameAction =
-  | { type: 'START_GAME'; playerNames: string[]; thingInDeck?: boolean }
+  | { type: 'START_GAME'; playerNames: string[]; thingInDeck?: boolean; chaosMode?: boolean }
   | { type: 'REVEAL_NEXT' }
   | { type: 'DRAW_CARD' }
   | { type: 'PLAY_CARD'; cardUid: string; targetPlayerId?: number; targetPosition?: number }
   | { type: 'DISCARD_CARD'; cardUid: string }
+  | { type: 'SUSPICION_PREVIEW_CARD'; cardUid: string }
+  | { type: 'SUSPICION_CONFIRM_CARD'; cardUid: string }
   | { type: 'OFFER_TRADE'; cardUid: string }
   | { type: 'RESPOND_TRADE'; cardUid: string }  // card from responder's hand
   | { type: 'PLAY_DEFENSE'; cardUid: string }

@@ -11,6 +11,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:8787',
       },
     },
+    // Ensure Vite doesn't compress SSE responses
+    headers: {
+      'Cache-Control': 'no-transform',
+    },
   },
   preview: {
     host: true,
