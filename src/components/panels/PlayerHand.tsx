@@ -85,21 +85,7 @@ export function PlayerHand({
     return true;
   };
 
-  let extraCards: ExtraHandEntry[] = [];
-  if (pending?.type === 'persistence_pick') {
-    extraCards = pending.drawnCards.map((c) => ({
-      isExtra: true,
-      card: c,
-      source: 'persistence',
-      btnLabel: t('action.keep'),
-      btnCss: 'primary',
-      actionFn: () => { void onAction({ type: 'PERSISTENCE_PICK', keepUid: c.uid, discardUids: pending.drawnCards.filter((x) => x.uid !== c.uid).map((x) => x.uid) }); },
-    }));
-  } else if (pending?.type === 'view_hand' || pending?.type === 'whisky_reveal') {
-    extraCards = pending.cards.map((c) => ({ isExtra: true, card: c, source: 'reveal' }));
-  } else if (pending?.type === 'view_card') {
-    extraCards = [{ isExtra: true, card: pending.card, source: 'reveal' }];
-  }
+  const extraCards: ExtraHandEntry[] = [];
 
   const allCards: Array<ExtraHandEntry | PlayerHandEntry> = [
     ...extraCards,

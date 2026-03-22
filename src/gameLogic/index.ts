@@ -79,6 +79,7 @@ export function createInitialState(): GameState {
     revealingPlayer: 0,
     tradeSkipped: false,
     panicAnnouncement: null,
+    reshuffleCount: 0,
     lang: 'ru',
   };
 }

@@ -16,9 +16,9 @@ function getOrbitLayout(totalPlayers: number) {
     return {
       orbitCenterX: 50,
       orbitCenterY: 54,
-      orbitRadiusX: 46,
-      orbitRadiusY: 35,
-      handOffset: 56,
+      orbitRadiusX: 49,
+      orbitRadiusY: 36.5,
+      handOffset: 60,
       nodeLift: '-24%',
     };
   }
@@ -27,9 +27,9 @@ function getOrbitLayout(totalPlayers: number) {
     return {
       orbitCenterX: 50,
       orbitCenterY: 53,
-      orbitRadiusX: 48,
-      orbitRadiusY: 36,
-      handOffset: 58,
+      orbitRadiusX: 50,
+      orbitRadiusY: 37,
+      handOffset: 61,
       nodeLift: '-25%',
     };
   }
@@ -38,9 +38,9 @@ function getOrbitLayout(totalPlayers: number) {
     return {
       orbitCenterX: 50,
       orbitCenterY: 52,
-      orbitRadiusX: 49,
-      orbitRadiusY: 37,
-      handOffset: 60,
+      orbitRadiusX: 51,
+      orbitRadiusY: 38,
+      handOffset: 62,
       nodeLift: '-26%',
     };
   }
@@ -48,9 +48,9 @@ function getOrbitLayout(totalPlayers: number) {
   return {
     orbitCenterX: 50,
     orbitCenterY: 51,
-    orbitRadiusX: 50,
-    orbitRadiusY: 38,
-    handOffset: 62,
+    orbitRadiusX: 52,
+    orbitRadiusY: 39,
+    handOffset: 64,
     nodeLift: '-27%',
   };
 }
@@ -154,24 +154,28 @@ export function PlayerCircle({
               <div className={`player-opponent-hand ${canPickFromFan ? 'is-suspicion-selectable' : ''}`} style={opponentHandStyle}>
                 <div className="opponent-hand-fan" aria-hidden={canPickFromFan ? undefined : true}>
                   {publicCardKeys.slice(0, previewCount).map((cardKey, idx) => (
-                    <button
-                      aria-label={t('suspicion.pickCard', { index: idx + 1 })}
-                      aria-pressed={suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey}
-                      className={`opponent-card-back ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''} ${canPickFromFan ? 'is-selectable' : ''}`}
-                      disabled={!canPickFromFan || loading}
+                    <div
+                      className={`opponent-card-slot ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''}`}
                       key={`${player.id}-card-back-${cardKey}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canPickFromFan || loading) return;
-                        void onAction({ type: 'SUSPICION_PREVIEW_CARD', cardUid: cardKey });
-                      }}
                       style={{
                         '--card-shift': `${(idx - fanMid) * 10}px`,
                         '--card-tilt': `${(idx - fanMid) * 7}deg`,
                         '--card-depth': `${Math.abs(idx - fanMid) * 1.5}px`,
                       } as CSSProperties}
-                      type="button"
-                    />
+                    >
+                      <button
+                        aria-label={t('suspicion.pickCard', { index: idx + 1 })}
+                        aria-pressed={suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey}
+                        className={`opponent-card-back ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''} ${canPickFromFan ? 'is-selectable' : ''}`}
+                        disabled={!canPickFromFan || loading}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!canPickFromFan || loading) return;
+                          void onAction({ type: 'SUSPICION_PREVIEW_CARD', cardUid: cardKey });
+                        }}
+                        type="button"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
