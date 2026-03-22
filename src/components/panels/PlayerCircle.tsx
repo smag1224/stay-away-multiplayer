@@ -16,9 +16,9 @@ function getOrbitLayout(totalPlayers: number) {
     return {
       orbitCenterX: 50,
       orbitCenterY: 54,
-      orbitRadiusX: 46,
-      orbitRadiusY: 35,
-      handOffset: 56,
+      orbitRadiusX: 49,
+      orbitRadiusY: 36.5,
+      handOffset: 60,
       nodeLift: '-24%',
     };
   }
@@ -27,9 +27,9 @@ function getOrbitLayout(totalPlayers: number) {
     return {
       orbitCenterX: 50,
       orbitCenterY: 53,
-      orbitRadiusX: 48,
-      orbitRadiusY: 36,
-      handOffset: 58,
+      orbitRadiusX: 50,
+      orbitRadiusY: 37,
+      handOffset: 61,
       nodeLift: '-25%',
     };
   }
@@ -38,9 +38,9 @@ function getOrbitLayout(totalPlayers: number) {
     return {
       orbitCenterX: 50,
       orbitCenterY: 52,
-      orbitRadiusX: 49,
-      orbitRadiusY: 37,
-      handOffset: 60,
+      orbitRadiusX: 51,
+      orbitRadiusY: 38,
+      handOffset: 62,
       nodeLift: '-26%',
     };
   }
@@ -48,9 +48,9 @@ function getOrbitLayout(totalPlayers: number) {
   return {
     orbitCenterX: 50,
     orbitCenterY: 51,
-    orbitRadiusX: 50,
-    orbitRadiusY: 38,
-    handOffset: 62,
+    orbitRadiusX: 52,
+    orbitRadiusY: 39,
+    handOffset: 64,
     nodeLift: '-27%',
   };
 }
@@ -71,7 +71,49 @@ export function PlayerCircle({
   const { t } = useTranslation();
   const total = game.players.length;
   const current = getCurrentPlayer(game);
-  const { orbitCenterX, orbitCenterY, orbitRadiusX, orbitRadiusY, handOffset, nodeLift } = getOrbitLayout(total);
+  const { orbitCenterX, orbitCenterY, orbitRadiusX, orbitRadiusY, nodeLift } = getOrbitLayout(total);
+  const circleStyle = {
+    '--player-node-width':
+      total >= 9
+        ? 'clamp(4.9rem, 7.8vw, 5.9rem)'
+        : total >= 8
+          ? 'clamp(5.35rem, 8.4vw, 6.6rem)'
+          : total >= 6
+            ? 'clamp(5.9rem, 8.9vw, 7.55rem)'
+            : 'clamp(6.45rem, 9.8vw, 8.85rem)',
+    '--player-avatar-size':
+      total >= 9
+        ? 'clamp(3.1rem, 5.3dvh, 4.3rem)'
+        : total >= 8
+          ? 'clamp(3.45rem, 5.9dvh, 4.85rem)'
+          : total >= 6
+            ? 'clamp(3.85rem, 6.45dvh, 5.45rem)'
+            : 'clamp(4.25rem, 7.6dvh, 6.5rem)',
+    '--player-meta-min-width':
+      total >= 8
+        ? 'clamp(4.5rem, 6.4vw, 5.5rem)'
+        : 'clamp(5.1rem, 7vw, 6.25rem)',
+    '--player-meta-max-width':
+      total >= 8
+        ? 'clamp(5.25rem, 7.6vw, 6.35rem)'
+        : 'clamp(6rem, 8.5vw, 8rem)',
+    '--circle-core-size':
+      total >= 8
+        ? 'clamp(3.45rem, 6dvh, 4.6rem)'
+        : 'clamp(4rem, 7.6dvh, 5.75rem)',
+    '--orbit-hand-distance':
+      total >= 9
+        ? 'clamp(2.25rem, 4.3dvh, 3rem)'
+        : total >= 8
+          ? 'clamp(2.5rem, 4.8dvh, 3.25rem)'
+          : 'clamp(2.85rem, 5.6dvh, 4rem)',
+    '--opponent-card-width':
+      total >= 9
+        ? 'clamp(1rem, 1.55vw, 1.25rem)'
+        : total >= 8
+          ? 'clamp(1.1rem, 1.75vw, 1.45rem)'
+          : 'clamp(1.25rem, 2.05vw, 1.8rem)',
+  } as CSSProperties;
   const targetPending = game.pendingAction?.type === 'choose_target' || game.pendingAction?.type === 'panic_choose_target'
     ? game.pendingAction
     : null;
@@ -81,7 +123,7 @@ export function PlayerCircle({
   const canSelectSuspicionCard = suspicionPending?.viewerPlayerId === me.id;
 
   return (
-    <div className="player-circle">
+    <div className="player-circle" style={circleStyle}>
       {game.players.map((player) => {
         const safePos = typeof player.position === 'number' ? player.position : 0;
         const angle = (safePos / (total || 1)) * 360 - 90;
@@ -119,9 +161,9 @@ export function PlayerCircle({
         const canPickFromFan = !isSelf && isSuspicionTarget && canSelectSuspicionCard;
         const opponentHandStyle = {
           '--hand-rotation': `${angle + 270}deg`,
-          '--hand-offset-x': `${-Math.cos(radians) * handOffset}px`,
-          '--hand-offset-y': `${-Math.sin(radians) * handOffset}px`,
-          '--fan-width': `${72 + previewCount * 16}px`,
+          '--hand-vector-x': (-Math.cos(radians)).toFixed(4),
+          '--hand-vector-y': (-Math.sin(radians)).toFixed(4),
+          '--fan-width': `${Math.max(2.6, 2.4 + previewCount * 0.82).toFixed(2)}rem`,
         } as CSSProperties;
         const selectTarget = () => {
           if (!isTargetable || loading || !targetPending) return;
@@ -154,24 +196,28 @@ export function PlayerCircle({
               <div className={`player-opponent-hand ${canPickFromFan ? 'is-suspicion-selectable' : ''}`} style={opponentHandStyle}>
                 <div className="opponent-hand-fan" aria-hidden={canPickFromFan ? undefined : true}>
                   {publicCardKeys.slice(0, previewCount).map((cardKey, idx) => (
-                    <button
-                      aria-label={t('suspicion.pickCard', { index: idx + 1 })}
-                      aria-pressed={suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey}
-                      className={`opponent-card-back ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''} ${canPickFromFan ? 'is-selectable' : ''}`}
-                      disabled={!canPickFromFan || loading}
+                    <div
+                      className={`opponent-card-slot ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''}`}
                       key={`${player.id}-card-back-${cardKey}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canPickFromFan || loading) return;
-                        void onAction({ type: 'SUSPICION_PREVIEW_CARD', cardUid: cardKey });
-                      }}
                       style={{
-                        '--card-shift': `${(idx - fanMid) * 10}px`,
+                        '--card-shift': `${((idx - fanMid) * 0.6).toFixed(2)}rem`,
                         '--card-tilt': `${(idx - fanMid) * 7}deg`,
-                        '--card-depth': `${Math.abs(idx - fanMid) * 1.5}px`,
+                        '--card-depth': `${(Math.abs(idx - fanMid) * 0.1).toFixed(2)}rem`,
                       } as CSSProperties}
-                      type="button"
-                    />
+                    >
+                      <button
+                        aria-label={t('suspicion.pickCard', { index: idx + 1 })}
+                        aria-pressed={suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey}
+                        className={`opponent-card-back ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''} ${canPickFromFan ? 'is-selectable' : ''}`}
+                        disabled={!canPickFromFan || loading}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!canPickFromFan || loading) return;
+                          void onAction({ type: 'SUSPICION_PREVIEW_CARD', cardUid: cardKey });
+                        }}
+                        type="button"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

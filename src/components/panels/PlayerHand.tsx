@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { canDiscardCard, canPlayCard } from '../../gameLogic.ts';
@@ -58,6 +58,14 @@ export function PlayerHand({
   const pending = game.pendingAction;
   const isMyTurn = (getCurrentPlayer(game)?.id ?? -1) === me.id;
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
+  const handScrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollHint, setScrollHint] = useState({
+    canScroll: false,
+    atStart: true,
+    atEnd: true,
+    progress: 0,
+    thumbWidth: 100,
+  });
   const tradePartner = (() => {
     if (game.step !== 'trade') return null;
     const alivePositions = game.players
@@ -85,21 +93,7 @@ export function PlayerHand({
     return true;
   };
 
-  let extraCards: ExtraHandEntry[] = [];
-  if (pending?.type === 'persistence_pick') {
-    extraCards = pending.drawnCards.map((c) => ({
-      isExtra: true,
-      card: c,
-      source: 'persistence',
-      btnLabel: t('action.keep'),
-      btnCss: 'primary',
-      actionFn: () => { void onAction({ type: 'PERSISTENCE_PICK', keepUid: c.uid, discardUids: pending.drawnCards.filter((x) => x.uid !== c.uid).map((x) => x.uid) }); },
-    }));
-  } else if (pending?.type === 'view_hand' || pending?.type === 'whisky_reveal') {
-    extraCards = pending.cards.map((c) => ({ isExtra: true, card: c, source: 'reveal' }));
-  } else if (pending?.type === 'view_card') {
-    extraCards = [{ isExtra: true, card: pending.card, source: 'reveal' }];
-  }
+  const extraCards: ExtraHandEntry[] = [];
 
   const allCards: Array<ExtraHandEntry | PlayerHandEntry> = [
     ...extraCards,
@@ -107,12 +101,60 @@ export function PlayerHand({
   ];
   const totalCards = allCards.length;
 
+  useEffect(() => {
+    const container = handScrollRef.current;
+    if (!container) return undefined;
+
+    const updateScrollHint = () => {
+      const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+      const canScroll = maxScroll > 12;
+      const progress = maxScroll <= 0 ? 0 : container.scrollLeft / maxScroll;
+      const thumbWidth = canScroll
+        ? Math.min(100, Math.max(20, (container.clientWidth / container.scrollWidth) * 100))
+        : 100;
+
+      setScrollHint({
+        canScroll,
+        atStart: !canScroll || container.scrollLeft <= 4,
+        atEnd: !canScroll || container.scrollLeft >= maxScroll - 4,
+        progress,
+        thumbWidth,
+      });
+    };
+
+    updateScrollHint();
+    container.addEventListener('scroll', updateScrollHint, { passive: true });
+    window.addEventListener('resize', updateScrollHint);
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateScrollHint();
+    });
+    resizeObserver.observe(container);
+    if (container.firstElementChild instanceof HTMLElement) {
+      resizeObserver.observe(container.firstElementChild);
+    }
+
+    return () => {
+      container.removeEventListener('scroll', updateScrollHint);
+      window.removeEventListener('resize', updateScrollHint);
+      resizeObserver.disconnect();
+    };
+  }, [totalCards, pending?.type]);
+
   const handleCardClick = (uid: string) => {
     setSelectedUid(prev => prev === uid ? null : uid);
   };
 
   return (
-    <div className="hand-fan-scroll">
+    <div
+      className={[
+        'hand-fan-scroll',
+        scrollHint.canScroll ? 'can-scroll' : '',
+        scrollHint.atStart ? 'at-start' : '',
+        scrollHint.atEnd ? 'at-end' : '',
+      ].filter(Boolean).join(' ')}
+      ref={handScrollRef}
+    >
       <div className="hand-fan">
         <AnimatePresence mode="popLayout">
         {allCards.map((entry, idx) => {
@@ -231,6 +273,17 @@ export function PlayerHand({
         })}
         </AnimatePresence>
       </div>
+      {scrollHint.canScroll && (
+        <div className="hand-scroll-indicator" aria-hidden="true">
+          <span
+            className="hand-scroll-indicator-thumb"
+            style={{
+              width: `${scrollHint.thumbWidth}%`,
+              left: `${scrollHint.progress * (100 - scrollHint.thumbWidth)}%`,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

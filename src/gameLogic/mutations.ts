@@ -3,7 +3,7 @@ import { log } from './utils.ts';
 import {
   currentPlayer,
   hasDoorBetween,
-  nextPlayerIndex,
+  nextPlayerIndexFromPosition,
   getTradePartner,
 } from './helpers.ts';
 
@@ -90,30 +90,34 @@ export function handleTradeStep(s: GameState): void {
 }
 
 export function advanceTurn(s: GameState): void {
-  const cur = currentPlayer(s);
-  if (cur.inQuarantine) {
-    cur.quarantineTurnsLeft--;
-    if (cur.quarantineTurnsLeft <= 0) {
-      cur.inQuarantine = false;
-      log(s, `${cur.name}'s quarantine ended.`, `Карантин ${cur.name} закончился.`);
+  const finishingPlayer = currentPlayer(s);
+  const finishingPosition = finishingPlayer.position;
+
+  if (finishingPlayer.inQuarantine) {
+    finishingPlayer.quarantineTurnsLeft--;
+    if (finishingPlayer.quarantineTurnsLeft <= 0) {
+      finishingPlayer.inQuarantine = false;
+      log(s, `${finishingPlayer.name}'s quarantine ended.`, `Карантин ${finishingPlayer.name} закончился.`);
     }
   }
 
-  s.currentPlayerIndex = nextPlayerIndex(s);
+  checkInfectionOverload(s, finishingPlayer);
+
+  const alive = s.players.filter((player) => player.isAlive);
+  if (s.phase === 'game_over' || alive.length <= 1) {
+    s.step = 'draw';
+    s.tradeSkipped = false;
+    s.pendingAction = null;
+    if (alive.length <= 1 && s.phase !== 'game_over') {
+      s.phase = 'game_over';
+      s.winner = alive[0]?.role === 'thing' ? 'thing' : 'humans';
+      s.winnerPlayerIds = alive.map((player) => player.id);
+    }
+    return;
+  }
+
+  s.currentPlayerIndex = nextPlayerIndexFromPosition(s, finishingPosition);
   s.step = 'draw';
   s.tradeSkipped = false;
   s.pendingAction = null;
-
-  let safety = 0;
-  while (!s.players[s.currentPlayerIndex].isAlive && safety < s.players.length) {
-    s.currentPlayerIndex = nextPlayerIndex(s);
-    safety++;
-  }
-
-  const alive = s.players.filter(p => p.isAlive);
-  if (alive.length <= 1) {
-    s.phase = 'game_over';
-    s.winner = alive[0]?.role === 'thing' ? 'thing' : 'humans';
-    s.winnerPlayerIds = alive.map(p => p.id);
-  }
 }

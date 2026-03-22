@@ -23,22 +23,26 @@ export function RevealPanel({
   const canConfirm = pending.viewerPlayerId === me.id;
 
   return (
-    <div className="panel">
+    <div className="panel reveal-panel">
       <div className="panel-header"><h3>{t('reveal.title')}</h3></div>
       <p className="helper-text">
         {pending.type === 'whisky_reveal'
           ? t('reveal.showsAll', { name: ownerName })
           : t('reveal.cardsOf', { name: ownerName })}
       </p>
-      <div className="hand-grid compact">
-        {cards.map((card) => <CardView card={card} faceUp key={card.uid} />)}
+      <div className="reveal-inline-list">
+        {cards.map((card) => (
+          <div className="reveal-inline-card" key={card.uid}>
+            <CardView card={card} faceUp />
+          </div>
+        ))}
       </div>
       {canConfirm ? (
-        <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'CONFIRM_VIEW' })} style={{ marginTop: '8px' }} type="button">
+        <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'CONFIRM_VIEW' })} type="button">
           {t('action.confirm')}
         </button>
       ) : (
-        <p className="helper-text">{t('reveal.otherMustConfirm')}</p>
+        !canConfirm ? <p className="helper-text">{t('reveal.otherMustConfirm')}</p> : null
       )}
     </div>
   );

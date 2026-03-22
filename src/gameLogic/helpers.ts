@@ -52,18 +52,26 @@ export function currentPlayer(state: GameState): Player {
   return state.players[state.currentPlayerIndex];
 }
 
+/** Get next player index based on a seat position, even if that player just died */
+export function nextPlayerIndexFromPosition(state: GameState, position: number): number {
+  const alivePos = alivePositions(state);
+  if (alivePos.length <= 1) return state.currentPlayerIndex;
+
+  let nextPos = alivePos[0];
+
+  if (state.direction === 1) {
+    nextPos = alivePos.find((seatPos) => seatPos > position) ?? alivePos[0];
+  } else {
+    nextPos = [...alivePos].reverse().find((seatPos) => seatPos < position) ?? alivePos[alivePos.length - 1];
+  }
+
+  const next = state.players.find((player) => player.position === nextPos && player.isAlive);
+  return next ? state.players.indexOf(next) : state.currentPlayerIndex;
+}
+
 /** Get next player in turn direction */
 export function nextPlayerIndex(state: GameState): number {
-  const alive = state.players.filter(p => p.isAlive);
-  if (alive.length <= 1) return state.currentPlayerIndex;
-
-  const cur = currentPlayer(state);
-  const alivePos = alivePositions(state);
-  const curIdx = alivePos.indexOf(cur.position);
-  const nextIdx = (curIdx + state.direction + alivePos.length) % alivePos.length;
-  const nextPos = alivePos[nextIdx];
-  const next = state.players.find(p => p.position === nextPos && p.isAlive)!;
-  return state.players.indexOf(next);
+  return nextPlayerIndexFromPosition(state, currentPlayer(state).position);
 }
 
 /** Get the trade partner (next player in turn direction) */
@@ -84,6 +92,7 @@ export function drawFromDeck(state: GameState): CardInstance | null {
     if (state.discard.length === 0) return null;
     state.deck = shuffle([...state.discard]);
     state.discard = [];
+    state.reshuffleCount += 1;
     log(state, 'Deck reshuffled from discard pile.', 'Колода перемешана из сброса.');
   }
   return state.deck.pop()!;

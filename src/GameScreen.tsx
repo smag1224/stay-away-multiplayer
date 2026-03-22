@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getCardName, getCardDescription } from './cards.ts';
@@ -17,6 +17,9 @@ import { ShowCardTextCtx } from './components/panels/ShowCardTextCtx.ts';
 import { TopBar } from './components/panels/TopBar.tsx';
 import { PlayerCircle } from './components/panels/PlayerCircle.tsx';
 import { PendingActionPanel } from './components/panels/PendingActionPanel.tsx';
+import { PersistenceTablePicker } from './components/panels/PersistenceTablePicker.tsx';
+import { RevealPanel } from './components/panels/RevealPanel.tsx';
+import { SuspicionPickPanel } from './components/panels/SuspicionPickPanel.tsx';
 import { hasRenderablePendingActionPanel } from './components/panels/pendingActionVisibility.ts';
 import { PlayerHand } from './components/panels/PlayerHand.tsx';
 
@@ -47,9 +50,59 @@ export function GameScreen({
   const lang: Lang = i18n.language === 'en' ? 'en' : 'ru';
   const [showCardText, setShowCardText] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [showSecondDeckAlert, setShowSecondDeckAlert] = useState(false);
+  const lastReshuffleCountRef = useRef(game.reshuffleCount);
   // Hook must be called unconditionally (before any early return)
   const currentSafe = getCurrentPlayer(game);
-  useTurnSound((currentSafe?.id ?? -1) === me.id && game.phase === 'playing');
+  const pendingOwnerId = extractPendingOwner(game.pendingAction);
+  const pendingOwnerName = pendingOwnerId === null
+    ? null
+    : game.players.find((p) => p.id === pendingOwnerId)?.name ?? null;
+  const showPendingPanel = hasRenderablePendingActionPanel(game.pendingAction, me.id);
+  const suspicionPending =
+    game.pendingAction?.type === 'suspicion_pick' && game.pendingAction.viewerPlayerId === me.id
+      ? game.pendingAction
+      : null;
+  const revealPending =
+    (game.pendingAction?.type === 'view_hand' ||
+      game.pendingAction?.type === 'view_card' ||
+      game.pendingAction?.type === 'whisky_reveal') &&
+    game.pendingAction.viewerPlayerId === me.id
+      ? game.pendingAction
+      : null;
+  const urgentTradePrompt = (
+    game.pendingAction?.type === 'trade_defense' && game.pendingAction.defenderId === me.id
+  ) || (
+    game.pendingAction?.type === 'temptation_response' && game.pendingAction.toId === me.id
+  ) || (
+    game.pendingAction?.type === 'panic_trade_response' && game.pendingAction.toId === me.id
+  );
+  const isSecondDeck = game.reshuffleCount > 0;
+  const myTurnSafe = (currentSafe?.id ?? -1) === me.id && game.phase === 'playing';
+
+  useTurnSound({
+    isMyTurn: myTurnSafe,
+    urgentTradePrompt,
+    reshuffleCount: game.reshuffleCount,
+    latestCardDefId: game.log[0]?.cardDefId ?? null,
+    tableAnim: game.tableAnim,
+  });
+
+  useEffect(() => {
+    if (game.reshuffleCount > lastReshuffleCountRef.current) {
+      setShowSecondDeckAlert(true);
+      lastReshuffleCountRef.current = game.reshuffleCount;
+
+      const timeoutId = window.setTimeout(() => {
+        setShowSecondDeckAlert(false);
+      }, 5000);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    lastReshuffleCountRef.current = game.reshuffleCount;
+    return undefined;
+  }, [game.reshuffleCount]);
 
   /* ── GAME OVER ─────────────────────────────────────────────── */
   if (game.phase === 'game_over') {
@@ -103,16 +156,33 @@ export function GameScreen({
   const current = getCurrentPlayer(game);
   const myTurn = (current?.id ?? -1) === me.id;
   const summary = pendingSummary(game.pendingAction, game, lang);
-  const pendingOwnerId = extractPendingOwner(game.pendingAction);
-  const pendingOwnerName = pendingOwnerId === null
-    ? null
-    : game.players.find((p) => p.id === pendingOwnerId)?.name ?? null;
-  const showPendingPanel = hasRenderablePendingActionPanel(game.pendingAction, me.id);
   const visibleLog = game.log.slice(0, logOpen ? 16 : 6);
+  const persistencePending = game.pendingAction?.type === 'persistence_pick'
+    ? game.pendingAction
+    : null;
+  const turnBannerText = urgentTradePrompt
+    ? t('game.tradeIncoming')
+    : myTurn
+      ? t('game.turnBannerYou')
+      : t('game.turnBannerPlayer', { name: current?.name ?? '…' });
+  const screenStateClass = urgentTradePrompt
+    ? 'screen-alert'
+    : myTurn
+      ? 'screen-turn'
+      : isSecondDeck
+        ? 'screen-second-deck'
+        : '';
+  const tableStateClass = urgentTradePrompt
+    ? 'alert'
+    : myTurn
+      ? 'turn'
+      : isSecondDeck
+        ? 'second-deck'
+        : '';
 
   return (
     <ShowCardTextCtx.Provider value={showCardText}>
-    <main className="game-screen">
+    <main className={`game-screen ${screenStateClass}`}>
       <TopBar
         lang={lang}
         onCopy={onCopy}
@@ -126,38 +196,74 @@ export function GameScreen({
         onToggleText={() => setShowCardText(v => !v)}
         room={room}
         showCardText={showCardText}
+        noticeContent={
+          <>
+            <AnimatePresence>
+            {game.panicAnnouncement && (
+              <motion.div className="panic-banner top-bar-notice"
+                initial={{ opacity: 0, y: -14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -14 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}>
+                <div className="panic-banner-icon">⚠</div>
+                <div className="panic-banner-content">
+                  <strong>{t('game.panic')}</strong>
+                  <span className="panic-banner-name">{getCardName(game.panicAnnouncement, lang)}</span>
+                  <p className="panic-banner-desc">{getCardDescription(game.panicAnnouncement, lang)}</p>
+                </div>
+              </motion.div>
+            )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+            {me.role === 'infected' && (
+              <motion.div
+                className="infected-alert top-bar-notice"
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}>
+                <strong>{t('game.infectedAlertTitle')}</strong>
+                <span>{t('game.infectedAlertBody')}</span>
+              </motion.div>
+            )}
+            </AnimatePresence>
+          </>
+        }
       />
 
-      <AnimatePresence>
-      {game.panicAnnouncement && (
-        <motion.div className="panic-banner"
-          initial={{ opacity: 0, y: -40 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -40 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 24 }}>
-          <div className="panic-banner-icon">⚠</div>
-          <div className="panic-banner-content">
-            <strong>{t('game.panic')}</strong>
-            <span className="panic-banner-name">{getCardName(game.panicAnnouncement, lang)}</span>
-            <p className="panic-banner-desc">{getCardDescription(game.panicAnnouncement, lang)}</p>
-          </div>
-        </motion.div>
-      )}
-      </AnimatePresence>
+      <div className="game-notice-stack">
+        <AnimatePresence>
+        {game.panicAnnouncement && (
+          <motion.div className="panic-banner"
+            initial={{ opacity: 0, y: -40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -40 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}>
+            <div className="panic-banner-icon">⚠</div>
+            <div className="panic-banner-content">
+              <strong>{t('game.panic')}</strong>
+              <span className="panic-banner-name">{getCardName(game.panicAnnouncement, lang)}</span>
+              <p className="panic-banner-desc">{getCardDescription(game.panicAnnouncement, lang)}</p>
+            </div>
+          </motion.div>
+        )}
+        </AnimatePresence>
 
-      <AnimatePresence>
-      {me.role === 'infected' && (
-        <motion.div
-          className="infected-alert"
-          initial={{ opacity: 0, y: -22 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -22 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}>
-          <strong>{t('game.infectedAlertTitle')}</strong>
-          <span>{t('game.infectedAlertBody')}</span>
-        </motion.div>
-      )}
-      </AnimatePresence>
+        <AnimatePresence>
+        {me.role === 'infected' && (
+          <motion.div
+            className="infected-alert"
+            initial={{ opacity: 0, y: -22 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -22 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}>
+            <strong>{t('game.infectedAlertTitle')}</strong>
+            <span>{t('game.infectedAlertBody')}</span>
+          </motion.div>
+        )}
+        </AnimatePresence>
+      </div>
 
       <div className="game-body">
         <div className="game-top-row">
@@ -191,7 +297,7 @@ export function GameScreen({
             </div>
 
             <div className="deck-row">
-              <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''}`}>
+              <div className={`deck-stack ${myTurn && game.step === 'draw' && !game.pendingAction ? 'highlight' : ''} ${isSecondDeck ? 'second-pass' : ''}`}>
                 <span>{t('game.deck')}</span>
                 <strong>{game.deck.length}</strong>
               </div>
@@ -227,12 +333,53 @@ export function GameScreen({
                 </p>
               </div>
             )}
+            {isSecondDeck && (
+              <div className="notice-box deck-notice">
+                <strong>{t('game.secondDeckActive')}</strong>
+                <p>{t('game.secondDeckWarning')}</p>
+              </div>
+            )}
 
             {error && <p className="error-text" style={{ fontSize: '.76rem', margin: 0 }}>{error}</p>}
           </div>
 
           <div className="game-table-center">
-            <div className="table-spotlight" />
+            <div className={`table-spotlight ${tableStateClass}`} />
+            <div className="table-hud">
+              <div className={`table-pill active ${urgentTradePrompt ? 'alert' : ''}`}>
+                <span>{urgentTradePrompt ? t('game.respondNow') : t('game.activePlayer')}</span>
+                <strong>{turnBannerText}</strong>
+              </div>
+              <div className={`table-pill subtle ${isSecondDeck ? 'danger' : ''}`}>
+                <span>{t('game.deckCycle')}</span>
+                <strong>{isSecondDeck ? t('game.secondDeckActive') : t('game.firstDeckActive')}</strong>
+              </div>
+            </div>
+            {isSecondDeck && showSecondDeckAlert && (
+              <div className="deck-phase-alert">
+                <strong>{t('game.secondDeckActive')}</strong>
+                <span>{t('game.secondDeckWarning')}</span>
+              </div>
+            )}
+            {persistencePending && (
+              <PersistenceTablePicker
+                loading={loading}
+                pending={persistencePending}
+                onAction={onAction}
+              />
+            )}
+            {suspicionPending?.previewCardUid ? (
+              <div className="table-suspicion-confirm">
+                <button
+                  className="btn primary"
+                  disabled={loading}
+                  onClick={() => void onAction({ type: 'SUSPICION_CONFIRM_CARD', cardUid: suspicionPending.previewCardUid! })}
+                  type="button"
+                >
+                  {t('suspicion.confirm')}
+                </button>
+              </div>
+            ) : null}
             <PlayerCircle game={game} loading={loading} me={me} members={room.members} onAction={onAction} />
           </div>
 
@@ -270,11 +417,49 @@ export function GameScreen({
           {error && <p className="error-text" style={{ fontSize: '.76rem', margin: 0 }}>{error}</p>}
         </div>
 
-        {/* ── Cards at bottom (no wrapper, centered) ── */}
-        <div className="game-hand-strip">
-          {showPendingPanel && (
-            <div className="inline-action-wrapper">
+        <AnimatePresence>
+        {showPendingPanel && (
+          <motion.div
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="game-prompt-overlay"
+            exit={{ opacity: 0, y: 18, scale: 0.98 }}
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}>
+            <div className="game-prompt-card panel">
               <PendingActionPanel game={game} loading={loading} me={me} onAction={onAction} />
+            </div>
+          </motion.div>
+        )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+        {revealPending && (
+          <motion.div
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="screen-reveal-overlay"
+            exit={{ opacity: 0, y: 18, scale: 0.98 }}
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}>
+            <RevealPanel
+              game={game}
+              loading={loading}
+              me={me}
+              pending={revealPending}
+              onAction={onAction}
+            />
+          </motion.div>
+        )}
+        </AnimatePresence>
+
+        {/* ── Cards at bottom ── */}
+        <div className="game-hand-strip">
+          {suspicionPending && (
+            <div className="inline-action-wrapper suspicion-inline-wrapper">
+              <SuspicionPickPanel
+                loading={loading}
+                pending={suspicionPending}
+                onAction={onAction}
+              />
             </div>
           )}
           <PlayerHand game={game} loading={loading} me={me} onAction={onAction} />
