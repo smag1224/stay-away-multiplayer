@@ -159,6 +159,7 @@ export interface GameState {
   revealingPlayer: number;     // index during role_reveal phase
   tradeSkipped: boolean;       // if Temptation was played
   panicAnnouncement: string | null; // defId of last drawn panic card (shown to all)
+  reshuffleCount: number;      // number of times discard pile became a new deck
   lang: 'en' | 'ru';
 }
 

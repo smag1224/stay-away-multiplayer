@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Lang } from '../../appHelpers.ts';
 import type { RoomView } from '../../multiplayer.ts';
@@ -15,6 +15,7 @@ export function TopBar({
   onToggleLang,
   showCardText,
   onToggleText,
+  noticeContent,
 }: {
   deckCount?: number;
   lang: Lang;
@@ -27,6 +28,7 @@ export function TopBar({
   onToggleLang?: () => void;
   showCardText?: boolean;
   onToggleText?: () => void;
+  noticeContent?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -45,6 +47,7 @@ export function TopBar({
       <span className="top-bar-sep">·</span>
       <span className="top-bar-room-label">{t('topbar.room')}</span>
       <span className="top-bar-room">{room.code}</span>
+      {noticeContent ? <div className="top-bar-notice-area">{noticeContent}</div> : null}
       {deckCount !== undefined && (
         <span className="top-bar-deck">
           {t('game.deck')}: {deckCount}

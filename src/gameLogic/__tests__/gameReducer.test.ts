@@ -156,6 +156,17 @@ describe('gameReducer', () => {
       expect(curAfter.role).toBe('thing');
       expect(curAfter.hand.some(c => c.defId === 'the_thing')).toBe(true);
     });
+
+    it('increments reshuffle counter when discard pile becomes the new deck', () => {
+      const state = startGame(4);
+      state.deck = [];
+      state.discard = [card('suspicion', 'reshuffled_suspicion')];
+
+      const next = gameReducer(state, { type: 'DRAW_CARD' });
+
+      expect(next.reshuffleCount).toBe(1);
+      expect(next.players[next.currentPlayerIndex].hand.some((handCard) => handCard.uid === 'reshuffled_suspicion')).toBe(true);
+    });
   });
 
   // ── DISCARD_CARD ────────────────────────────────────────────────────────
@@ -375,6 +386,32 @@ describe('gameReducer', () => {
       // Turn should advance or step should be draw
       expect(next.step).toBe('draw');
       expect(next.pendingAction).toBeNull();
+    });
+
+    it('kills a player immediately if a trade gives them a fourth infection card', () => {
+      const state = startGame(4);
+      state.step = 'trade';
+      state.direction = 1;
+      state.doors = [];
+
+      const thingPlayer = state.players[0];
+      const targetPlayer = state.players[1];
+
+      thingPlayer.role = 'thing';
+      thingPlayer.hand = [card('the_thing', 'keep_thing'), card('infected', 'infected_offer')];
+      targetPlayer.role = 'human';
+      targetPlayer.hand = [
+        card('infected', 'infected_a'),
+        card('infected', 'infected_b'),
+        card('infected', 'infected_c'),
+        card('watch_your_back', 'survivor_reply'),
+      ];
+
+      let next = gameReducer(state, { type: 'OFFER_TRADE', cardUid: 'infected_offer' });
+      next = gameReducer(next, { type: 'RESPOND_TRADE', cardUid: 'survivor_reply' });
+
+      expect(next.players[1].isAlive).toBe(false);
+      expect(next.players[1].hand).toHaveLength(0);
     });
   });
 
@@ -679,6 +716,28 @@ describe('gameReducer', () => {
       const next = gameReducer(state, { type: 'END_TURN' });
 
       expect(next.tradeSkipped).toBe(false);
+    });
+  });
+
+  describe('END_TURN', () => {
+    it('eliminates the current player with four infection cards and passes the turn onward', () => {
+      const state = startGame(4);
+      state.step = 'end_turn';
+      state.currentPlayerIndex = 0;
+      state.players[0].role = 'human';
+      state.players[0].hand = [
+        card('infected', 'infected_1'),
+        card('infected', 'infected_2'),
+        card('infected', 'infected_3'),
+        card('infected', 'infected_4'),
+      ];
+
+      const next = gameReducer(state, { type: 'END_TURN' });
+
+      expect(next.players[0].isAlive).toBe(false);
+      expect(next.currentPlayerIndex).toBe(1);
+      expect(next.step).toBe('draw');
+      expect(next.phase).toBe('playing');
     });
   });
 });

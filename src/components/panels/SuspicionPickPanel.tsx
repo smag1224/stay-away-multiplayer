@@ -16,22 +16,6 @@ export function SuspicionPickPanel({
 
   return (
     <div className="suspicion-pick-panel">
-      <div className="suspicion-pick-desktop">
-        <div className="suspicion-pick-actions suspicion-pick-actions-desktop">
-          <button
-            className="btn primary"
-            disabled={!selectedUid || loading}
-            onClick={() => {
-              if (!selectedUid) return;
-              void onAction({ type: 'SUSPICION_CONFIRM_CARD', cardUid: selectedUid });
-            }}
-            type="button"
-          >
-            {t('suspicion.confirm')}
-          </button>
-        </div>
-      </div>
-
       <div className="suspicion-pick-mobile">
         <div className="panel-header"><h3>{t('suspicion.title')}</h3></div>
         <div className="suspicion-pick-grid" role="list">

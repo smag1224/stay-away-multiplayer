@@ -198,12 +198,8 @@ export function pendingSummary(
     case 'view_card':
     case 'whisky_reveal':
       return i18n.t('pending.privateReveal');
-    case 'choose_target':
-      return i18n.t('pending.chooseTarget');
     case 'choose_card_to_discard':
       return i18n.t('pending.chooseCardDiscard');
-    case 'choose_card_to_give':
-      return i18n.t('pending.chooseCardTrade');
     case 'persistence_pick':
       return i18n.t('pending.chooseCardKeep');
     case 'just_between_us':
