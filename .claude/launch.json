@@ -2,12 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dev",
+      "name": "stay-away-dev",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--host"],
-      "port": 5174,
-      "autoPort": true,
-      "cwd": "C:\\Users\\smag1\\OneDrive\\Рабочий стол\\CODEX NECHYO\\НЕЧТО\\stay-away-multiplayer"
+      "runtimeArgs": ["node_modules/vite/bin/vite.js"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

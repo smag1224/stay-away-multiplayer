@@ -255,6 +255,10 @@ export function handlePlayCard(
   );
   // Tag the log entry so all clients can animate the played card
   s.log[0].cardDefId = card.defId;
+  s.log[0].fromPlayerId = cur.id;
+  if (action.targetPlayerId !== undefined) {
+    s.log[0].targetPlayerId = action.targetPlayerId;
+  }
 
   if (s.step === 'play_or_discard' && !s.pendingAction) {
     s.step = 'trade';
@@ -387,7 +391,7 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
   if (def.category !== 'defense') return s;
 
   const allowedDefenseIds =
-    reason === 'trade' || reason === 'temptation'
+    reason === 'trade' || reason === 'temptation' || reason === 'panic_trade'
       ? ['fear', 'no_thanks', 'miss']
       : reason === 'flamethrower'
         ? ['no_barbecue']
@@ -408,8 +412,12 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
       log(s, `${defender.name} played No Thanks! Trade refused.`,
           `${defender.name} сыграл(а) «Нет уж, спасибо!» Обмен отклонён.`);
       s.pendingAction = null;
-      s.step = 'end_turn';
-      advanceTurn(s);
+      if (reason === 'panic_trade') {
+        s.step = 'draw';
+      } else {
+        s.step = 'end_turn';
+        advanceTurn(s);
+      }
       break;
     }
     case 'fear': {
@@ -444,8 +452,15 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
       const nextIdx = (defPosIdx + s.direction + alivePos.length) % alivePos.length;
       const nextPos = alivePos[nextIdx];
       const nextP = playerAtPosition(s, nextPos);
-      if (nextP && nextP.id !== fromId && !nextP.inQuarantine &&
-          !hasDoorBetween(s, getPlayer(s, fromId).position, nextP.position)) {
+      const canRedirect =
+        nextP &&
+        nextP.id !== fromId &&
+        !nextP.inQuarantine &&
+        (
+          reason === 'panic_trade' ||
+          !hasDoorBetween(s, getPlayer(s, fromId).position, nextP.position)
+        );
+      if (canRedirect && nextP) {
         s.pendingAction = {
           type: 'trade_defense',
           defenderId: nextP.id,
@@ -455,14 +470,19 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
         };
       } else {
         s.pendingAction = null;
-        s.step = 'end_turn';
-        advanceTurn(s);
+        if (reason === 'panic_trade') {
+          s.step = 'draw';
+        } else {
+          s.step = 'end_turn';
+          advanceTurn(s);
+        }
       }
       break;
     }
     case 'no_barbecue': {
       log(s, `${defender.name} played No Barbecue! Flamethrower cancelled.`,
           `${defender.name} сыграл(а) «Никакого шашлыка!» Огнемёт отменён.`);
+      s.log[0].cardDefId = card.defId;
       s.pendingAction = null;
       if (s.step === 'play_or_discard') {
         s.step = 'trade';
@@ -483,6 +503,7 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
     case 'anti_analysis': {
       log(s, `${defender.name} played Anti-Analysis! Analysis cancelled.`,
           `${defender.name} сыграл(а) «Анти-Анализ!» Анализ отменён.`);
+      s.log[0].cardDefId = card.defId;
       s.pendingAction = null;
       if (s.step === 'play_or_discard') {
         s.step = 'trade';
@@ -545,6 +566,22 @@ export function handleEndTurn(s: GameState, _originalState: GameState, _action: 
 }
 
 export function handleConfirmView(s: GameState, _originalState: GameState, _action: GameAction): GameState {
+  if (s.pendingAction?.type === 'whisky_reveal' && s.pendingAction.revelationsResume) {
+    const { revealOrder, nextRevealerIdx } = s.pendingAction.revelationsResume;
+    if (nextRevealerIdx === null || nextRevealerIdx >= revealOrder.length) {
+      s.pendingAction = null;
+      s.step = 'draw';
+      return s;
+    }
+
+    s.pendingAction = {
+      type: 'revelations_round',
+      revealOrder,
+      currentRevealerIdx: nextRevealerIdx,
+    };
+    return s;
+  }
+
   s.pendingAction = null;
   if (s.step === 'trade_response') {
     s.step = 'end_turn';
@@ -917,19 +954,42 @@ export function handlePanicTradeSelect(s: GameState, _originalState: GameState, 
   const curCard = cur.hand[cardIdx];
   if (!validateTradeCard(cur, target, curCard)) return s;
 
+  const targetHasDefense = target.hand.some((card) => ['fear', 'no_thanks', 'miss'].includes(card.defId));
+  const targetHasTradeableCard = target.hand.some((card) => validateTradeCard(target, cur, card));
+
+  if (!targetHasDefense && !targetHasTradeableCard) {
+    s.pendingAction = null;
+    log(s,
+      `${target.name} has no valid response to Can't We Be Friends?. The panic effect is cancelled.`,
+      `${target.name} не может ответить на «Давай дружить?». Эффект паники отменён.`
+    );
+    s.step = 'draw';
+    return s;
+  }
+
   s.pendingAction = {
-    type: 'panic_trade_response',
+    type: 'trade_defense',
+    defenderId: target.id,
     fromId: cur.id,
-    toId: target.id,
     offeredCardUid: curCard.uid,
+    reason: 'panic_trade',
   };
   return s;
 }
 
 export function handlePanicTradeRespond(s: GameState, _originalState: GameState, action: GameAction): GameState {
   if (action.type !== 'PANIC_TRADE_RESPOND') return s;
-  if (!s.pendingAction || s.pendingAction.type !== 'panic_trade_response') return s;
-  const { fromId, toId, offeredCardUid } = s.pendingAction;
+  if (!s.pendingAction || (
+    s.pendingAction.type !== 'panic_trade_response' &&
+    !(s.pendingAction.type === 'trade_defense' && s.pendingAction.reason === 'panic_trade')
+  )) return s;
+  const { fromId, toId, offeredCardUid } = s.pendingAction.type === 'trade_defense'
+    ? {
+        fromId: s.pendingAction.fromId,
+        toId: s.pendingAction.defenderId,
+        offeredCardUid: s.pendingAction.offeredCardUid,
+      }
+    : s.pendingAction;
   const from = getPlayer(s, fromId);
   const target = getPlayer(s, toId);
 
@@ -957,36 +1017,89 @@ export function handlePanicTradeRespond(s: GameState, _originalState: GameState,
   return s;
 }
 
+export function handleAxeChooseEffect(s: GameState, _originalState: GameState, action: GameAction): GameState {
+  if (action.type !== 'AXE_CHOOSE_EFFECT') return s;
+  if (!s.pendingAction || s.pendingAction.type !== 'axe_choice') return s;
+  if (s.pendingAction.targetPlayerId !== action.targetPlayerId) return s;
+
+  const cur = currentPlayer(s);
+  const target = getPlayer(s, action.targetPlayerId);
+
+  if (action.choice === 'quarantine') {
+    if (!s.pendingAction.canRemoveQuarantine || !target.inQuarantine) return s;
+    target.inQuarantine = false;
+    target.quarantineTurnsLeft = 0;
+  } else {
+    if (!s.pendingAction.canRemoveDoor || !hasDoorBetween(s, cur.position, target.position)) return s;
+    s.doors = s.doors.filter(
+      (door) => !(
+        (door.between[0] === cur.position && door.between[1] === target.position) ||
+        (door.between[0] === target.position && door.between[1] === cur.position)
+      )
+    );
+  }
+
+  s.pendingAction = null;
+  if (s.step === 'play_or_discard') {
+    s.step = 'trade';
+    handleTradeStep(s);
+  }
+  return s;
+}
+
 export function handleRevelationsRespond(s: GameState, _originalState: GameState, action: GameAction): GameState {
   if (action.type !== 'REVELATIONS_RESPOND') return s;
   if (!s.pendingAction || s.pendingAction.type !== 'revelations_round') return s;
   const pa = s.pendingAction;
   const revealer = s.players[pa.revealOrder[pa.currentRevealerIdx]];
+  const infectedCards = revealer.hand.filter(c => c.defId === 'infected');
+  const hasInfected = infectedCards.length > 0;
+  const nextIdx = pa.currentRevealerIdx + 1;
+  const nextRevealerIdx = nextIdx >= pa.revealOrder.length ? null : nextIdx;
 
   if (action.show) {
-    const hasInfected = revealer.hand.some(c => c.defId === 'infected');
+    const revealMode = action.mode === 'infected_only' ? 'infected_only' : 'all';
+    const revealOnlyInfected = revealMode === 'infected_only' && hasInfected;
+    const revealedCards = revealOnlyInfected ? [infectedCards[0]] : [...revealer.hand];
+
     log(s,
-      `${revealer.name} showed their hand during Revelations.`,
-      `${revealer.name} показал(а) свои карты во время Времени признаний.`
+      revealOnlyInfected
+        ? `${revealer.name} revealed an Infected card during Revelations.`
+        : `${revealer.name} showed their hand during Revelations.`,
+      revealOnlyInfected
+        ? `${revealer.name} показал(а) карту «Заражение!» во время Времени признаний.`
+        : `${revealer.name} показал(а) свои карты во время Времени признаний.`
     );
+
     if (hasInfected) {
       log(s, 'An Infected card was revealed! Revelations end.',
           'Обнаружена карта «Заражение!»! Время признаний завершено.');
       s.pendingAction = {
         type: 'whisky_reveal',
         playerId: revealer.id,
-        cards: [...revealer.hand],
+        cards: revealedCards,
         viewerPlayerId: revealer.id,
         public: true,
+        revealKind: revealOnlyInfected ? 'infected_only' : 'all',
+        revelationsResume: {
+          revealOrder: [...pa.revealOrder],
+          nextRevealerIdx: null,
+        },
       };
       return s;
     }
+
     s.pendingAction = {
       type: 'whisky_reveal',
       playerId: revealer.id,
-      cards: [...revealer.hand],
+      cards: revealedCards,
       viewerPlayerId: revealer.id,
       public: true,
+      revealKind: revealOnlyInfected ? 'infected_only' : 'all',
+      revelationsResume: {
+        revealOrder: [...pa.revealOrder],
+        nextRevealerIdx,
+      },
     };
     return s;
   } else {
@@ -994,13 +1107,12 @@ export function handleRevelationsRespond(s: GameState, _originalState: GameState
       `${revealer.name} chose not to show their hand.`,
       `${revealer.name} решил(а) не показывать карты.`
     );
-    const nextIdx = pa.currentRevealerIdx + 1;
-    if (nextIdx >= pa.revealOrder.length) {
+    if (nextRevealerIdx === null) {
       s.pendingAction = null;
       log(s, 'Revelations complete.', 'Время признаний завершено.');
       s.step = 'draw';
     } else {
-      s.pendingAction = { ...pa, currentRevealerIdx: nextIdx };
+      s.pendingAction = { ...pa, currentRevealerIdx: nextRevealerIdx };
     }
     return s;
   }

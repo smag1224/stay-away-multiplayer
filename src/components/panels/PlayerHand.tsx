@@ -175,7 +175,7 @@ export function PlayerHand({
               </div>
               <CardView card={card} faceUp />
               {actionFn && btnLabel ? (
-                <div className="hand-card-actions">
+                <div className="hand-card-actions single-action">
                   <button className={`btn small ${btnCss}`} disabled={loading} onClick={(e) => { e.stopPropagation(); actionFn(); }} type="button" style={{ flex: 1 }}>
                     {btnLabel}
                   </button>
@@ -206,13 +206,24 @@ export function PlayerHand({
             buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !allowed, fn: () => { void onAction({ type: 'TEMPTATION_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid }); } });
           } else if (pending.type === 'trade_defense') {
             const receiver = game.players.find((player) => player.id === pending.fromId) ?? null;
-            const allowedIds = pending.reason === 'trade' || pending.reason === 'temptation' ? ['fear', 'no_thanks', 'miss'] :
+            const allowedIds = pending.reason === 'trade' || pending.reason === 'temptation' || pending.reason === 'panic_trade' ? ['fear', 'no_thanks', 'miss'] :
                                pending.reason === 'flamethrower' ? ['no_barbecue'] :
                                pending.reason === 'analysis' ? ['anti_analysis'] : ['im_fine_here'];
+            const isNonTradeDefense = pending.reason !== 'trade' && pending.reason !== 'temptation' && pending.reason !== 'panic_trade';
+            const declineLabel = pending.reason === 'analysis' ? t('action.allowAnalysis') :
+                                 pending.reason === 'flamethrower' ? t('action.acceptElimination') : t('action.acceptSwap');
             if (allowedIds.includes(card.defId)) {
               buttons.push({ label: t('action.defend'), css: 'danger', fn: () => { void onAction({ type: 'PLAY_DEFENSE', cardUid: card.uid }); } });
+              if (isNonTradeDefense) {
+                buttons.push({ label: declineLabel, css: 'secondary', fn: () => { void onAction({ type: 'DECLINE_DEFENSE' }); } });
+              }
+            } else if (isNonTradeDefense) {
+              const hasDefenseCard = me.hand.some((c) => allowedIds.includes(c.defId));
+              if (!hasDefenseCard && me.hand[0]?.uid === card.uid) {
+                buttons.push({ label: declineLabel, css: 'secondary', fn: () => { void onAction({ type: 'DECLINE_DEFENSE' }); } });
+              }
             }
-            if ((pending.reason === 'trade' || pending.reason === 'temptation') && localTradeCheck(me, card, receiver)) {
+            if ((pending.reason === 'trade' || pending.reason === 'temptation' || pending.reason === 'panic_trade') && localTradeCheck(me, card, receiver)) {
               buttons.push({
                 label: t('action.give'),
                 css: 'primary',
@@ -220,6 +231,8 @@ export function PlayerHand({
                   void onAction(
                     pending.reason === 'temptation'
                       ? { type: 'TEMPTATION_RESPOND', cardUid: card.uid }
+                      : pending.reason === 'panic_trade'
+                        ? { type: 'PANIC_TRADE_RESPOND', cardUid: card.uid }
                       : { type: 'RESPOND_TRADE', cardUid: card.uid },
                   );
                 },
@@ -258,7 +271,7 @@ export function PlayerHand({
             onClick={() => handleCardClick(card.uid)}>
             <CardView card={card} faceUp />
             {buttons.length > 0 && (
-              <div className="hand-card-actions">
+              <div className={`hand-card-actions ${buttons.length === 1 ? 'single-action' : ''}`}>
                 {buttons.map((b, i) => (
                   <button className={`btn small ${b.css}`} disabled={b.disabled || loading} key={i}
                     onClick={(e) => { e.stopPropagation(); b.fn(); }}

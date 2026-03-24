@@ -80,6 +80,10 @@ export interface LogEntry {
   timestamp: number;
   /** defId of the card that was played — set only for PLAY_CARD log entries, used by animation */
   cardDefId?: string;
+  /** Player who played the card — used by animation overlay */
+  fromPlayerId?: number;
+  /** Target player of the card — used by animation overlay */
+  targetPlayerId?: number;
 }
 
 // ── Pending Action (for modals) ─────────────────────────────────────────────
@@ -113,7 +117,7 @@ export type PendingAction =
       defenderId: number;
       fromId: number;
       offeredCardUid: string;
-      reason: 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis';
+      reason: 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis' | 'panic_trade';
     }
   | { type: 'panic_effect'; cardDefId: string; data?: unknown }
   | { type: 'choose_card_to_give'; targetPlayerId: number }
@@ -127,6 +131,11 @@ export type PendingAction =
       cards: CardInstance[];
       viewerPlayerId: number;
       public?: boolean;
+      revealKind?: 'all' | 'infected_only';
+      revelationsResume?: {
+        revealOrder: number[];
+        nextRevealerIdx: number | null;
+      };
     }
   | { type: 'temptation_target'; cardUid: string; targets: number[] }
   | { type: 'party_pass'; pendingPlayerIds: number[]; chosen: { playerId: number; cardUid: string }[]; direction: 1 | -1 }
@@ -138,6 +147,12 @@ export type PendingAction =
   | { type: 'forgetful_discard'; remaining: number }
   | { type: 'panic_trade'; targetPlayerId: number }
   | { type: 'panic_trade_response'; fromId: number; toId: number; offeredCardUid: string }
+  | {
+      type: 'axe_choice';
+      targetPlayerId: number;
+      canRemoveQuarantine: boolean;
+      canRemoveDoor: boolean;
+    }
   | { type: 'revelations_round'; currentRevealerIdx: number; revealOrder: number[] };
 
 // ── Game State ──────────────────────────────────────────────────────────────
@@ -193,4 +208,5 @@ export type GameAction =
   | { type: 'FORGETFUL_DISCARD_PICK'; cardUid: string }
   | { type: 'PANIC_TRADE_SELECT'; targetPlayerId: number; cardUid: string }
   | { type: 'PANIC_TRADE_RESPOND'; cardUid: string }
-  | { type: 'REVELATIONS_RESPOND'; show: boolean };
+  | { type: 'AXE_CHOOSE_EFFECT'; targetPlayerId: number; choice: 'quarantine' | 'door' }
+  | { type: 'REVELATIONS_RESPOND'; show: boolean; mode?: 'all' | 'infected_only' };

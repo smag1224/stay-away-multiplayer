@@ -31,6 +31,8 @@
     "briefingLabel": "Сводка станции",
     "tagline": "Паранойя, скрытые роли и обмены картами на одной заражённой базе.",
     "summary": "Соберите экипаж, разошлите ссылку и запускайте партию так, чтобы каждый игрок чувствовал напряжение ещё до первого хода.",
+    "showBriefing": "Открыть сводку",
+    "hideBriefing": "Скрыть сводку",
     "playersRange": "4–12 игроков",
     "hiddenRoles": "Скрытые роли",
     "mobileReady": "Телефон + ноутбук ок",
@@ -98,7 +100,7 @@
     "tableState": "На столе",
     "waitingFor": "Ожидается: {{name}}",
     "infectedAlertTitle": "Вы заражены",
-    "infectedAlertBody": "Скрывайте это от людей: теперь вы играете на стороне Нечто.",
+    "infectedAlertBody": "Скрывайте это от людей: теперь вы играете на стороне Нечто (на стороне игрока {{name}}).",
     "commandDeck": "Командный пост",
     "stationIntel": "Обстановка",
     "activePlayer": "Сейчас ходит",
@@ -124,7 +126,8 @@
     "temptation": "соблазн",
     "flamethrower": "огнемёт",
     "swap": "перемещение",
-    "analysis": "анализ"
+    "analysis": "анализ",
+    "panic_trade": "панический обмен"
   },
   "pending": {
     "privateReveal": "Открыт приватный просмотр карт.",
@@ -133,7 +136,8 @@
     "chooseCardTrade": "Нужно выбрать карту для обмена.",
     "chooseCardKeep": "Нужно выбрать карту, которую оставить.",
     "chooseAdjacentPlayers": "Нужно выбрать двух соседних игроков для обязательного обмена.",
-    "tradeDefenseDeciding": "{{name}} решает, как ответить на {{reason}}."
+    "tradeDefenseDeciding": "{{name}} решает, как ответить на {{reason}}.",
+    "chooseAxeEffect": "Нужно выбрать, что именно сбросить топором."
   },
   "category": {
     "infection": "Заражение",
@@ -221,6 +225,7 @@
   "reveal": {
     "title": "Просмотр карт",
     "showsAll": "{{name}} показывает карты всем.",
+    "showsInfectedOnly": "{{name}} показывает всем карту «Заражение!».",
     "cardsOf": "Карты: {{name}}",
     "otherMustConfirm": "Другой игрок должен подтвердить."
   },
@@ -249,10 +254,18 @@
     "offersExchange": "{{name}} предлагает обмен.",
     "choosing": "{{name}} выбирает карту…"
   },
+  "axeChoice": {
+    "title": "Топор",
+    "description": "Выберите, что сбросить у {{name}}.",
+    "removeQuarantine": "Сбросить карантин",
+    "removeDoor": "Сбросить дверь"
+  },
   "revelations": {
     "title": "Время признаний",
     "deciding": "{{name}} решает, показывать ли карты…",
-    "showCards": "Показать свои карты всем?"
+    "showCards": "Показать свои карты всем?",
+    "showInfectedOnly": "Показать только «Заражение!»",
+    "showAllCards": "Показать все карты"
   },
   "tableScene": {
     "mode": {

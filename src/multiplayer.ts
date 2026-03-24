@@ -44,7 +44,7 @@ export type TableAnimEvent =
       sceneId: string;
       initiatorId: number;
       targetId: number;
-      mode: 'trade' | 'swap' | 'temptation';
+      mode: 'trade' | 'swap' | 'temptation' | 'panic_trade';
       defenseCardDefId: string;
     }
   /** Both hidden exchange cards are ready in the centre and should animate to new owners */
@@ -65,6 +65,13 @@ export interface ViewerGameState extends Omit<GameState, 'players' | 'pendingAct
   tableAnim: TableAnimEvent | null;
 }
 
+export interface ShoutEntry {
+  playerId: number;
+  phrase: string;
+  phraseEn: string;
+  expiresAt: number;
+}
+
 export interface RoomView {
   code: string;
   me: {
@@ -77,6 +84,7 @@ export interface RoomView {
   game: ViewerGameState | null;
   hostAddress: string;
   updatedAt: number;
+  shouts: ShoutEntry[];
 }
 
 export interface ApiSuccess<T> {
@@ -104,4 +112,10 @@ export interface RoomActionPayload {
 
 export interface RoomSessionPayload {
   sessionId: string;
+}
+
+export interface ShoutPayload {
+  sessionId: string;
+  phrase: string;
+  phraseEn: string;
 }

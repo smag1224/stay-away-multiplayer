@@ -1,13 +1,36 @@
 import type { CSSProperties } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { hasDoorBetween } from '../../gameLogic.ts';
 import { getCurrentPlayer } from '../../appHelpers.ts';
-import type { RoomMemberView, ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
+import type { RoomMemberView, ShoutEntry, ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
 import type { GameAction } from '../../types.ts';
 import { getPlayerAvatarPresentation, getPlayerAvatarSrc } from '../../playerAvatarImages.ts';
 import { PLAYER_AVATAR_IDS } from '../../avatarCatalog.ts';
+import quarantineOverlay from '../../assets/quarantine_overlay.png';
+import thingOverlay from '../../assets/thing_overlay.png';
+import { CardView } from './CardView.tsx';
 import { TableAnimationBoundary } from './TableAnimationBoundary.tsx';
+import { speakShout } from '../../sounds/shoutVoice.ts';
+
+const LOCKED_DOOR_MARKER_CARD = {
+  uid: 'locked-door-marker',
+  defId: 'locked_door',
+} as const;
+
+const SHOUT_PHRASES = [
+  { ru: 'Чистейший!', en: 'Clean!' },
+  { ru: 'На руках!',  en: 'In hand!' },
+  { ru: 'В колоде',   en: 'In the deck' },
+  { ru: 'Заюзаешь',  en: "You'll use it" },
+  { ru: 'Грязнющий!', en: 'Dirty!' },
+  { ru: 'Я свой',     en: "I'm friendly" },
+  { ru: 'Посидит',    en: 'It can wait' },
+  { ru: 'Передашь',   en: "You'll pass it" },
+  { ru: 'Даю годнотишку', en: 'Giving you gold' },
+] as const;
 
 function getOrbitLayout(totalPlayers: number) {
   const total = Math.max(4, totalPlayers);
@@ -29,7 +52,7 @@ function getOrbitLayout(totalPlayers: number) {
       orbitCenterY: 53,
       orbitRadiusX: 50,
       orbitRadiusY: 37,
-      handOffset: 61,
+      handOffset: 56,
       nodeLift: '-25%',
     };
   }
@@ -40,7 +63,7 @@ function getOrbitLayout(totalPlayers: number) {
       orbitCenterY: 52,
       orbitRadiusX: 51,
       orbitRadiusY: 38,
-      handOffset: 62,
+      handOffset: 52,
       nodeLift: '-26%',
     };
   }
@@ -50,7 +73,7 @@ function getOrbitLayout(totalPlayers: number) {
     orbitCenterY: 51,
     orbitRadiusX: 52,
     orbitRadiusY: 39,
-    handOffset: 64,
+    handOffset: 48,
     nodeLift: '-27%',
   };
 }
@@ -61,17 +84,57 @@ export function PlayerCircle({
   me,
   members,
   onAction,
+  shouts = [],
+  onShout,
+  animOverlay,
 }: {
   game: ViewerGameState;
   loading: boolean;
   me: ViewerPlayerState;
   members?: RoomMemberView[];
   onAction: (action: GameAction) => Promise<void>;
+  shouts?: ShoutEntry[];
+  onShout?: (phrase: string, phraseEn: string) => void;
+  animOverlay?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRu = i18n.language !== 'en';
+  const [shoutMenuOpen, setShoutMenuOpen] = useState(false);
+  const [shoutMenuAnchor, setShoutMenuAnchor] = useState<{
+    left: number; right: number; top: number; onRight: boolean;
+  } | null>(null);
+  const selfAvatarRef = useRef<HTMLDivElement>(null);
+
+  // Speak new shouts aloud via Web Speech API
+  const seenShoutsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const s of shouts) {
+      const key = `${s.playerId}-${s.expiresAt}`;
+      if (!seenShoutsRef.current.has(key)) {
+        seenShoutsRef.current.add(key);
+        speakShout(s.phrase, s.phraseEn, isRu, s.playerId);
+      }
+    }
+    // Clean up old entries to prevent memory leak
+    if (seenShoutsRef.current.size > 50) {
+      const keys = [...seenShoutsRef.current];
+      seenShoutsRef.current = new Set(keys.slice(-20));
+    }
+  }, [shouts, isRu]);
+
+  const openShoutMenu = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (selfAvatarRef.current) {
+      const rect = selfAvatarRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const onRight = centerX > window.innerWidth / 2;
+      setShoutMenuAnchor({ left: rect.left, right: rect.right, top: rect.top, onRight });
+    }
+    setShoutMenuOpen(v => !v);
+  }, []);
   const total = game.players.length;
   const current = getCurrentPlayer(game);
-  const { orbitCenterX, orbitCenterY, orbitRadiusX, orbitRadiusY, nodeLift } = getOrbitLayout(total);
+  const { orbitCenterX, orbitCenterY, orbitRadiusX, orbitRadiusY, handOffset, nodeLift } = getOrbitLayout(total);
   const circleStyle = {
     '--player-node-width':
       total >= 9
@@ -122,6 +185,7 @@ export function PlayerCircle({
     : null;
   const canSelectSuspicionCard = suspicionPending?.viewerPlayerId === me.id;
 
+
   return (
     <div className="player-circle" style={circleStyle}>
       {game.players.map((player) => {
@@ -159,7 +223,11 @@ export function PlayerCircle({
             : Array.from({ length: previewCount }, (_, idx) => `${player.id}-back-${idx}`);
         const isSuspicionTarget = suspicionPending?.targetPlayerId === player.id;
         const canPickFromFan = !isSelf && isSuspicionTarget && canSelectSuspicionCard;
+        const sideBlend = Math.abs(Math.cos(radians));
+        const effectiveHandOffset = handOffset * (1 - sideBlend * 0.28);
         const opponentHandStyle = {
+          '--hand-offset-x': `${(-Math.cos(radians) * effectiveHandOffset).toFixed(1)}px`,
+          '--hand-offset-y': `${(-Math.sin(radians) * effectiveHandOffset).toFixed(1)}px`,
           '--hand-rotation': `${angle + 270}deg`,
           '--hand-vector-x': (-Math.cos(radians)).toFixed(4),
           '--hand-vector-y': (-Math.sin(radians)).toFixed(4),
@@ -174,9 +242,12 @@ export function PlayerCircle({
           );
         };
 
+        const activeShout = shouts.find(s => s.playerId === player.id);
+        const shoutLabel = activeShout ? (isRu ? activeShout.phrase : activeShout.phraseEn) : null;
+
         return (
           <motion.div
-            className={`player-node ${isCurrent ? 'active' : ''} ${isSelf ? 'self' : ''} ${player.isAlive ? '' : 'dead'} ${isDisconnected ? 'disconnected' : ''} ${isTargetable ? 'is-targetable' : ''} ${isUpperSeat ? 'is-upper-seat' : ''} ${isLowerSeat ? 'is-lower-seat' : ''} ${isLeftSeat ? 'is-left-seat' : ''} ${isRightSeat ? 'is-right-seat' : ''}`}
+            className={`player-node ${isCurrent ? 'active' : ''} ${isSelf ? 'self' : ''} ${player.isAlive ? '' : 'dead'} ${isDisconnected ? 'disconnected' : ''} ${isTargetable ? 'is-targetable' : ''} ${isUpperSeat ? 'is-upper-seat' : ''} ${isLowerSeat ? 'is-lower-seat' : ''} ${isLeftSeat ? 'is-left-seat' : ''} ${isRightSeat ? 'is-right-seat' : ''} ${isSelf && shoutMenuOpen ? 'shout-open' : ''} ${activeShout ? 'has-shout' : ''}`}
             key={player.id}
             style={{ left: `${x}%`, top: `${y}%`, x: '-50%', y: nodeLift }}
             animate={isCurrent ? { scale: [1, 1.08, 1] } : { scale: 1 }}
@@ -222,7 +293,15 @@ export function PlayerCircle({
                 </div>
               </div>
             )}
-            <div className="player-avatar">
+            <div
+              ref={isSelf ? selfAvatarRef : undefined}
+              className={`player-avatar${isSelf ? ' player-avatar--self' : ''}`}
+              onClick={isSelf ? openShoutMenu : undefined}
+              role={isSelf ? 'button' : undefined}
+              tabIndex={isSelf ? 0 : undefined}
+              onKeyDown={isSelf ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShoutMenu(e); } } : undefined}
+              aria-label={isSelf ? t('shout.openMenu', 'Выкрик') : undefined}
+            >
               {avatarSrc ? (
                 <img
                   alt={player.name}
@@ -236,6 +315,38 @@ export function PlayerCircle({
               ) : (
                 <span className="player-avatar-fallback">{avatarFallback}</span>
               )}
+              {player.inQuarantine && (
+                <img
+                  alt=""
+                  aria-hidden="true"
+                  className="player-avatar-quarantine-overlay"
+                  src={quarantineOverlay}
+                />
+              )}
+              {(player.role === 'thing' || (me.role === 'infected' && player.canReceiveInfectedCardFromMe)) && (
+                <img
+                  alt=""
+                  aria-hidden="true"
+                  className="player-avatar-thing-overlay"
+                  src={thingOverlay}
+                />
+              )}
+
+              {/* Speech bubble visible to all */}
+              <AnimatePresence>
+                {shoutLabel && (
+                  <motion.div
+                    className="shout-bubble"
+                    key={shoutLabel}
+                    initial={{ opacity: 0, y: 6, scale: 0.85 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.85 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {shoutLabel}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             <div className="player-meta">
               <strong>{player.name}</strong>
@@ -244,6 +355,7 @@ export function PlayerCircle({
               <div className="token quarantine">Q{player.quarantineTurnsLeft}</div>
             )}
             {!player.isAlive && <div className="token dead">✗</div>}
+
           </motion.div>
         );
       })}
@@ -266,7 +378,9 @@ export function PlayerCircle({
             key={`${door.between.join('-')}-${index}`}
             style={{ left: `${x}%`, top: `${y}%` }}
           >
-            {'🚪'}
+            <div className="door-marker-card" aria-hidden="true">
+              <CardView card={LOCKED_DOOR_MARKER_CARD} faceUp />
+            </div>
           </div>
         );
       })}
@@ -277,6 +391,58 @@ export function PlayerCircle({
       </div>
 
       <TableAnimationBoundary game={game} />
+      {animOverlay}
+
+      {/* Shout menu — always portal into document.body to escape all transform ancestors.
+          Mobile: centred at bottom. Desktop: anchored next to the avatar via fixed coords. */}
+      {shoutMenuOpen && shoutMenuAnchor && createPortal(
+        <>
+          {/* Backdrop — closes menu on outside click */}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+            onClick={() => setShoutMenuOpen(false)}
+          />
+          <AnimatePresence>
+            <div
+              className="shout-menu-portal"
+              style={window.innerWidth > 768 ? {
+                // Desktop: align top of menu to top of avatar, beside it left/right
+                top: `${shoutMenuAnchor.top}px`,
+                bottom: 'auto',
+                transform: 'none',
+                ...(shoutMenuAnchor.onRight
+                  ? { right: `${window.innerWidth - shoutMenuAnchor.left + 8}px`, left: 'auto' }
+                  : { left: `${shoutMenuAnchor.right + 8}px`, right: 'auto' }),
+              } : undefined}
+              onClick={e => e.stopPropagation()}
+            >
+              <motion.div
+                className="shout-menu"
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.85 }}
+                transition={{ duration: 0.13 }}
+              >
+                {SHOUT_PHRASES.map((p) => (
+                  <button
+                    key={p.ru}
+                    className="shout-menu-item"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShoutMenuOpen(false);
+                      onShout?.(p.ru, p.en);
+                    }}
+                  >
+                    {isRu ? p.ru : p.en}
+                  </button>
+                ))}
+              </motion.div>
+            </div>
+          </AnimatePresence>
+        </>,
+        document.body,
+      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import {
   handleForgetfulDiscardPick,
   handlePanicTradeSelect,
   handlePanicTradeRespond,
+  handleAxeChooseEffect,
   handleRevelationsRespond,
 } from './actionHandlers.ts';
 
@@ -167,6 +168,8 @@ function applyAction(s: GameState, originalState: GameState, action: GameAction)
       return handlePanicTradeSelect(s, originalState, action);
     case 'PANIC_TRADE_RESPOND':
       return handlePanicTradeRespond(s, originalState, action);
+    case 'AXE_CHOOSE_EFFECT':
+      return handleAxeChooseEffect(s, originalState, action);
     case 'REVELATIONS_RESPOND':
       return handleRevelationsRespond(s, originalState, action);
     default:

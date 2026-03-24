@@ -69,6 +69,30 @@ export function checkInfectionOverload(s: GameState, player: Player): void {
   }
 }
 
+export function resolveThingVictoryIfNoHumans(s: GameState): boolean {
+  if (s.phase === 'game_over') return true;
+
+  const humans = s.players.filter((player) => player.isAlive && player.role === 'human');
+  if (humans.length > 0) return false;
+
+  const thing = s.players.find((player) => player.isAlive && player.role === 'thing');
+  if (!thing) return false;
+
+  const infected = s.players.filter((player) => player.isAlive && player.role === 'infected');
+  const eliminated = s.players.filter((player) => !player.isAlive);
+
+  s.phase = 'game_over';
+  if (eliminated.length === 0) {
+    s.winner = 'thing_solo';
+    s.winnerPlayerIds = [thing.id];
+  } else {
+    s.winner = 'thing';
+    s.winnerPlayerIds = [thing.id, ...infected.map((player) => player.id)];
+  }
+
+  return true;
+}
+
 // ── Turn management ─────────────────────────────────────────────────────────
 
 export function handleTradeStep(s: GameState): void {
@@ -102,6 +126,12 @@ export function advanceTurn(s: GameState): void {
   }
 
   checkInfectionOverload(s, finishingPlayer);
+  if (resolveThingVictoryIfNoHumans(s)) {
+    s.step = 'draw';
+    s.tradeSkipped = false;
+    s.pendingAction = null;
+    return;
+  }
 
   const alive = s.players.filter((player) => player.isAlive);
   if (s.phase === 'game_over' || alive.length <= 1) {

@@ -1,5 +1,5 @@
 import type { GameState, Player, CardInstance } from '../types.ts';
-import { getPlayer, drawEventCard } from './helpers.ts';
+import { getPlayer, drawEventCard, hasDoorBetween } from './helpers.ts';
 import { eliminatePlayer, swapPositions } from './mutations.ts';
 
 // ── Card Effects ────────────────────────────────────────────────────────────
@@ -136,10 +136,20 @@ export function applyCardEffect(s: GameState, player: Player, card: CardInstance
         player.inQuarantine = false;
         player.quarantineTurnsLeft = 0;
       } else {
-        if (target.inQuarantine) {
+        const canRemoveQuarantine = target.inQuarantine;
+        const canRemoveDoor = hasDoorBetween(s, player.position, target.position);
+
+        if (canRemoveQuarantine && canRemoveDoor) {
+          s.pendingAction = {
+            type: 'axe_choice',
+            targetPlayerId: target.id,
+            canRemoveQuarantine: true,
+            canRemoveDoor: true,
+          };
+        } else if (canRemoveQuarantine) {
           target.inQuarantine = false;
           target.quarantineTurnsLeft = 0;
-        } else {
+        } else if (canRemoveDoor) {
           s.doors = s.doors.filter(
             d => !((d.between[0] === player.position && d.between[1] === target.position) ||
                    (d.between[0] === target.position && d.between[1] === player.position))

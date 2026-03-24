@@ -94,6 +94,7 @@ export function TopBar({
           <button className="dropdown-item" onClick={() => { void onCopy(); setMenuOpen(false); }} type="button">
             {t('topbar.copyLink')}
           </button>
+          <div className="dropdown-divider" />
           <button className="dropdown-item danger" onClick={() => { onLeave(); setMenuOpen(false); }} type="button">
             {t('topbar.leave')}
           </button>

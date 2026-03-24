@@ -17,6 +17,7 @@ import { PanicTradePanel } from './PanicTradePanel.tsx';
 import { PanicTradeResponsePanel } from './PanicTradeResponsePanel.tsx';
 import { RevelationsPanel } from './RevelationsPanel.tsx';
 import { SuspicionPickPanel } from './SuspicionPickPanel.tsx';
+import { AxeChoicePanel } from './AxeChoicePanel.tsx';
 
 export function PendingActionPanel({
   game,
@@ -64,6 +65,8 @@ export function PendingActionPanel({
     return <PanicTradePanel game={game} loading={loading} me={me} pending={pending} onAction={onAction} />;
   if (pending.type === 'panic_trade_response')
     return <PanicTradeResponsePanel game={game} loading={loading} me={me} pending={pending} onAction={onAction} />;
+  if (pending.type === 'axe_choice')
+    return <AxeChoicePanel game={game} loading={loading} pending={pending} onAction={onAction} />;
   if (pending.type === 'revelations_round')
     return <RevelationsPanel game={game} loading={loading} me={me} pending={pending} onAction={onAction} />;
 

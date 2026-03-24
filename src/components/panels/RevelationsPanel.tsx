@@ -20,6 +20,7 @@ export function RevelationsPanel({
   const revealerIdx = pending.revealOrder[pending.currentRevealerIdx];
   const revealer = game.players[revealerIdx];
   const isMyTurn = revealer?.id === me.id;
+  const hasInfected = me.hand.some((card) => card.defId === 'infected');
 
   if (!isMyTurn) {
     return (
@@ -31,12 +32,20 @@ export function RevelationsPanel({
   }
 
   return (
-    <div className="panel">
+    <div className="panel revelations-panel">
       <div className="panel-header"><h3>{t('revelations.title')}</h3></div>
-      <p className="helper-text">{t('revelations.showCards')}</p>
       <div className="stack-actions" style={{ marginTop: '8px' }}>
+        {hasInfected && (
+          <button
+            className="btn danger"
+            disabled={loading}
+            onClick={() => void onAction({ type: 'REVELATIONS_RESPOND', show: true, mode: 'infected_only' })}
+            type="button">
+            {t('revelations.showInfectedOnly')}
+          </button>
+        )}
         <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'REVELATIONS_RESPOND', show: true })} type="button">
-          {t('action.show')}
+          {hasInfected ? t('revelations.showAllCards') : t('action.show')}
         </button>
         <button className="btn secondary" disabled={loading} onClick={() => void onAction({ type: 'REVELATIONS_RESPOND', show: false })} type="button">
           {t('action.skip')}

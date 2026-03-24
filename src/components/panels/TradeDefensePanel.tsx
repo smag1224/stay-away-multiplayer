@@ -19,7 +19,7 @@ export function TradeDefensePanel({
 }) {
   const { t, i18n } = useTranslation();
   const lang: Lang = i18n.language === 'en' ? 'en' : 'ru';
-  const allowedIds = pending.reason === 'trade' || pending.reason === 'temptation'
+  const allowedIds = pending.reason === 'trade' || pending.reason === 'temptation' || pending.reason === 'panic_trade'
     ? ['fear', 'no_thanks', 'miss']
     : pending.reason === 'flamethrower'
       ? ['no_barbecue']
@@ -28,7 +28,8 @@ export function TradeDefensePanel({
         : ['im_fine_here'];
 
   const defenseCards = me.hand.filter((c) => allowedIds.includes(c.defId));
-  const tradeableCards = me.hand.filter((c) => localTradeCheck(me, c));
+  const receiver = game.players.find((player) => player.id === pending.fromId) ?? null;
+  const tradeableCards = me.hand.filter((c) => localTradeCheck(me, c, receiver));
   const fromName = game.players.find((p) => p.id === pending.fromId)?.name ?? pending.fromId;
 
   return (
@@ -52,7 +53,7 @@ export function TradeDefensePanel({
           </div>
         </>
       )}
-      {(pending.reason === 'trade' || pending.reason === 'temptation') && (
+      {(pending.reason === 'trade' || pending.reason === 'temptation' || pending.reason === 'panic_trade') && (
         <>
           <h4 className="subheading">{t('tradeDefense.acceptTrade')}</h4>
           <div className="hand-grid compact">
@@ -65,6 +66,8 @@ export function TradeDefensePanel({
                   onClick={() => void onAction(
                     pending.reason === 'temptation'
                       ? { type: 'TEMPTATION_RESPOND', cardUid: card.uid }
+                      : pending.reason === 'panic_trade'
+                        ? { type: 'PANIC_TRADE_RESPOND', cardUid: card.uid }
                       : { type: 'RESPOND_TRADE', cardUid: card.uid },
                   )}
                   type="button">

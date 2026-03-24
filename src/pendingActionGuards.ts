@@ -52,7 +52,11 @@ export function allowsActionForPendingAction(
     case 'PANIC_TRADE_SELECT':
       return pendingAction.type === 'panic_trade';
     case 'PANIC_TRADE_RESPOND':
-      return pendingAction.type === 'panic_trade_response';
+      return pendingAction.type === 'panic_trade_response' ||
+        (pendingAction.type === 'trade_defense' && pendingAction.reason === 'panic_trade');
+    case 'AXE_CHOOSE_EFFECT':
+      return pendingAction.type === 'axe_choice' &&
+        pendingAction.targetPlayerId === action.targetPlayerId;
     case 'REVELATIONS_RESPOND':
       return pendingAction.type === 'revelations_round';
     default:

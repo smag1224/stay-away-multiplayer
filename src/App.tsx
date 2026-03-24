@@ -222,6 +222,7 @@ function App() {
           onCopy={updateCopied}
           onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
           onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
+          onShout={(phrase, phraseEn) => callRoomEndpoint(`/api/rooms/${room.code}/shout`, { sessionId: room.me.sessionId, phrase, phraseEn })}
         />
       )}
     </div>

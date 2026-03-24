@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RoomView } from './multiplayer.ts';
 
@@ -23,16 +24,16 @@ export function ConnectScreen({
   onNameChange: (value: string) => void;
 }) {
   const { t } = useTranslation();
+  const [briefingExpanded, setBriefingExpanded] = useState(false);
 
   return (
     <main className="connect-screen">
       <div className="connect-layout">
-        <section className="connect-briefing">
+        <section className={`connect-briefing ${briefingExpanded ? 'is-expanded' : 'is-collapsed'}`}>
           <div className="signal-pill">{t('connect.briefingLabel')}</div>
           <h1 className="hero-title">Stay Away!</h1>
           <p className="version-tag">v1.3 multiplayer</p>
           <p className="hero-subtitle">{t('connect.tagline')}</p>
-          <p className="connect-summary">{t('connect.summary')}</p>
 
           <div className="connect-chip-row">
             <span className="connect-chip">{t('connect.playersRange')}</span>
@@ -40,22 +41,35 @@ export function ConnectScreen({
             <span className="connect-chip">{t('connect.mobileReady')}</span>
           </div>
 
-          <div className="briefing-grid">
-            <article className="briefing-card">
-              <span className="briefing-index">01</span>
-              <strong>{t('connect.briefingRolesTitle')}</strong>
-              <p>{t('connect.briefingRolesBody')}</p>
-            </article>
-            <article className="briefing-card">
-              <span className="briefing-index">02</span>
-              <strong>{t('connect.briefingTradeTitle')}</strong>
-              <p>{t('connect.briefingTradeBody')}</p>
-            </article>
-            <article className="briefing-card">
-              <span className="briefing-index">03</span>
-              <strong>{t('connect.briefingBurnTitle')}</strong>
-              <p>{t('connect.briefingBurnBody')}</p>
-            </article>
+          <button
+            aria-expanded={briefingExpanded}
+            className="connect-briefing-toggle btn ghost small"
+            onClick={() => setBriefingExpanded((value) => !value)}
+            type="button"
+          >
+            {briefingExpanded ? t('connect.hideBriefing') : t('connect.showBriefing')}
+          </button>
+
+          <div className="connect-briefing-body">
+            <p className="connect-summary">{t('connect.summary')}</p>
+
+            <div className="briefing-grid">
+              <article className="briefing-card">
+                <span className="briefing-index">01</span>
+                <strong>{t('connect.briefingRolesTitle')}</strong>
+                <p>{t('connect.briefingRolesBody')}</p>
+              </article>
+              <article className="briefing-card">
+                <span className="briefing-index">02</span>
+                <strong>{t('connect.briefingTradeTitle')}</strong>
+                <p>{t('connect.briefingTradeBody')}</p>
+              </article>
+              <article className="briefing-card">
+                <span className="briefing-index">03</span>
+                <strong>{t('connect.briefingBurnTitle')}</strong>
+                <p>{t('connect.briefingBurnBody')}</p>
+              </article>
+            </div>
           </div>
         </section>
 

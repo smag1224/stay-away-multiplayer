@@ -22,6 +22,8 @@ import type {
   RoomActionPayload,
   RoomSessionPayload,
   RoomView,
+  ShoutEntry,
+  ShoutPayload,
   ViewerPlayerState,
 } from '../src/multiplayer.ts';
 
@@ -42,6 +44,8 @@ type Room = {
   updatedAt: number;
   /** Ephemeral animation override — set on specific player actions, expires automatically */
   tableAnimOverride?: { event: import('../src/multiplayer.ts').TableAnimEvent; expiresAt: number } | null;
+  /** Short-lived player shout phrases visible to all, expire after 5s */
+  shouts: ShoutEntry[];
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -214,6 +218,7 @@ function canViewerSeePendingAction(
     case 'blind_date_swap':
     case 'forgetful_discard':
     case 'panic_trade':
+    case 'axe_choice':
       return currentPlayer(game).id === viewerId;
     case 'panic_trade_response':
       return viewerId === pendingAction.fromId || viewerId === pendingAction.toId;
@@ -290,13 +295,13 @@ function buildTableAnim(
     };
   }
   if (pa.type === 'trade_defense') {
-    if (pa.reason === 'trade' || pa.reason === 'swap' || pa.reason === 'temptation') {
+    if (pa.reason === 'trade' || pa.reason === 'swap' || pa.reason === 'temptation' || pa.reason === 'panic_trade') {
       return {
         type: 'exchange_pending',
         sceneId: makeSceneId(`trade-defense-${pa.reason}`, pa.fromId, pa.defenderId, pa.offeredCardUid),
         initiatorId: pa.fromId,
         targetId: pa.defenderId,
-        mode: pa.reason,
+        mode: pa.reason === 'panic_trade' ? 'panic_trade' : pa.reason,
       };
     }
     // flamethrower / analysis — show the attack card while defender decides
@@ -349,6 +354,7 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
     game: room.game ? sanitizeGame(room.game, member.playerId, room) : null,
     hostAddress: createHostAddress(req),
     updatedAt: room.updatedAt,
+    shouts: (room.shouts ?? []).filter(s => s.expiresAt > now()),
   };
 }
 
@@ -463,6 +469,18 @@ function allowedToDispatch(room: Room, member: RoomMember, action: GameAction): 
         (pendingAction?.type === 'temptation_response' && pendingAction.toId === member.playerId) ||
         (pendingAction?.type === 'trade_defense' && pendingAction.reason === 'temptation' && pendingAction.defenderId === member.playerId)
       );
+    case 'PANIC_TRADE_RESPOND':
+      return (
+        (pendingAction?.type === 'panic_trade_response' && pendingAction.toId === member.playerId) ||
+        (pendingAction?.type === 'trade_defense' && pendingAction.reason === 'panic_trade' && pendingAction.defenderId === member.playerId)
+      );
+    case 'AXE_CHOOSE_EFFECT':
+      return pendingAction?.type === 'axe_choice' &&
+        currentId === member.playerId &&
+        pendingAction.targetPlayerId === action.targetPlayerId;
+    case 'REVELATIONS_RESPOND':
+      return pendingAction?.type === 'revelations_round' &&
+        pendingAction.revealOrder[pendingAction.currentRevealerIdx] === member.playerId;
     case 'CONFIRM_VIEW':
       if (!pendingAction) {
         return false;
@@ -511,7 +529,7 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
   // Set ephemeral animation overrides based on what just happened
   if (action.type === 'PLAY_DEFENSE' && prevPA?.type === 'trade_defense') {
     if (playedDefenseDefId) {
-      if (prevPA.reason === 'trade' || prevPA.reason === 'swap' || prevPA.reason === 'temptation') {
+      if (prevPA.reason === 'trade' || prevPA.reason === 'swap' || prevPA.reason === 'temptation' || prevPA.reason === 'panic_trade') {
         // Show: initiator face-down offer + revealed defense card, then keep a blocked state briefly.
         room.tableAnimOverride = {
           event: {
@@ -519,7 +537,7 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
             sceneId: makeSceneId('exchange-blocked', prevPA.reason, prevPA.fromId, prevPA.defenderId, action.cardUid),
             initiatorId: prevPA.fromId,
             targetId: prevPA.defenderId,
-            mode: prevPA.reason,
+            mode: prevPA.reason === 'panic_trade' ? 'panic_trade' : prevPA.reason,
             defenseCardDefId: playedDefenseDefId,
           },
           expiresAt: Date.now() + 3200,
@@ -564,13 +582,22 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
       },
       expiresAt: Date.now() + 3000,
     };
-  } else if (action.type === 'PANIC_TRADE_RESPOND' && prevPA?.type === 'panic_trade_response') {
+  } else if (
+    action.type === 'PANIC_TRADE_RESPOND' &&
+    (
+      prevPA?.type === 'panic_trade_response' ||
+      (prevPA?.type === 'trade_defense' && prevPA.reason === 'panic_trade')
+    )
+  ) {
+    const fromId = prevPA.type === 'trade_defense' ? prevPA.fromId : prevPA.fromId;
+    const targetId = prevPA.type === 'trade_defense' ? prevPA.defenderId : prevPA.toId;
+    const offeredCardUid = prevPA.type === 'trade_defense' ? prevPA.offeredCardUid : prevPA.offeredCardUid;
     room.tableAnimOverride = {
       event: {
         type: 'exchange_ready',
-        sceneId: makeSceneId('panic-ready', prevPA.fromId, prevPA.toId, prevPA.offeredCardUid, action.cardUid),
-        initiatorId: prevPA.fromId,
-        targetId: prevPA.toId,
+        sceneId: makeSceneId('panic-ready', fromId, targetId, offeredCardUid, action.cardUid),
+        initiatorId: fromId,
+        targetId: targetId,
         mode: 'panic_trade',
       },
       expiresAt: Date.now() + 3000,
@@ -693,6 +720,7 @@ const server = createServer(async (req, res) => {
         ],
         game: null,
         updatedAt: now(),
+        shouts: [],
       };
 
       rooms.set(room.code, room);
@@ -740,7 +768,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset))?$/i);
+    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|shout))?$/i);
     if (!roomMatch) {
       notFound(res);
       return;
@@ -876,6 +904,21 @@ const server = createServer(async (req, res) => {
         return;
       }
 
+      sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
+      return;
+    }
+
+    if (actionSegment === 'shout') {
+      const body = await readBody<ShoutPayload>(req);
+      const member = getMember(room, body.sessionId);
+      if (!member || member.playerId === null) {
+        badRequest(res, 'Session not found.');
+        return;
+      }
+      room.shouts = (room.shouts ?? []).filter(s => s.playerId !== member.playerId);
+      room.shouts.push({ playerId: member.playerId, phrase: body.phrase, phraseEn: body.phraseEn, expiresAt: now() + 5000 });
+      touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
       broadcastRoom(room, req);
       return;

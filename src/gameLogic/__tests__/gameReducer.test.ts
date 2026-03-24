@@ -211,6 +211,34 @@ describe('gameReducer', () => {
     });
   });
 
+  describe('automatic victory conditions', () => {
+    it('ends the game when no living humans remain and The Thing has infected allies', () => {
+      const state = startGame(4);
+      state.phase = 'playing';
+      state.step = 'end_turn';
+      state.currentPlayerIndex = 0;
+
+      state.players[0].role = 'thing';
+      state.players[0].isAlive = true;
+      state.players[1].role = 'infected';
+      state.players[1].isAlive = true;
+      state.players[2].role = 'infected';
+      state.players[2].isAlive = true;
+      state.players[3].role = 'human';
+      state.players[3].isAlive = false;
+
+      const next = gameReducer(state, { type: 'END_TURN' });
+
+      expect(next.phase).toBe('game_over');
+      expect(next.winner).toBe('thing');
+      expect(next.winnerPlayerIds).toEqual(expect.arrayContaining([
+        state.players[0].id,
+        state.players[1].id,
+        state.players[2].id,
+      ]));
+    });
+  });
+
   // ── PLAY_CARD — Flamethrower eliminates target ──────────────────────────
 
   describe('PLAY_CARD (flamethrower)', () => {
@@ -738,6 +766,172 @@ describe('gameReducer', () => {
       expect(next.currentPlayerIndex).toBe(1);
       expect(next.step).toBe('draw');
       expect(next.phase).toBe('playing');
+    });
+  });
+
+  describe('REVELATIONS_RESPOND', () => {
+    it('continues to the next player after confirming a non-infected public reveal', () => {
+      const state = startGame(4);
+      state.step = 'draw';
+      state.players[0].hand = [
+        card('suspicion', 'rev_suspicion'),
+        card('axe', 'rev_axe'),
+      ];
+      state.pendingAction = {
+        type: 'revelations_round',
+        currentRevealerIdx: 0,
+        revealOrder: [0, 1, 2, 3],
+      };
+
+      const revealed = gameReducer(state, { type: 'REVELATIONS_RESPOND', show: true });
+      expect(revealed.pendingAction).toMatchObject({
+        type: 'whisky_reveal',
+        playerId: state.players[0].id,
+        revealKind: 'all',
+        revelationsResume: {
+          revealOrder: [0, 1, 2, 3],
+          nextRevealerIdx: 1,
+        },
+      });
+
+      const resumed = gameReducer(revealed, { type: 'CONFIRM_VIEW' });
+      expect(resumed.pendingAction).toEqual({
+        type: 'revelations_round',
+        currentRevealerIdx: 1,
+        revealOrder: [0, 1, 2, 3],
+      });
+      expect(resumed.step).toBe('draw');
+    });
+
+    it('lets a player reveal only an infected card and then ends revelations after confirmation', () => {
+      const state = startGame(4);
+      state.step = 'draw';
+      state.players[0].hand = [
+        card('infected', 'rev_infected'),
+        card('suspicion', 'rev_suspicion'),
+        card('axe', 'rev_axe'),
+      ];
+      state.pendingAction = {
+        type: 'revelations_round',
+        currentRevealerIdx: 0,
+        revealOrder: [0, 1, 2, 3],
+      };
+
+      const revealed = gameReducer(state, {
+        type: 'REVELATIONS_RESPOND',
+        show: true,
+        mode: 'infected_only',
+      });
+
+      expect(revealed.pendingAction).toMatchObject({
+        type: 'whisky_reveal',
+        playerId: state.players[0].id,
+        revealKind: 'infected_only',
+        revelationsResume: {
+          revealOrder: [0, 1, 2, 3],
+          nextRevealerIdx: null,
+        },
+      });
+      expect(revealed.pendingAction?.type).toBe('whisky_reveal');
+      if (revealed.pendingAction?.type === 'whisky_reveal') {
+        expect(revealed.pendingAction.cards).toHaveLength(1);
+        expect(revealed.pendingAction.cards[0].defId).toBe('infected');
+      }
+
+      const finished = gameReducer(revealed, { type: 'CONFIRM_VIEW' });
+      expect(finished.pendingAction).toBeNull();
+      expect(finished.step).toBe('draw');
+    });
+  });
+
+  describe('rulebook parity fixes', () => {
+    it('panic Just Between Us ignores neighbors behind a locked door', () => {
+      const state = startGame(4);
+      state.players.forEach((player, index) => {
+        player.position = index;
+        player.isAlive = true;
+        player.inQuarantine = false;
+      });
+      state.currentPlayerIndex = 0;
+      state.doors = [{ between: [0, 1] }];
+
+      stackDeck(state, card('panic_between_us', 'panic_between_us_top'));
+
+      const next = gameReducer(state, { type: 'DRAW_CARD' });
+
+      expect(next.pendingAction).toEqual({
+        type: 'view_hand',
+        targetPlayerId: state.players[3].id,
+        cards: expect.any(Array),
+        viewerPlayerId: state.players[3].id,
+        public: false,
+      });
+    });
+
+    it('cant_be_friends uses trade defense flow and allows No Thanks', () => {
+      const state = startGame(4);
+      state.currentPlayerIndex = 0;
+      state.players[0].role = 'thing';
+      state.players[0].hand = [card('the_thing', 'thing_keep'), card('suspicion', 'panic_offer')];
+      state.players[1].hand = [card('no_thanks', 'panic_no_thanks'), card('whisky', 'panic_other')];
+      state.pendingAction = { type: 'panic_trade', targetPlayerId: state.players[1].id };
+
+      let next = gameReducer(state, {
+        type: 'PANIC_TRADE_SELECT',
+        targetPlayerId: state.players[1].id,
+        cardUid: 'panic_offer',
+      });
+
+      expect(next.pendingAction).toEqual({
+        type: 'trade_defense',
+        defenderId: state.players[1].id,
+        fromId: state.players[0].id,
+        offeredCardUid: 'panic_offer',
+        reason: 'panic_trade',
+      });
+
+      next = gameReducer(next, { type: 'PLAY_DEFENSE', cardUid: 'panic_no_thanks' });
+
+      expect(next.pendingAction).toBeNull();
+      expect(next.step).toBe('draw');
+      expect(next.players[0].hand.some((handCard) => handCard.uid === 'panic_offer')).toBe(true);
+      expect(next.players[1].hand.some((handCard) => handCard.uid === 'panic_other')).toBe(true);
+    });
+
+    it('axe asks which obstacle to remove when both door and quarantine are present', () => {
+      const state = startGame(4);
+      state.step = 'play_or_discard';
+      state.currentPlayerIndex = 0;
+      state.players[0].position = 0;
+      state.players[1].position = 1;
+      state.players[1].inQuarantine = true;
+      state.players[1].quarantineTurnsLeft = 2;
+      state.doors = [{ between: [0, 1] }];
+      const axeUid = giveCard(state, 0, 'axe');
+
+      let next = gameReducer(state, {
+        type: 'PLAY_CARD',
+        cardUid: axeUid,
+        targetPlayerId: state.players[1].id,
+      });
+
+      expect(next.pendingAction).toEqual({
+        type: 'axe_choice',
+        targetPlayerId: state.players[1].id,
+        canRemoveQuarantine: true,
+        canRemoveDoor: true,
+      });
+
+      next = gameReducer(next, {
+        type: 'AXE_CHOOSE_EFFECT',
+        targetPlayerId: state.players[1].id,
+        choice: 'door',
+      });
+
+      expect(next.pendingAction).toBeNull();
+      expect(next.players[1].inQuarantine).toBe(true);
+      expect(next.doors).toEqual([]);
+      expect(next.step).toBe('draw');
     });
   });
 });

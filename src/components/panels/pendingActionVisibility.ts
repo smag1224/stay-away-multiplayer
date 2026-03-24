@@ -7,10 +7,7 @@ export function hasRenderablePendingActionPanel(
   if (!pending) return false;
 
   return (
-    (pending.type === 'trade_defense' &&
-      pending.defenderId === meId &&
-      pending.reason !== 'trade' &&
-      pending.reason !== 'temptation') ||
+    pending.type === 'axe_choice' ||
     pending.type === 'just_between_us' ||
     pending.type === 'revelations_round'
   );

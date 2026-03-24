@@ -5,6 +5,7 @@ import {
   currentPlayer,
   getAdjacentPositions,
   getPlayer,
+  hasDoorBetween,
   playerAtPosition,
   drawEventCard,
 } from './helpers.ts';
@@ -89,7 +90,7 @@ export function applyPanicEffect(s: GameState, card: CardInstance): void {
       const adjacent = getAdjacentPositions(s, cur.position);
       const targets = adjacent
         .map(pos => playerAtPosition(s, pos))
-        .filter((p): p is Player => !!p && p.isAlive)
+        .filter((p): p is Player => !!p && p.isAlive && !hasDoorBetween(s, cur.position, p.position))
         .map(p => p.id);
       if (targets.length === 0) {
         log(s, 'Just Between Us — no adjacent players.', 'Только между нами — нет соседних игроков.');

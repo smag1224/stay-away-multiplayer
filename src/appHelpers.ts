@@ -145,7 +145,7 @@ export function stepLabel(step: ViewerGameState['step'], _lang?: Lang): string {
   }
 }
 
-export function actionReasonLabel(reason: 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis', _lang?: Lang): string {
+export function actionReasonLabel(reason: 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis' | 'panic_trade', _lang?: Lang): string {
   switch (reason) {
     case 'trade':
       return i18n.t('actionReason.trade');
@@ -157,6 +157,8 @@ export function actionReasonLabel(reason: 'trade' | 'temptation' | 'flamethrower
       return i18n.t('actionReason.swap');
     case 'analysis':
       return i18n.t('actionReason.analysis');
+    case 'panic_trade':
+      return i18n.t('actionReason.panic_trade');
   }
 }
 
@@ -204,6 +206,8 @@ export function pendingSummary(
       return i18n.t('pending.chooseCardKeep');
     case 'just_between_us':
       return i18n.t('pending.chooseAdjacentPlayers');
+    case 'axe_choice':
+      return i18n.t('pending.chooseAxeEffect');
     default:
       return null;
   }
