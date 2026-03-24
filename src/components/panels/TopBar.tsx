@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Lang } from '../../appHelpers.ts';
 import type { RoomView } from '../../multiplayer.ts';
+import { MusicVolumeSlider } from './MusicVolumeSlider.tsx';
 
 export function TopBar({
   deckCount,
@@ -53,6 +54,8 @@ export function TopBar({
           {t('game.deck')}: {deckCount}
         </span>
       )}
+      {/* Music volume slider */}
+      <MusicVolumeSlider />
       {/* Desktop actions */}
       <div className="top-bar-actions desktop-actions">
         {onToggleText && (

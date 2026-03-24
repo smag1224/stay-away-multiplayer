@@ -412,6 +412,56 @@ img {
   flex-wrap: wrap;
 }
 
+/* ── Music volume slider ───────────────────────────── */
+.music-volume-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.music-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 2px 4px;
+  line-height: 1;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.music-toggle-btn:hover { opacity: 1; }
+
+.music-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(240, 200, 140, 0.25);
+  outline: none;
+  cursor: pointer;
+}
+.music-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e0af6a;
+  box-shadow: 0 0 4px rgba(224, 175, 106, 0.6);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.music-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e0af6a;
+  border: none;
+  cursor: pointer;
+}
+
 /* Hamburger button — hidden on desktop */
 .top-bar-hamburger {
   display: none;

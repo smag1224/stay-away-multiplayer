@@ -23,6 +23,7 @@ import { hasRenderablePendingActionPanel } from './components/panels/pendingActi
 import { PlayerHand } from './components/panels/PlayerHand.tsx';
 import { CardPlayAnimationOverlay } from './components/panels/CardPlayAnimationOverlay.tsx';
 import type { CardAnimTrigger } from './components/panels/CardPlayAnimationOverlay.tsx';
+import { bgMusic } from './sounds/backgroundMusic.ts';
 
 export function GameScreen({
   error,
@@ -145,6 +146,17 @@ export function GameScreen({
     lastReshuffleCountRef.current = game.reshuffleCount;
     return undefined;
   }, [game.reshuffleCount]);
+
+  // Start background music when game begins (requires user interaction first)
+  useEffect(() => {
+    if (!bgMusic.playing) {
+      bgMusic.start();
+    }
+    return () => {
+      bgMusic.stop();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Detect newly played targeted cards and trigger animation.
   // Works two ways: (1) if server provides fromPlayerId/targetPlayerId on the log
