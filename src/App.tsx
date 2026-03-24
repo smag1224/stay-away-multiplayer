@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ConnectScreen, LobbyScreen } from './ConnectLobby.tsx';
-import { GameScreen } from './GameScreen.tsx';
+// Lazy-load the heavy game screen — only downloaded when a game actually starts
+const GameScreen = lazy(() =>
+  import('./GameScreen.tsx').then((m) => ({ default: m.GameScreen })),
+);
 import type { RoomView, SessionInfo } from './multiplayer.ts';
 import {
   api,
@@ -211,19 +214,21 @@ function App() {
       )}
 
       {session && room && game && me && (
-        <GameScreen
-          error={error}
-          game={game}
-          loading={loading}
-          me={me}
-          onToggleLang={toggleLang}
-          room={room}
-          onAction={(action) => callRoomEndpoint(`/api/rooms/${room.code}/action`, { sessionId: room.me.sessionId, action })}
-          onCopy={updateCopied}
-          onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
-          onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
-          onShout={(phrase, phraseEn) => callRoomEndpoint(`/api/rooms/${room.code}/shout`, { sessionId: room.me.sessionId, phrase, phraseEn })}
-        />
+        <Suspense fallback={null}>
+          <GameScreen
+            error={error}
+            game={game}
+            loading={loading}
+            me={me}
+            onToggleLang={toggleLang}
+            room={room}
+            onAction={(action) => callRoomEndpoint(`/api/rooms/${room.code}/action`, { sessionId: room.me.sessionId, action })}
+            onCopy={updateCopied}
+            onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
+            onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
+            onShout={(phrase, phraseEn) => callRoomEndpoint(`/api/rooms/${room.code}/shout`, { sessionId: room.me.sessionId, phrase, phraseEn })}
+          />
+        </Suspense>
       )}
     </div>
   );

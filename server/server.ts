@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createGzip } from 'node:zlib';
 
 import {
   createInitialState,
@@ -623,6 +624,33 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
   return null;
 }
 
+const CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'text/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.svg':  'image/svg+xml',
+  '.png':  'image/png',
+  '.webp': 'image/webp',
+  '.mp3':  'audio/mpeg',
+  '.json': 'application/json; charset=utf-8',
+};
+
+// Types worth compressing with gzip
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.svg', '.json']);
+
+function getCacheControl(urlPath: string): string {
+  // Vite hashes /assets/* filenames — safe to cache forever
+  if (urlPath.startsWith('/assets/')) return 'public, max-age=31536000, immutable';
+  // Large static resources — cache for 1 day
+  if (urlPath.startsWith('/music/') || urlPath.startsWith('/cards/') || urlPath.startsWith('/shouts/')) {
+    return 'public, max-age=86400';
+  }
+  // index.html — revalidate on every load so users get fresh deploys
+  if (urlPath === '/' || urlPath.endsWith('.html')) return 'public, max-age=0, must-revalidate';
+  // Everything else — 1 hour
+  return 'public, max-age=3600';
+}
+
 async function serveStatic(
   req: HttpRequest,
   res: HttpResponse,
@@ -633,33 +661,36 @@ async function serveStatic(
   const normalizedPath = path.normalize(requestedPath).replace(/^(\.\.[\\/])+/, '');
   const filePath = path.join(distDir, normalizedPath);
 
-  try {
-    const stats = await fs.stat(filePath);
-    if (stats.isDirectory()) {
-      return false;
-    }
-
+  const sendFile = async (filePath: string, urlPath: string): Promise<void> => {
     const body = await fs.readFile(filePath);
-    const extension = path.extname(filePath);
-    const contentType = ({
-      '.html': 'text/html; charset=utf-8',
-      '.js': 'text/javascript; charset=utf-8',
-      '.css': 'text/css; charset=utf-8',
-      '.svg': 'image/svg+xml',
-      '.png': 'image/png',
-      '.json': 'application/json; charset=utf-8',
-    } as Record<string, string>)[extension] ?? 'application/octet-stream';
+    const ext = path.extname(filePath);
+    const contentType = CONTENT_TYPES[ext] ?? 'application/octet-stream';
+    const acceptsGzip = (req.headers['accept-encoding'] ?? '').includes('gzip');
+    const shouldCompress = acceptsGzip && COMPRESSIBLE.has(ext);
 
     res.statusCode = 200;
     res.setHeader('Content-Type', contentType);
-    res.end(body);
+    res.setHeader('Cache-Control', getCacheControl(urlPath));
+    res.setHeader('Vary', 'Accept-Encoding');
+
+    if (shouldCompress) {
+      res.setHeader('Content-Encoding', 'gzip');
+      const gzip = createGzip({ level: 6 });
+      gzip.pipe(res);
+      gzip.end(body);
+    } else {
+      res.end(body);
+    }
+  };
+
+  try {
+    const stats = await fs.stat(filePath);
+    if (stats.isDirectory()) return false;
+    await sendFile(filePath, requestUrl.pathname);
     return true;
   } catch {
     try {
-      const indexFile = await fs.readFile(path.join(distDir, 'index.html'));
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.end(indexFile);
+      await sendFile(path.join(distDir, 'index.html'), '/index.html');
       return true;
     } catch {
       return false;
