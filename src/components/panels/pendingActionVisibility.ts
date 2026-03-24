@@ -2,7 +2,7 @@ import type { PendingAction } from '../../types.ts';
 
 export function hasRenderablePendingActionPanel(
   pending: PendingAction | null | undefined,
-  meId: number,
+  _meId: number,
 ) {
   if (!pending) return false;
 

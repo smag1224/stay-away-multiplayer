@@ -74,6 +74,7 @@ function buildViewerGame(playerCount: number): {
     game,
     hostAddress: 'http://localhost:8787',
     updatedAt: Date.now(),
+    shouts: [],
   };
 
   return {
@@ -100,6 +101,7 @@ describe('GameScreen six-player render', () => {
           onCopy={async () => undefined}
           onLeave={() => undefined}
           onReset={async () => undefined}
+          onShout={() => undefined}
         />,
       ),
     ).not.toThrow();
