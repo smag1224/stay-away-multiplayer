@@ -32,10 +32,6 @@ extract.js
 split_components.js
 mockups/
 
-# Large media assets — add manually to server, do not commit
-public/music/
-public/shouts/
-
 # Local tooling / verification artifacts
 .playwright-artifacts/
 .claude/settings.local.json
