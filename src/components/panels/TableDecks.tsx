@@ -69,9 +69,8 @@ interface FlyCard {
 /* Desktop positions (% of player-circle) — indexed by player count bracket */
 function getDeckPositions(totalPlayers: number, mobile: boolean) {
   if (mobile) return { drawX: 8, drawY: 10, discX: 92, discY: 10 };
-  // 7+ players: pull decks inward so they don't overlap corner avatars
-  if (totalPlayers >= 9) return { drawX: 22, drawY: 14, discX: 78, discY: 14 };
-  if (totalPlayers >= 7) return { drawX: 18, drawY: 15, discX: 82, discY: 15 };
+  // 7+ players: push decks to edges so they don't overlap avatars
+  if (totalPlayers >= 7) return { drawX: 0.5, drawY: 10, discX: 99.5, discY: 10 };
   return { drawX: 12, drawY: 18, discX: 88, discY: 18 };
 }
 
