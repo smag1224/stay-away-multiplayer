@@ -606,6 +606,64 @@ img {
   line-height: 1.45;
 }
 
+/* ── Spectator choice prompt (centered overlay) ── */
+.spectator-prompt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.spectator-prompt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 36px;
+  background: linear-gradient(160deg, rgba(40, 22, 14, 0.97), rgba(20, 10, 6, 0.98));
+  border: 1px solid rgba(200, 120, 60, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 0 60px rgba(180, 80, 20, 0.1);
+  color: #f3e3cf;
+  text-align: center;
+  max-width: 340px;
+}
+
+.spectator-prompt-icon {
+  font-size: 2.4rem;
+}
+
+.spectator-prompt-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.2rem;
+  letter-spacing: 0.05em;
+  margin: 0;
+  color: #eed3af;
+}
+
+.spectator-prompt-sub {
+  font-size: 0.8rem;
+  color: rgba(238, 211, 175, 0.6);
+  margin: 0;
+}
+
+.spectator-prompt-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.spectator-prompt-buttons .btn {
+  font-size: .88rem;
+  padding: 8px 20px;
+  white-space: nowrap;
+}
+
 /* ── Spectator banner ── */
 .spectator-banner {
   position: relative;
@@ -2653,11 +2711,16 @@ img {
 }
 
 .table-deck__count {
+  position: relative;
+  z-index: 10;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 0.7rem;
-  color: rgba(238, 211, 175, 0.7);
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-  letter-spacing: 0.05em;
+  font-size: 0.85rem;
+  color: rgba(255, 235, 200, 0.95);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7);
+  letter-spacing: 0.06em;
+  background: rgba(0,0,0,0.45);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 /* Flying card animation */

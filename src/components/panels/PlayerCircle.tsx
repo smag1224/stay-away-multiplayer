@@ -89,6 +89,7 @@ export function PlayerCircle({
   shouts = [],
   onShout,
   animOverlay,
+  isSpectator = false,
 }: {
   game: ViewerGameState;
   loading: boolean;
@@ -98,6 +99,7 @@ export function PlayerCircle({
   shouts?: ShoutEntry[];
   onShout?: (phrase: string, phraseEn: string) => void;
   animOverlay?: React.ReactNode;
+  isSpectator?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const isRu = i18n.language !== 'en';
@@ -161,7 +163,6 @@ export function PlayerCircle({
   }, []);
   const total = game.players.length;
   const current = getCurrentPlayer(game);
-  const isSpectator = !me.isAlive && game.phase === 'playing';
   const { orbitCenterX, orbitCenterY, orbitRadiusX, orbitRadiusY, handOffset, nodeLift } = getOrbitLayout(total);
   const circleStyle = {
     '--player-node-width':
@@ -349,11 +350,11 @@ export function PlayerCircle({
             <div
               ref={isSelf ? selfAvatarRef : undefined}
               className={`player-avatar${isSelf ? ' player-avatar--self' : ''}`}
-              onClick={isSelf ? openShoutMenu : undefined}
-              role={isSelf ? 'button' : undefined}
-              tabIndex={isSelf ? 0 : undefined}
-              onKeyDown={isSelf ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShoutMenu(e); } } : undefined}
-              aria-label={isSelf ? t('shout.openMenu', 'Выкрик') : undefined}
+              onClick={isSelf && me.isAlive ? openShoutMenu : undefined}
+              role={isSelf && me.isAlive ? 'button' : undefined}
+              tabIndex={isSelf && me.isAlive ? 0 : undefined}
+              onKeyDown={isSelf && me.isAlive ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openShoutMenu(e); } } : undefined}
+              aria-label={isSelf && me.isAlive ? t('shout.openMenu', 'Выкрик') : undefined}
             >
               {avatarSrc ? (
                 <img

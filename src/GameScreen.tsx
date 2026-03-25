@@ -151,6 +151,8 @@ export function GameScreen({
   const [logOpen, setLogOpen] = useState(false);
   const [showSecondDeckAlert, setShowSecondDeckAlert] = useState(false);
   const [cardAnim, setCardAnim] = useState<CardAnimTrigger | null>(null);
+  const [spectatorChoice, setSpectatorChoice] = useState<'pending' | 'accepted' | 'declined' | null>(null);
+  const prevAliveRef = useRef(me.isAlive);
   const [hintsEnabled, setHintsEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem('stay-away-hints');
@@ -279,6 +281,16 @@ export function GameScreen({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Detect player death → show spectator choice prompt
+  useEffect(() => {
+    if (prevAliveRef.current && !me.isAlive && game.phase === 'playing') {
+      setSpectatorChoice('pending');
+    }
+    prevAliveRef.current = me.isAlive;
+  }, [me.isAlive, game.phase]);
+
+  const isSpectator = !me.isAlive && game.phase === 'playing' && spectatorChoice === 'accepted';
 
   // Detect newly played targeted cards and trigger animation.
   // Works two ways: (1) if server provides fromPlayerId/targetPlayerId on the log
@@ -538,10 +550,8 @@ export function GameScreen({
           onCopy={onCopy}
           deckCount={game.deck.length}
           onLeave={onLeave}
-          mobileQuickActionLabel={myTurn && me.role === 'thing' && game.step !== 'draw' ? t('game.declareVictory') : undefined}
-          onMobileQuickAction={myTurn && me.role === 'thing' && game.step !== 'draw'
-            ? () => { void onAction({ type: 'DECLARE_VICTORY' }); }
-            : undefined}
+          mobileQuickActionLabel={undefined}
+          onMobileQuickAction={undefined}
           onToggleLang={onToggleLang}
           onToggleText={() => setShowCardText(v => !v)}
           hintsEnabled={hintsEnabled}
@@ -651,20 +661,50 @@ export function GameScreen({
             )}
           </AnimatePresence>
 
-          <AnimatePresence>
-            {!me.isAlive && game.phase === 'playing' && (
-              <motion.div
-                className="spectator-banner"
-                initial={{ opacity: 0, y: -22 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -22 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}>
-                <span className="spectator-banner-icon">👁</span>
-                <span>{lang === 'ru' ? 'Режим наблюдателя — ты видишь карты и роли всех игроков' : 'Spectator mode — you can see all cards and roles'}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* spectator prompt + banner moved to a standalone overlay outside noticeContent */}
         </div>
+
+        {/* ── Spectator prompt / banner — standalone overlay ── */}
+        <AnimatePresence>
+          {spectatorChoice === 'pending' && (
+            <motion.div
+              className="spectator-prompt-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}>
+              <motion.div
+                className="spectator-prompt-card"
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}>
+                <span className="spectator-prompt-icon">💀</span>
+                <p className="spectator-prompt-text">
+                  {lang === 'ru' ? 'Ты выбыл из игры. Включить режим наблюдателя?' : 'You have been eliminated. Enable spectator mode?'}
+                </p>
+                <p className="spectator-prompt-sub">
+                  {lang === 'ru' ? 'Ты увидишь карты и роли всех игроков' : 'You will see all cards and roles'}
+                </p>
+                <div className="spectator-prompt-buttons">
+                  <button className="btn primary" onClick={() => setSpectatorChoice('accepted')} type="button">
+                    {lang === 'ru' ? '👁 Наблюдать' : '👁 Spectate'}
+                  </button>
+                  <button className="btn ghost" onClick={() => setSpectatorChoice('declined')} type="button">
+                    {lang === 'ru' ? 'Нет, спасибо' : 'No thanks'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {isSpectator && (
+          <div className="spectator-banner">
+            <span className="spectator-banner-icon">👁</span>
+            <span>{lang === 'ru' ? 'Режим наблюдателя' : 'Spectator mode'}</span>
+          </div>
+        )}
 
         <div className="game-body">
           <div className="game-top-row">
@@ -709,12 +749,6 @@ export function GameScreen({
               </div>
 
               <div className="action-row">
-                {/* Draw button moved to hand strip on desktop — kept here only for declare/end */}
-                {myTurn && me.role === 'thing' && game.step !== 'draw' && (
-                  <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLARE_VICTORY' })} type="button">
-                    {t('game.declareVictory')}
-                  </button>
-                )}
                 {myTurn && game.step === 'end_turn' && (
                   <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'END_TURN' })} type="button">
                     {t('game.endTurn')}
@@ -785,6 +819,7 @@ export function GameScreen({
                 onAction={onAction}
                 shouts={room.shouts ?? []}
                 onShout={onShout}
+                isSpectator={isSpectator}
                 animOverlay={
                   <CardPlayAnimationOverlay
                     trigger={cardAnim}
