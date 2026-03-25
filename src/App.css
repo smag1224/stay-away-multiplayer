@@ -223,6 +223,8 @@ img {
    GAME SCREEN — Themed
 ═══════════════════════════════════════ */
 .game-screen {
+  -webkit-user-select: none;
+  user-select: none;
   --table-panel-bg: rgba(20, 11, 8, 0.36);
   --table-panel-bg-strong: rgba(27, 15, 10, 0.5);
   --table-panel-bg-soft: rgba(16, 10, 7, 0.28);
