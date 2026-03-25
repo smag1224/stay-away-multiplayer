@@ -413,9 +413,9 @@ export function GameScreen({
       }
     }
 
-    // Your turn notification
+    // Your turn notification (slight delay so it doesn't overlap with draw/play sounds)
     if (currentPlayerChanged && game.players[game.currentPlayerIndex]?.id === me.id && game.phase === 'playing') {
-      playYourTurn();
+      setTimeout(() => playYourTurn(0.7), 350);
     }
 
     // Player eliminated
