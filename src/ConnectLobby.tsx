@@ -138,6 +138,8 @@ export function LobbyScreen({
   onLeave,
   onReset,
   onStart,
+  onAddBot,
+  onRemoveBot,
   onGameModeChange,
 }: {
   copied: boolean;
@@ -150,6 +152,8 @@ export function LobbyScreen({
   onLeave: () => void;
   onReset: () => Promise<void>;
   onStart: () => Promise<void>;
+  onAddBot: () => Promise<void>;
+  onRemoveBot: (botSessionId: string) => Promise<void>;
   onGameModeChange: (value: 'standard' | 'thing_in_deck' | 'anomaly') => void;
 }) {
   const { t } = useTranslation();
@@ -221,7 +225,16 @@ export function LobbyScreen({
                 </div>
                 <div className="member-badges">
                   {member.isHost && <span className="badge host">{t('connect.host')}</span>}
-                  {!member.connected && <span className="badge dim">{t('connect.offline')}</span>}
+                  {member.isBot && <span className="badge bot">BOT</span>}
+                  {!member.connected && !member.isBot && <span className="badge dim">{t('connect.offline')}</span>}
+                  {member.isBot && room.me.isHost && (
+                    <button
+                      className="btn ghost small bot-remove-btn"
+                      onClick={() => void onRemoveBot(member.sessionId)}
+                      type="button"
+                      title={t('connect.removeBot', 'Убрать бота')}
+                    >✕</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -260,6 +273,11 @@ export function LobbyScreen({
                 </select>
               </label>
               <p className="helper-text mode-hint">{t(`connect.modeHint_${gameMode}`)}</p>
+              {room.members.length < 12 && (
+                <button className="btn secondary wide" disabled={loading} onClick={() => void onAddBot()} type="button">
+                  🤖 {t('connect.addBot', 'Добавить бота')}
+                </button>
+              )}
               <button className="btn primary wide" disabled={!canStart || loading} onClick={() => void onStart()} type="button">
                 {t('connect.startMatch')}
               </button>

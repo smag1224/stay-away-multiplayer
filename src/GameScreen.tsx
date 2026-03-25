@@ -23,7 +23,105 @@ import { hasRenderablePendingActionPanel } from './components/panels/pendingActi
 import { PlayerHand } from './components/panels/PlayerHand.tsx';
 import { CardPlayAnimationOverlay } from './components/panels/CardPlayAnimationOverlay.tsx';
 import type { CardAnimTrigger } from './components/panels/CardPlayAnimationOverlay.tsx';
+import type { LogEntry } from './types.ts';
+
+/** Classify a log entry for icon & color styling */
+function getLogMeta(entry: LogEntry): { icon: string; cls: string } {
+  const t = entry.text.toLowerCase();
+  if (t.includes('eliminated') || t.includes('died') || t.includes('killed'))
+    return { icon: '💀', cls: 'log-eliminate' };
+  if (t.includes('wins') || t.includes('victory') || t.includes('game over'))
+    return { icon: '🏆', cls: 'log-gameover' };
+  if (t.includes('panic'))
+    return { icon: '😱', cls: 'log-panic' };
+  if (t.includes('no_barbecue') || t.includes('no_thanks') || t.includes('miss') || t.includes('im_fine_here') || t.includes('defended') || t.includes('blocked'))
+    return { icon: '🛡', cls: 'log-defense' };
+  if (t.includes('played'))
+    return { icon: '🃏', cls: 'log-play' };
+  if (t.includes('traded') || t.includes('exchanged') || t.includes('swap'))
+    return { icon: '🔄', cls: 'log-trade' };
+  if (t.includes('drew') || t.includes('draw'))
+    return { icon: '📥', cls: 'log-draw' };
+  if (t.includes('discard'))
+    return { icon: '📤', cls: 'log-draw' };
+  return { icon: '📋', cls: '' };
+}
+
+function formatLogTime(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Generate a contextual hint for the current game state */
+function getHint(
+  game: ViewerGameState,
+  me: ViewerPlayerState,
+  myTurn: boolean,
+  isRu: boolean,
+): string | null {
+  if (game.phase === 'role_reveal') {
+    return isRu
+      ? '👁 Запомни свою роль! Никому не показывай.'
+      : '👁 Remember your role! Don\'t show anyone.';
+  }
+  if (!me.isAlive) {
+    return isRu ? '💀 Ты выбыл из игры. Наблюдай за остальными.' : '💀 You\'re eliminated. Watch the others.';
+  }
+  if (game.pendingAction) {
+    const pa = game.pendingAction;
+    if (pa.type === 'choose_target' || pa.type === 'panic_choose_target') {
+      return isRu ? '🎯 Выбери игрока-цель, нажав на его аватарку.' : '🎯 Choose a target by clicking their avatar.';
+    }
+    if (pa.type === 'trade_offer') {
+      return isRu ? '🔄 Выбери карту из руки для обмена.' : '🔄 Pick a card from your hand to trade.';
+    }
+    if (pa.type === 'trade_response') {
+      return isRu ? '🔄 Тебе предлагают обмен! Выбери карту в ответ.' : '🔄 Someone wants to trade! Pick a card in response.';
+    }
+    if (pa.type === 'suspicion_pick') {
+      return isRu ? '🔍 Выбери карту из веера подозреваемого.' : '🔍 Pick a card from the suspect\'s fan.';
+    }
+    if (pa.type === 'defense_choice') {
+      return isRu ? '🛡 Можешь защититься картой или пропустить.' : '🛡 You can play a defense card or skip.';
+    }
+    if (pa.type === 'persistence_pick') {
+      return isRu ? '🔥 Выбери карту, которую хочешь забрать.' : '🔥 Choose the card you want to take.';
+    }
+  }
+  if (!myTurn) {
+    return isRu ? '⏳ Сейчас ход другого игрока. Жди свою очередь.' : '⏳ Another player\'s turn. Wait for yours.';
+  }
+  if (game.step === 'draw') {
+    return isRu ? '📥 Тяни карту из колоды! Нажми кнопку "Тянуть".' : '📥 Draw a card from the deck!';
+  }
+  if (game.step === 'play_or_discard') {
+    return isRu ? '🃏 Сыграй карту на игрока или сбрось ненужную.' : '🃏 Play a card on someone or discard one.';
+  }
+  if (game.step === 'trade') {
+    return isRu ? '🔄 Выбери карту для обмена с соседом.' : '🔄 Pick a card to trade with your neighbor.';
+  }
+  if (game.step === 'end_turn') {
+    return isRu ? '✅ Нажми "Завершить ход".' : '✅ Click "End Turn".';
+  }
+  return null;
+}
 import { bgMusic } from './sounds/backgroundMusic.ts';
+import {
+  playCardDraw,
+  playCardDrop,
+  playCardPlay,
+  playCardSwap,
+  playPanicReveal,
+  playDefenseBlock,
+  playYourTurn,
+  playDeckShuffle,
+  playPlayerEliminated,
+  playVictoryHumans,
+  playVictoryThing,
+  playButtonClick,
+  playLockedDoor,
+  playQuarantine,
+} from './sounds/gameSfx.ts';
 
 export function GameScreen({
   error,
@@ -56,8 +154,22 @@ export function GameScreen({
   const [logOpen, setLogOpen] = useState(false);
   const [showSecondDeckAlert, setShowSecondDeckAlert] = useState(false);
   const [cardAnim, setCardAnim] = useState<CardAnimTrigger | null>(null);
+  const [hintsEnabled, setHintsEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stay-away-hints');
+      return saved === null ? true : saved === '1';
+    } catch { return true; }
+  });
   const lastReshuffleCountRef = useRef(game.reshuffleCount);
   const prevLogLenRef = useRef(game.log.length);
+  // Refs for sound effect triggers
+  const prevDeckLenSfx = useRef(game.deck.length);
+  const prevDiscardLenSfx = useRef(game.discard.length);
+  const prevStepSfx = useRef(game.step);
+  const prevCurrentPlayerSfx = useRef(game.currentPlayerIndex);
+  const prevPhaseSfx = useRef(game.phase);
+  const prevAliveCountSfx = useRef(game.players.filter(p => p.isAlive).length);
+  const prevReshuffleSfx = useRef(game.reshuffleCount);
   // Hook must be called unconditionally (before any early return)
   const currentSafe = getCurrentPlayer(game);
   const pendingOwnerId = extractPendingOwner(game.pendingAction);
@@ -147,6 +259,18 @@ export function GameScreen({
     return undefined;
   }, [game.reshuffleCount]);
 
+  // Global button click sound — captures all button clicks in the game screen
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, .btn, [role="button"]')) {
+        playButtonClick();
+      }
+    };
+    document.addEventListener('click', handler, { capture: true });
+    return () => document.removeEventListener('click', handler, { capture: true });
+  }, []);
+
   // Start background music when game begins (requires user interaction first)
   useEffect(() => {
     if (!bgMusic.playing) {
@@ -166,34 +290,33 @@ export function GameScreen({
     const prevLen = prevLogLenRef.current;
     prevLogLenRef.current = game.log.length;
 
-    console.log('[CardAnim] useEffect fired. prevLen:', prevLen, 'current:', game.log.length);
 
-    if (game.log.length <= prevLen) {
-      console.log('[CardAnim] No new entries, skipping');
-      return;
-    }
+    if (game.log.length <= prevLen) return;
 
     const newCount = game.log.length - prevLen;
-    console.log('[CardAnim] New entries:', newCount);
 
     for (let i = 0; i < newCount; i++) {
       const entry = game.log[i];
-      console.log('[CardAnim] Entry', i, ':', {
-        id: entry.id,
-        text: entry.text,
-        cardDefId: entry.cardDefId,
-        fromPlayerId: entry.fromPlayerId,
-        targetPlayerId: entry.targetPlayerId,
-      });
+
+      // Defense card played — play block sound
+      const DEFENSE_CARDS = ['no_barbecue', 'no_thanks', 'miss', 'im_fine_here'];
+      if (entry.cardDefId && DEFENSE_CARDS.includes(entry.cardDefId)) {
+        playDefenseBlock();
+      }
+
+      // Trade completed — detect from log text
+      if (entry.text.includes('traded') || entry.text.includes('offered') ||
+          entry.textRu?.includes('обмен') || entry.textRu?.includes('передал')) {
+        playCardSwap();
+      }
 
       if (!entry.cardDefId) {
-        console.log('[CardAnim] No cardDefId, skipping entry');
         continue;
       }
 
       // Method 1: explicit IDs from server (available after server restart)
       if (entry.fromPlayerId !== undefined && entry.targetPlayerId !== undefined) {
-        console.log('[CardAnim] TRIGGER via method 1 (explicit IDs)');
+
         setCardAnim({
           key: entry.id,
           cardDefId: entry.cardDefId,
@@ -206,10 +329,9 @@ export function GameScreen({
       // Method 2: parse log text to find player names
       const fromPlayer = game.players.find((p) => entry.text.startsWith(p.name + ' played '));
       const toPlayer = game.players.find((p) => entry.text.endsWith(` on ${p.name}.`));
-      console.log('[CardAnim] Method 2 parse:', { fromPlayer: fromPlayer?.name, toPlayer: toPlayer?.name });
 
       if (fromPlayer && toPlayer) {
-        console.log('[CardAnim] TRIGGER via method 2 (text parse)');
+
         setCardAnim({
           key: entry.id,
           cardDefId: entry.cardDefId,
@@ -219,10 +341,94 @@ export function GameScreen({
         break;
       }
 
-      console.log('[CardAnim] Entry did not match any method');
+
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.log.length]);
+
+  // ── Sound effects based on game state changes ──────────────────
+  useEffect(() => {
+    const dDeck = game.deck.length - prevDeckLenSfx.current;
+    const dDiscard = game.discard.length - prevDiscardLenSfx.current;
+    const stepChanged = game.step !== prevStepSfx.current;
+    const currentPlayerChanged = game.currentPlayerIndex !== prevCurrentPlayerSfx.current;
+    const phaseChanged = game.phase !== prevPhaseSfx.current;
+    const aliveCount = game.players.filter(p => p.isAlive).length;
+    const aliveDecreased = aliveCount < prevAliveCountSfx.current;
+    const reshuffled = game.reshuffleCount > prevReshuffleSfx.current;
+
+    prevDeckLenSfx.current = game.deck.length;
+    prevDiscardLenSfx.current = game.discard.length;
+    prevStepSfx.current = game.step;
+    prevCurrentPlayerSfx.current = game.currentPlayerIndex;
+    prevPhaseSfx.current = game.phase;
+    prevAliveCountSfx.current = aliveCount;
+    prevReshuffleSfx.current = game.reshuffleCount;
+
+    // Deck reshuffle
+    if (reshuffled) {
+      playDeckShuffle();
+      return; // don't stack other sounds on reshuffle
+    }
+
+    // Card drawn from deck
+    if (dDeck < 0) {
+      // Check if it was a panic card (deck shrank AND discard grew simultaneously)
+      const isPanic = dDiscard > 0 && dDeck === -1;
+      if (isPanic) {
+        // Slight delay so draw sound plays first, then panic reveal
+        playCardDraw(0.3);
+        setTimeout(() => playPanicReveal(), 200);
+      } else {
+        playCardDraw();
+      }
+    }
+
+    // Card played/discarded to discard pile (but NOT during panic-draw combo)
+    if (dDiscard > 0 && dDeck >= 0) {
+      // Check recent log for "played" vs "discarded"
+      const latestLog = game.log[0];
+      const wasPlayed = latestLog?.cardDefId && (
+        latestLog.text.includes(' played ') || latestLog.textRu.includes(' сыграл')
+      );
+      if (wasPlayed) {
+        if (latestLog.cardDefId === 'locked_door') {
+          playLockedDoor();
+        } else if (latestLog.cardDefId === 'quarantine') {
+          playQuarantine();
+        } else {
+          playCardPlay();
+        }
+      } else {
+        playCardDrop();
+      }
+    }
+
+    // Trade completed (step changed to end_turn from trade_response)
+    if (stepChanged && game.step === 'end_turn' && prevStepSfx.current === 'trade_response') {
+      // This was already set to end_turn — but check prev
+    }
+
+    // Your turn notification
+    if (currentPlayerChanged && game.players[game.currentPlayerIndex]?.id === me.id && game.phase === 'playing') {
+      playYourTurn();
+    }
+
+    // Player eliminated
+    if (aliveDecreased && game.phase === 'playing') {
+      playPlayerEliminated();
+    }
+
+    // Game over
+    if (phaseChanged && game.phase === 'game_over') {
+      if (game.winner === 'humans') {
+        playVictoryHumans();
+      } else {
+        playVictoryThing();
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.deck.length, game.discard.length, game.step, game.currentPlayerIndex, game.phase, game.reshuffleCount]);
 
   /* ── GAME OVER ─────────────────────────────────────────────── */
   if (game.phase === 'game_over') {
@@ -256,13 +462,11 @@ export function GameScreen({
               ))}
             </div>
             <div className="stack-actions">
-              {room.me.isHost && (
-                <button className="btn primary" disabled={loading} onClick={() => void onReset()} type="button">
-                  {t('game.newMatch')}
-                </button>
-              )}
+              <button className="btn primary" disabled={loading || !room.me.isHost} onClick={() => void onReset()} type="button">
+                {room.me.isHost ? t('game.newMatch') : t('game.newMatch')}
+              </button>
               {!room.me.isHost && (
-                <p className="helper-text">{t('game.hostReturnLobby')}</p>
+                <p className="helper-text" style={{ marginTop: '0.4rem' }}>{t('game.hostReturnLobby')}</p>
               )}
               {error && <p className="error-text">{error}</p>}
             </div>
@@ -314,6 +518,14 @@ export function GameScreen({
             : undefined}
           onToggleLang={onToggleLang}
           onToggleText={() => setShowCardText(v => !v)}
+          hintsEnabled={hintsEnabled}
+          onToggleHints={() => {
+            setHintsEnabled(v => {
+              const next = !v;
+              localStorage.setItem('stay-away-hints', next ? '1' : '0');
+              return next;
+            });
+          }}
           room={room}
           showCardText={showCardText}
           noticeContent={
@@ -352,6 +564,35 @@ export function GameScreen({
           }
         />
 
+        {/* ── Newbie hint (top of screen) ── */}
+        <AnimatePresence>
+          {hintsEnabled && (() => {
+            const hint = getHint(game, me, myTurn, lang === 'ru');
+            return hint ? (
+              <motion.div
+                className="hint-bar"
+                key={hint}
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.25 }}
+              >
+                <span className="hint-icon">💡</span>
+                <span className="hint-text">{hint}</span>
+                <button
+                  className="hint-dismiss"
+                  type="button"
+                  onClick={() => {
+                    setHintsEnabled(false);
+                    localStorage.setItem('stay-away-hints', '0');
+                  }}
+                  title={lang === 'ru' ? 'Отключить подсказки' : 'Disable hints'}
+                >✕</button>
+              </motion.div>
+            ) : null;
+          })()}
+        </AnimatePresence>
+
         <div className="game-notice-stack">
           <AnimatePresence>
             {game.panicAnnouncement && (
@@ -371,7 +612,7 @@ export function GameScreen({
           </AnimatePresence>
 
           <AnimatePresence>
-            {me.role === 'infected' && (
+            {me.role === 'infected' && me.isAlive && (
               <motion.div
                 className="infected-alert"
                 initial={{ opacity: 0, y: -22 }}
@@ -380,6 +621,20 @@ export function GameScreen({
                 transition={{ duration: 0.22, ease: 'easeOut' }}>
                 <strong>{t('game.infectedAlertTitle')}</strong>
                 <span>{t('game.infectedAlertBody', { name: thingPlayerName })}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {!me.isAlive && game.phase === 'playing' && (
+              <motion.div
+                className="spectator-banner"
+                initial={{ opacity: 0, y: -22 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -22 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}>
+                <span className="spectator-banner-icon">👁</span>
+                <span>{lang === 'ru' ? 'Режим наблюдателя — ты видишь карты и роли всех игроков' : 'Spectator mode — you can see all cards and roles'}</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -527,11 +782,16 @@ export function GameScreen({
                   </button>
                 </div>
                 <div className="intel-log-list">
-                  {visibleLog.map((entry) => (
-                    <div className="log-entry intel-log-entry" key={entry.id}>
-                      {lang === 'ru' ? entry.textRu : entry.text}
-                    </div>
-                  ))}
+                  {visibleLog.map((entry) => {
+                    const meta = getLogMeta(entry);
+                    return (
+                      <div className={`log-entry intel-log-entry ${meta.cls}`} key={entry.id}>
+                        <span className="log-entry-icon">{meta.icon}</span>
+                        <span className="log-entry-text">{lang === 'ru' ? entry.textRu : entry.text}</span>
+                        {entry.timestamp > 0 && <span className="log-entry-time">{formatLogTime(entry.timestamp)}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -570,6 +830,8 @@ export function GameScreen({
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* hint moved to top of screen */}
 
           {/* ── Cards at bottom ── */}
           <div className="game-hand-strip">
@@ -615,11 +877,16 @@ export function GameScreen({
                 transition={{ duration: 0.25, ease: 'easeInOut' }}
                 style={{ overflow: 'hidden' }}>
                 <div className="floating-log-scroll">
-                  {game.log.slice(0, 30).map((entry) => (
-                    <div className="log-entry" key={entry.id}>
-                      {lang === 'ru' ? entry.textRu : entry.text}
-                    </div>
-                  ))}
+                  {game.log.slice(0, 30).map((entry) => {
+                    const meta = getLogMeta(entry);
+                    return (
+                      <div className={`log-entry ${meta.cls}`} key={entry.id}>
+                        <span className="log-entry-icon">{meta.icon}</span>
+                        <span className="log-entry-text">{lang === 'ru' ? entry.textRu : entry.text}</span>
+                        {entry.timestamp > 0 && <span className="log-entry-time">{formatLogTime(entry.timestamp)}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </motion.div>
             )}

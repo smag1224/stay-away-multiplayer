@@ -64,14 +64,18 @@ class BackgroundMusicPlayer {
 
   private loadTrack(index: number) {
     if (this.audio) {
+      // Remove handlers BEFORE clearing src to prevent error→nextTrack loop
+      this.audio.onended = null;
+      this.audio.onerror = null;
       this.audio.pause();
-      this.audio.src = '';
+      this.audio.removeAttribute('src');
     }
     const track = this.playlist[index];
     this.audio = new Audio(`/music/${encodeURIComponent(track)}`);
     this.audio.volume = this._volume;
-    this.audio.addEventListener('ended', () => this.nextTrack());
-    this.audio.addEventListener('error', () => this.nextTrack());
+    // Use .on* instead of addEventListener — easy to clear, only one handler
+    this.audio.onended = () => this.nextTrack();
+    this.audio.onerror = () => this.nextTrack();
   }
 
   private nextTrack() {

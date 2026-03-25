@@ -16,6 +16,8 @@ export function TopBar({
   onToggleLang,
   showCardText,
   onToggleText,
+  hintsEnabled,
+  onToggleHints,
   noticeContent,
 }: {
   deckCount?: number;
@@ -29,6 +31,8 @@ export function TopBar({
   onToggleLang?: () => void;
   showCardText?: boolean;
   onToggleText?: () => void;
+  hintsEnabled?: boolean;
+  onToggleHints?: () => void;
   noticeContent?: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -58,6 +62,11 @@ export function TopBar({
       <MusicVolumeSlider />
       {/* Desktop actions */}
       <div className="top-bar-actions desktop-actions">
+        {onToggleHints && (
+          <button className={`btn small ${hintsEnabled ? 'primary' : 'ghost'}`} onClick={onToggleHints} type="button">
+            💡 {hintsEnabled ? t('topbar.hintsOn', 'Подсказки') : t('topbar.hintsOff', 'Подсказки')}
+          </button>
+        )}
         {onToggleText && (
           <button className={`btn small ${showCardText ? 'primary' : 'ghost'}`} onClick={onToggleText} type="button">
             {showCardText ? t('topbar.hideText') : t('topbar.cardText')}
@@ -87,6 +96,11 @@ export function TopBar({
           {onToggleLang && (
             <button className="dropdown-item" onClick={() => { onToggleLang(); setMenuOpen(false); }} type="button">
               {t('topbar.language')} {lang === 'ru' ? 'EN' : 'RU'}
+            </button>
+          )}
+          {onToggleHints && (
+            <button className="dropdown-item" onClick={() => { onToggleHints(); setMenuOpen(false); }} type="button">
+              💡 {hintsEnabled ? t('topbar.hintsOn', 'Подсказки вкл') : t('topbar.hintsOff', 'Подсказки выкл')}
             </button>
           )}
           {onToggleText && (

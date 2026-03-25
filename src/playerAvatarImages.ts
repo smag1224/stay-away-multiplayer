@@ -2,7 +2,7 @@ import explorer from './assets/player-icons/01_explorer.webp';
 import scientist from './assets/player-icons/02_scientist.webp';
 import medic from './assets/player-icons/03_medic.webp';
 import pilot from './assets/player-icons/04_pilot.webp';
-import mechanic from './assets/player-icons/05_mechanic.webp';
+import mechanic from './assets/player-icons/05_mechanic.png';
 import soldier from './assets/player-icons/06_soldier.webp';
 import journalist from './assets/player-icons/07_journalist.webp';
 import archaeologist from './assets/player-icons/08_archaeologist.webp';

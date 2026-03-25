@@ -9,6 +9,7 @@ export interface RoomMemberView {
   sessionId: string;
   name: string;
   isHost: boolean;
+  isBot: boolean;
   playerId: number | null;
   connected: boolean;
   joinedAt: number;
@@ -20,6 +21,8 @@ export interface ViewerPlayerState {
   role: Role | null;
   avatarId: string;
   canReceiveInfectedCardFromMe: boolean;
+  /** True only when the viewer is The Thing and this player is infected — used to show the infected overlay */
+  isKnownInfectedToMe: boolean;
   hand: GameState['players'][number]['hand'];
   handCount: number;
   isAlive: boolean;

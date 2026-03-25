@@ -5,6 +5,7 @@ import {
   hasDoorBetween,
   nextPlayerIndexFromPosition,
   getTradePartner,
+  validateTradeCard,
 } from './helpers.ts';
 
 // ── Player elimination ──────────────────────────────────────────────────────
@@ -108,6 +109,19 @@ export function handleTradeStep(s: GameState): void {
   if (!partner || cur.inQuarantine || partner.inQuarantine ||
       hasDoorBetween(s, cur.position, partner.position)) {
     log(s, 'Trade skipped due to obstacles.', 'Обмен пропущен из-за препятствий.');
+    s.step = 'end_turn';
+    advanceTurn(s);
+    return;
+  }
+
+  // If the current player has no valid cards to offer (e.g. only infected
+  // cards and the partner is not The Thing), skip trade so advanceTurn can
+  // run checkInfectionOverload and eliminate the player if needed.
+  const hasTradeableCard = partner
+    ? cur.hand.some(c => validateTradeCard(cur, partner, c))
+    : false;
+  if (!hasTradeableCard) {
+    log(s, 'Trade skipped — no valid cards to offer.', 'Обмен пропущен — нет подходящих карт.');
     s.step = 'end_turn';
     advanceTurn(s);
   }

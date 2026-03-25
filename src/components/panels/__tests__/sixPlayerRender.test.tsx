@@ -67,6 +67,7 @@ function buildViewerGame(playerCount: number): {
       sessionId: `session-${player.id}`,
       name: player.name,
       isHost: player.id === viewerId,
+      isBot: false,
       playerId: player.id,
       connected: true,
       joinedAt: 0,

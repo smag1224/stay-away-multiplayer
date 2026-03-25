@@ -68,15 +68,21 @@ function App() {
     };
 
     let pollInterval: number | null = null;
+    let isPending = false;
 
     function startPolling() {
       if (pollInterval || cancelled) return;
       const refresh = async () => {
+        // Skip if a request is already in-flight — prevents pile-up on slow connections
+        if (isPending || cancelled) return;
+        isPending = true;
         try {
           const nextRoom = await api<RoomView>(`/api/rooms/${activeSession.roomCode}?sessionId=${activeSession.sessionId}`);
           handleRoomData(nextRoom);
         } catch (e) {
           handleError(e instanceof Error ? e.message : String(e));
+        } finally {
+          isPending = false;
         }
       };
       void refresh();
@@ -210,6 +216,8 @@ function App() {
             thingInDeck: gameMode === 'thing_in_deck',
             chaosMode: gameMode === 'anomaly',
           })}
+          onAddBot={() => callRoomEndpoint(`/api/rooms/${room.code}/add-bot`, { sessionId: room.me.sessionId })}
+          onRemoveBot={(botSessionId: string) => callRoomEndpoint(`/api/rooms/${room.code}/remove-bot`, { sessionId: room.me.sessionId, botSessionId })}
         />
       )}
 

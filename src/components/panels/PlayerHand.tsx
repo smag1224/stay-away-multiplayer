@@ -263,7 +263,7 @@ export function PlayerHand({
         }
 
         return (
-          <motion.div className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''}`} key={card.uid}
+          <motion.div className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''} ${card.defId === 'suspicion' ? 'is-suspicion-card' : ''}`} key={card.uid}
             style={style}
             variants={cardVariants} initial="initial" animate="animate" exit="exit"
             transition={{ type: 'spring', stiffness: 350, damping: 25 }}

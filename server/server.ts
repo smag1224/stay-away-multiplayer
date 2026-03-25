@@ -27,11 +27,13 @@ import type {
   ShoutPayload,
   ViewerPlayerState,
 } from '../src/multiplayer.ts';
+import { decideBotAction, clearRoomMemory } from './bot/index.ts';
 
 type RoomMember = {
   sessionId: string;
   name: string;
   isHost: boolean;
+  isBot: boolean;
   playerId: number | null;
   connected: boolean;
   joinedAt: number;
@@ -150,6 +152,7 @@ function clonePlayerForViewer(
   viewer: Player | null,
   viewerId: number | null,
   revealRoles: boolean,
+  isSpectator = false,
 ): ViewerPlayerState {
   return {
     id: player.id,
@@ -164,7 +167,11 @@ function clonePlayerForViewer(
           : viewer.role === 'infected'
             ? player.role === 'thing'
             : false,
-    hand: player.id === viewerId ? [...player.hand] : [],
+    isKnownInfectedToMe:
+      revealRoles
+        ? player.role === 'infected'
+        : viewer != null && viewer.role === 'thing' && player.role === 'infected',
+    hand: player.id === viewerId || isSpectator ? [...player.hand] : [],
     handCount: player.hand.length,
     isAlive: player.isAlive,
     inQuarantine: player.inQuarantine,
@@ -324,12 +331,14 @@ function buildTableAnim(
 }
 
 function sanitizeGame(game: GameState, viewerId: number | null, room: Room): import('../src/multiplayer.ts').ViewerGameState {
-  const revealRoles = game.phase === 'game_over';
   const viewer = viewerId === null ? null : game.players.find((player) => player.id === viewerId) ?? null;
+  // Reveal everything to eliminated players (spectator mode) and during game_over
+  const isSpectator = viewer != null && !viewer.isAlive && game.phase !== 'game_over';
+  const revealRoles = game.phase === 'game_over' || isSpectator;
 
   return {
     ...game,
-    players: game.players.map((player) => clonePlayerForViewer(player, viewer, viewerId, revealRoles)),
+    players: game.players.map((player) => clonePlayerForViewer(player, viewer, viewerId, revealRoles, isSpectator)),
     pendingAction: sanitizePendingAction(game.pendingAction, game, viewerId),
     tableAnim: buildTableAnim(game, room),
   };
@@ -348,6 +357,7 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
       sessionId: roomMember.sessionId,
       name: roomMember.name,
       isHost: roomMember.isHost,
+      isBot: roomMember.isBot,
       playerId: roomMember.playerId,
       connected: roomMember.connected,
       joinedAt: roomMember.joinedAt,
@@ -414,11 +424,138 @@ function startRoomGame(room: Room, thingInDeck?: boolean, chaosMode?: boolean): 
   touchRoom(room);
 }
 
+const BOT_NAMES = ['Алекс 🤖', 'Макс 🤖', 'Кира 🤖', 'Рик 🤖', 'Зои 🤖', 'Нео 🤖', 'Ева 🤖', 'Дэн 🤖', 'Сэм 🤖', 'Лия 🤖', 'Кай 🤖'];
+
+/**
+ * Schedule bot auto-play. Checks if any bot needs to act and dispatches actions
+ * with small delays to feel natural. Chains multiple actions if needed.
+ */
+function scheduleBotTurn(room: Room, req: HttpRequest): void {
+  if (!room.game || room.game.phase !== 'playing') return;
+
+  // Find which bot needs to act right now
+  const botMember = findBotThatNeedsToAct(room);
+  if (!botMember || botMember.playerId === null) return;
+
+  // Add a delay (2-4s) to make it feel like the bot is "thinking"
+  // Confirmations (view_hand, view_card, etc.) are faster since they don't require decision
+  const pa = room.game.pendingAction;
+  const isQuickAction = pa && ['view_hand', 'view_card', 'whisky_reveal', 'show_hand_confirm'].includes(pa.type);
+  const delay = isQuickAction
+    ? 1500 + Math.floor(Math.random() * 1000)
+    : 3000 + Math.floor(Math.random() * 3000);
+
+  setTimeout(() => {
+    if (!room.game || room.game.phase !== 'playing') return;
+
+    const action = decideBotAction(room.game, botMember.playerId!, room.code);
+    if (!action) {
+      console.warn(`[Bot ${botMember.name}] No action decided, step=${room.game.step}, pa=${room.game.pendingAction?.type}`);
+      return;
+    }
+
+    // Apply the action via the same path as human players
+    const error = applyRoomAction(room, botMember, action);
+    if (error) {
+      console.warn(`[Bot ${botMember.name}] Action failed: ${error}`, action.type, JSON.stringify(action));
+      return;
+    }
+
+    broadcastRoom(room, req);
+
+    // Chain: after this action, check if a bot needs to act again
+    scheduleBotTurn(room, req);
+  }, delay);
+}
+
+/** Find the bot member who currently needs to take an action */
+function findBotThatNeedsToAct(room: Room): RoomMember | null {
+  if (!room.game || room.game.phase !== 'playing') return null;
+
+  const game = room.game;
+  const pa = game.pendingAction;
+
+  // If there's a pending action, find which player needs to respond
+  if (pa) {
+    let responderId: number | null = null;
+
+    switch (pa.type) {
+      case 'choose_target':
+      case 'persistence_pick':
+      case 'blind_date_swap':
+      case 'forgetful_discard':
+      case 'panic_trade':
+      case 'axe_choice':
+      case 'declare_victory':
+      case 'choose_card_to_discard':
+      case 'choose_card_to_give':
+      case 'panic_choose_target':
+      case 'temptation_target':
+      case 'just_between_us':
+        responderId = currentPlayer(game).id;
+        break;
+      case 'trade_defense':
+        responderId = pa.defenderId;
+        break;
+      case 'trade_offer':
+        responderId = pa.toId;
+        break;
+      case 'temptation_response':
+        responderId = pa.toId;
+        break;
+      case 'panic_trade_response':
+        responderId = pa.toId;
+        break;
+      case 'suspicion_pick':
+        responderId = pa.viewerPlayerId;
+        break;
+      case 'view_hand':
+      case 'view_card':
+      case 'whisky_reveal':
+        responderId = pa.viewerPlayerId;
+        break;
+      case 'show_hand_confirm':
+        responderId = pa.playerId;
+        break;
+      case 'party_pass':
+        // Find first pending bot
+        for (const pid of pa.pendingPlayerIds) {
+          const m = room.members.find(rm => rm.playerId === pid && rm.isBot);
+          if (m) return m;
+        }
+        return null;
+      case 'revelations_round':
+        responderId = pa.revealOrder[pa.currentRevealerIdx];
+        break;
+      case 'just_between_us_pick': {
+        // Find whichever side hasn't acted yet — check if either is a bot
+        const mA = room.members.find(rm => rm.playerId === pa.playerA && rm.isBot);
+        const mB = room.members.find(rm => rm.playerId === pa.playerB && rm.isBot);
+        if (mA && pa.cardUidA === null) return mA;
+        if (mB && pa.cardUidB === null) return mB;
+        return null;
+      }
+      default:
+        return null;
+    }
+
+    if (responderId !== null) {
+      return room.members.find(m => m.playerId === responderId && m.isBot) ?? null;
+    }
+    return null;
+  }
+
+  // No pending action — check if it's a bot's normal turn
+  const curId = currentPlayer(game).id;
+  return room.members.find(m => m.playerId === curId && m.isBot) ?? null;
+}
+
 function resetRoom(room: Room): void {
   room.game = null;
   room.members.forEach((member) => {
     member.playerId = null;
   });
+  clearRoomMemory(room.code);
   touchRoom(room);
 }
 
@@ -743,6 +880,7 @@ const server = createServer(async (req, res) => {
             sessionId: randomId(8),
             name,
             isHost: true,
+            isBot: false,
             playerId: null,
             connected: true,
             joinedAt: now(),
@@ -799,7 +937,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|shout))?$/i);
+    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|shout|add-bot|remove-bot))?$/i);
     if (!roomMatch) {
       notFound(res);
       return;
@@ -852,6 +990,7 @@ const server = createServer(async (req, res) => {
         sessionId: randomId(8),
         name,
         isHost: false,
+        isBot: false,
         playerId: null,
         connected: true,
         joinedAt: now(),
@@ -897,6 +1036,8 @@ const server = createServer(async (req, res) => {
       startRoomGame(room, body.thingInDeck, body.chaosMode);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
       broadcastRoom(room, req);
+      // Kick off bot turns if the first player is a bot
+      scheduleBotTurn(room, req);
       return;
     }
 
@@ -935,6 +1076,52 @@ const server = createServer(async (req, res) => {
         return;
       }
 
+      sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
+      // After any human action, check if a bot needs to respond
+      scheduleBotTurn(room, req);
+      return;
+    }
+
+    if (actionSegment === 'add-bot') {
+      const body = await readBody<RoomSessionPayload>(req);
+      const member = getMember(room, body.sessionId);
+      if (!member) { badRequest(res, 'Session not found.'); return; }
+      if (!member.isHost) { badRequest(res, 'Only the host can add bots.'); return; }
+      if (room.game) { badRequest(res, 'Cannot add bots during a game.'); return; }
+      if (room.members.length >= 12) { badRequest(res, 'Room is full.'); return; }
+
+      const usedNames = new Set(room.members.map(m => m.name));
+      const botName = BOT_NAMES.find(n => !usedNames.has(n)) ?? `Бот ${room.members.length + 1} 🤖`;
+
+      const bot: RoomMember = {
+        sessionId: `bot-${randomId(6)}`,
+        name: botName,
+        isHost: false,
+        isBot: true,
+        playerId: null,
+        connected: true,
+        joinedAt: now(),
+        lastSeenAt: now(),
+      };
+      room.members.push(bot);
+      touchRoom(room);
+      sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
+      broadcastRoom(room, req);
+      return;
+    }
+
+    if (actionSegment === 'remove-bot') {
+      const body = await readBody<RoomSessionPayload & { botSessionId: string }>(req);
+      const member = getMember(room, body.sessionId);
+      if (!member) { badRequest(res, 'Session not found.'); return; }
+      if (!member.isHost) { badRequest(res, 'Only the host can remove bots.'); return; }
+      if (room.game) { badRequest(res, 'Cannot remove bots during a game.'); return; }
+
+      const idx = room.members.findIndex(m => m.sessionId === body.botSessionId && m.isBot);
+      if (idx === -1) { badRequest(res, 'Bot not found.'); return; }
+      room.members.splice(idx, 1);
+      touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
       broadcastRoom(room, req);
       return;

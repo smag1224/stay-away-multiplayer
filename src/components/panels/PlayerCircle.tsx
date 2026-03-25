@@ -11,8 +11,10 @@ import { getPlayerAvatarPresentation, getPlayerAvatarSrc } from '../../playerAva
 import { PLAYER_AVATAR_IDS } from '../../avatarCatalog.ts';
 import quarantineOverlay from '../../assets/quarantine_overlay.png';
 import thingOverlay from '../../assets/thing_overlay.png';
+import infectedOverlay from '../../assets/infected_overlay.png';
 import { CardView } from './CardView.tsx';
 import { TableAnimationBoundary } from './TableAnimationBoundary.tsx';
+import { TableDecks } from './TableDecks.tsx';
 import { speakShout } from '../../sounds/shoutVoice.ts';
 
 const LOCKED_DOOR_MARKER_CARD = {
@@ -100,6 +102,31 @@ export function PlayerCircle({
   const { t, i18n } = useTranslation();
   const isRu = i18n.language !== 'en';
   const [shoutMenuOpen, setShoutMenuOpen] = useState(false);
+  const [peekedCardUid, setPeekedCardUid] = useState<string | null>(null);
+
+  // Track recently died players for death animation
+  const [recentlyDied, setRecentlyDied] = useState<Set<number>>(new Set());
+  const prevAliveRef = useRef<Record<number, boolean>>({});
+  useEffect(() => {
+    const newDead = new Set<number>();
+    for (const p of game.players) {
+      if (prevAliveRef.current[p.id] === true && !p.isAlive) {
+        newDead.add(p.id);
+      }
+      prevAliveRef.current[p.id] = p.isAlive;
+    }
+    if (newDead.size > 0) {
+      setRecentlyDied(prev => new Set([...prev, ...newDead]));
+      // Clear animation after 2s
+      setTimeout(() => {
+        setRecentlyDied(prev => {
+          const next = new Set(prev);
+          for (const id of newDead) next.delete(id);
+          return next;
+        });
+      }, 2000);
+    }
+  }, [game.players]);
   const [shoutMenuAnchor, setShoutMenuAnchor] = useState<{
     left: number; right: number; top: number; onRight: boolean;
   } | null>(null);
@@ -134,6 +161,7 @@ export function PlayerCircle({
   }, []);
   const total = game.players.length;
   const current = getCurrentPlayer(game);
+  const isSpectator = !me.isAlive && game.phase === 'playing';
   const { orbitCenterX, orbitCenterY, orbitRadiusX, orbitRadiusY, handOffset, nodeLift } = getOrbitLayout(total);
   const circleStyle = {
     '--player-node-width':
@@ -231,7 +259,7 @@ export function PlayerCircle({
           '--hand-rotation': `${angle + 270}deg`,
           '--hand-vector-x': (-Math.cos(radians)).toFixed(4),
           '--hand-vector-y': (-Math.sin(radians)).toFixed(4),
-          '--fan-width': `${Math.max(2.6, 2.4 + previewCount * 0.82).toFixed(2)}rem`,
+          '--fan-width': `${Math.max(2.6, 2.4 + (isSpectator ? player.hand.length : previewCount) * (isSpectator ? 1.1 : 0.82)).toFixed(2)}rem`,
         } as CSSProperties;
         const selectTarget = () => {
           if (!isTargetable || loading || !targetPending) return;
@@ -244,10 +272,11 @@ export function PlayerCircle({
 
         const activeShout = shouts.find(s => s.playerId === player.id);
         const shoutLabel = activeShout ? (isRu ? activeShout.phrase : activeShout.phraseEn) : null;
+        const isDying = recentlyDied.has(player.id);
 
         return (
           <motion.div
-            className={`player-node ${isCurrent ? 'active' : ''} ${isSelf ? 'self' : ''} ${player.isAlive ? '' : 'dead'} ${isDisconnected ? 'disconnected' : ''} ${isTargetable ? 'is-targetable' : ''} ${isUpperSeat ? 'is-upper-seat' : ''} ${isLowerSeat ? 'is-lower-seat' : ''} ${isLeftSeat ? 'is-left-seat' : ''} ${isRightSeat ? 'is-right-seat' : ''} ${isSelf && shoutMenuOpen ? 'shout-open' : ''} ${activeShout ? 'has-shout' : ''}`}
+            className={`player-node ${isCurrent ? 'active' : ''} ${isSelf ? 'self' : ''} ${player.isAlive ? '' : 'dead'} ${isDying ? 'dying' : ''} ${isDisconnected ? 'disconnected' : ''} ${isTargetable ? 'is-targetable' : ''} ${isUpperSeat ? 'is-upper-seat' : ''} ${isLowerSeat ? 'is-lower-seat' : ''} ${isLeftSeat ? 'is-left-seat' : ''} ${isRightSeat ? 'is-right-seat' : ''} ${isSelf && shoutMenuOpen ? 'shout-open' : ''} ${activeShout ? 'has-shout' : ''}`}
             key={player.id}
             style={{ left: `${x}%`, top: `${y}%`, x: '-50%', y: nodeLift }}
             animate={isCurrent ? { scale: [1, 1.08, 1] } : { scale: 1 }}
@@ -264,9 +293,33 @@ export function PlayerCircle({
             tabIndex={isTargetable ? 0 : undefined}
           >
             {!isSelf && previewCount > 0 && (
-              <div className={`player-opponent-hand ${canPickFromFan ? 'is-suspicion-selectable' : ''}`} style={opponentHandStyle}>
+              <div className={`player-opponent-hand ${canPickFromFan ? 'is-suspicion-selectable' : ''} ${isSpectator && player.hand.length > 0 ? 'spectator-hand' : ''}`} style={opponentHandStyle}>
                 <div className="opponent-hand-fan" aria-hidden={canPickFromFan ? undefined : true}>
-                  {publicCardKeys.slice(0, previewCount).map((cardKey, idx) => (
+                  {isSpectator && player.hand.length > 0
+                    ? player.hand.map((card, idx) => {
+                        const fm = (player.hand.length - 1) / 2;
+                        const isPeeked = peekedCardUid === card.uid;
+                        return (
+                          <div
+                            className={`opponent-card-slot spectator-card-slot ${isPeeked ? 'is-peeked' : ''}`}
+                            key={card.uid}
+                            style={{
+                              '--card-shift': `${((idx - fm) * 0.9).toFixed(2)}rem`,
+                              '--card-tilt': isPeeked ? '0deg' : `${(idx - fm) * 5}deg`,
+                              '--card-depth': `${(Math.abs(idx - fm) * 0.08).toFixed(2)}rem`,
+                            } as CSSProperties}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPeekedCardUid(prev => prev === card.uid ? null : card.uid);
+                            }}
+                          >
+                            <div className="spectator-mini-card">
+                              <CardView card={card} faceUp />
+                            </div>
+                          </div>
+                        );
+                      })
+                    : publicCardKeys.slice(0, previewCount).map((cardKey, idx) => (
                     <div
                       className={`opponent-card-slot ${suspicionPending?.targetPlayerId === player.id && suspicionPending.previewCardUid === cardKey ? 'previewed' : ''}`}
                       key={`${player.id}-card-back-${cardKey}`}
@@ -323,12 +376,20 @@ export function PlayerCircle({
                   src={quarantineOverlay}
                 />
               )}
-              {(player.role === 'thing' || (me.role === 'infected' && player.canReceiveInfectedCardFromMe)) && (
+              {!isSpectator && (player.role === 'thing' || (me.role === 'infected' && player.canReceiveInfectedCardFromMe)) && (
                 <img
                   alt=""
                   aria-hidden="true"
                   className="player-avatar-thing-overlay"
                   src={thingOverlay}
+                />
+              )}
+              {!isSpectator && player.isKnownInfectedToMe && (
+                <img
+                  alt=""
+                  aria-hidden="true"
+                  className="player-avatar-infected-overlay"
+                  src={infectedOverlay}
                 />
               )}
 
@@ -350,11 +411,27 @@ export function PlayerCircle({
             </div>
             <div className="player-meta">
               <strong>{player.name}</strong>
+              {isSpectator && player.role && (
+                <span className={`spectator-role role-${player.role}`}>
+                  {player.role === 'thing' ? (isRu ? 'Нечто' : 'Thing')
+                    : player.role === 'infected' ? (isRu ? 'Заражён' : 'Infected')
+                    : (isRu ? 'Человек' : 'Human')}
+                </span>
+              )}
             </div>
             {player.inQuarantine && (
               <div className="token quarantine">Q{player.quarantineTurnsLeft}</div>
             )}
-            {!player.isAlive && <div className="token dead">✗</div>}
+            {!player.isAlive && (
+              <motion.div
+                className="token dead"
+                initial={isDying ? { scale: 3, opacity: 0, rotate: -45 } : false}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+              >
+                ✗
+              </motion.div>
+            )}
 
           </motion.div>
         );
@@ -389,6 +466,8 @@ export function PlayerCircle({
         <strong>{game.direction === 1 ? '↻' : '↺'}</strong>
         <span>{t('panel.direction')}</span>
       </div>
+
+      <TableDecks game={game} orbitCenterX={orbitCenterX} orbitCenterY={orbitCenterY} />
 
       <TableAnimationBoundary game={game} />
       {animOverlay}
