@@ -75,9 +75,6 @@ function getHint(
     if (pa.type === 'trade_offer') {
       return isRu ? '🔄 Выбери карту из руки для обмена.' : '🔄 Pick a card from your hand to trade.';
     }
-    if (pa.type === 'trade_response') {
-      return isRu ? '🔄 Тебе предлагают обмен! Выбери карту в ответ.' : '🔄 Someone wants to trade! Pick a card in response.';
-    }
     if (pa.type === 'suspicion_pick') {
       return isRu ? '🔍 Выбери карту из веера подозреваемого.' : '🔍 Pick a card from the suspect\'s fan.';
     }

@@ -329,23 +329,6 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
 
 // ── Target picking ──────────────────────────────────────────────────────────
 
-function _pickBestTarget(vs: BotVisibleState, memory: BotMemory, targets: number[], defId: string, w: Weights, stage: GameStage): number {
-  if (targets.length === 1) return targets[0];
-
-  let best = targets[0];
-  let bestScore = -Infinity;
-
-  for (const t of targets) {
-    let score = scoreTarget(vs, memory, t, defId, w, stage);
-    score += (Math.random() - 0.5) * 0.5;
-    if (score > bestScore) {
-      bestScore = score;
-      best = t;
-    }
-  }
-  return best;
-}
-
 function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, cardDefId: string, w: Weights, _stage: GameStage): number {
   let score = 5;
   const susp = getSuspicion(memory, targetId);
