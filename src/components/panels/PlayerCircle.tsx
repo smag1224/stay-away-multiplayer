@@ -444,7 +444,12 @@ export function PlayerCircle({
 
         const a1 = (first.position / total) * 360 - 90;
         const a2 = (second.position / total) * 360 - 90;
-        const mid = (a1 + a2) / 2;
+        // Use shortest arc midpoint so the marker sits between adjacent players
+        let diff = a2 - a1;
+        // Normalize diff to [-180, 180]
+        if (diff > 180) diff -= 360;
+        if (diff < -180) diff += 360;
+        const mid = a1 + diff / 2;
         const midRadians = (mid * Math.PI) / 180;
         const x = orbitCenterX + orbitRadiusX * Math.cos(midRadians);
         const y = orbitCenterY + orbitRadiusY * Math.sin(midRadians);

@@ -166,6 +166,8 @@ export function GameScreen({
   const prevPhaseSfx = useRef(game.phase);
   const prevAliveCountSfx = useRef(game.players.filter(p => p.isAlive).length);
   const prevReshuffleSfx = useRef(game.reshuffleCount);
+  const prevPendingTypeSfx = useRef(game.pendingAction?.type ?? null);
+  const lastTurnSoundTimeSfx = useRef(0);
   // Hook must be called unconditionally (before any early return)
   const currentSafe = getCurrentPlayer(game);
   const pendingOwnerId = extractPendingOwner(game.pendingAction);
@@ -339,6 +341,8 @@ export function GameScreen({
     const aliveCount = game.players.filter(p => p.isAlive).length;
     const aliveDecreased = aliveCount < prevAliveCountSfx.current;
     const reshuffled = game.reshuffleCount > prevReshuffleSfx.current;
+    const pendingType = game.pendingAction?.type ?? null;
+    const pendingChanged = pendingType !== prevPendingTypeSfx.current;
 
     prevLogLenSfx.current = game.log.length;
     prevDeckLenSfx.current = game.deck.length;
@@ -346,6 +350,7 @@ export function GameScreen({
     prevPhaseSfx.current = game.phase;
     prevAliveCountSfx.current = aliveCount;
     prevReshuffleSfx.current = game.reshuffleCount;
+    prevPendingTypeSfx.current = pendingType;
 
     // Deck reshuffle
     if (reshuffled) {
@@ -413,9 +418,26 @@ export function GameScreen({
       }
     }
 
-    // Your turn notification (slight delay so it doesn't overlap with draw/play sounds)
-    if (currentPlayerChanged && game.players[game.currentPlayerIndex]?.id === me.id && game.phase === 'playing') {
+    // ── "Action required" sound ──
+    // Play when a NEW pending action appears that requires ME, but only if
+    // it's NOT my normal turn (i.e. someone else is the current player).
+    // Examples: trade offer sent to me, trade defense, panic effect on me.
+    const isMyTurn = game.players[game.currentPlayerIndex]?.id === me.id;
+    const pendingOwner = extractPendingOwner(game.pendingAction);
+    if (pendingChanged && pendingOwner === me.id && !isMyTurn && game.phase === 'playing') {
+      const now = Date.now();
+      lastTurnSoundTimeSfx.current = now;
       setTimeout(() => playYourTurn(0.7), 350);
+    }
+
+    // Your turn notification (slight delay so it doesn't overlap with draw/play sounds)
+    // Skip if the "action required" sound already played recently (within 3s)
+    if (currentPlayerChanged && isMyTurn && game.phase === 'playing') {
+      const elapsed = Date.now() - lastTurnSoundTimeSfx.current;
+      if (elapsed > 3000) {
+        lastTurnSoundTimeSfx.current = Date.now();
+        setTimeout(() => playYourTurn(0.7), 350);
+      }
     }
 
     // Player eliminated
@@ -687,11 +709,7 @@ export function GameScreen({
               </div>
 
               <div className="action-row">
-                {myTurn && game.step === 'draw' && !game.pendingAction && (
-                  <button className="btn primary" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
-                    {t('game.drawCard')}
-                  </button>
-                )}
+                {/* Draw button moved to hand strip on desktop — kept here only for declare/end */}
                 {myTurn && me.role === 'thing' && game.step !== 'draw' && (
                   <button className="btn danger" disabled={loading} onClick={() => void onAction({ type: 'DECLARE_VICTORY' })} type="button">
                     {t('game.declareVictory')}
@@ -861,6 +879,12 @@ export function GameScreen({
                   onAction={onAction}
                 />
               </div>
+            )}
+            {/* Desktop draw button — sits next to the hand fan */}
+            {myTurn && game.step === 'draw' && !game.pendingAction && (
+              <button className="btn primary desktop-draw-btn" disabled={loading} onClick={() => void onAction({ type: 'DRAW_CARD' })} type="button">
+                {t('game.drawCard')}
+              </button>
             )}
             <PlayerHand game={game} loading={loading} me={me} onAction={onAction} />
           </div>
