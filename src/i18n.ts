@@ -2,7 +2,7 @@ type Lang = 'en' | 'ru';
 
 const translations: Record<string, Record<Lang, string>> = {
   // Lobby
-  'lobby.title': { en: 'Stay Away!', ru: 'Нечто' },
+  'lobby.title': { en: 'Нечто', ru: 'Нечто' },
   'lobby.subtitle': { en: 'The Thing from the Deep Abyss', ru: 'Из глубокой бездны' },
   'lobby.addPlayer': { en: 'Add Player', ru: 'Добавить игрока' },
   'lobby.startGame': { en: 'Start Game', ru: 'Начать игру' },

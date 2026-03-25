@@ -31,7 +31,7 @@ export function ConnectScreen({
       <div className="connect-layout">
         <section className={`connect-briefing ${briefingExpanded ? 'is-expanded' : 'is-collapsed'}`}>
           <div className="signal-pill">{t('connect.briefingLabel')}</div>
-          <h1 className="hero-title">Stay Away!</h1>
+          <h1 className="hero-title">Нечто</h1>
           <p className="version-tag">v1.3 multiplayer</p>
           <p className="hero-subtitle">{t('connect.tagline')}</p>
 
@@ -93,7 +93,7 @@ export function ConnectScreen({
               />
             </label>
 
-            <button className="btn primary wide" disabled={loading} onClick={onCreateRoom} type="button">
+            <button className="btn accent wide" disabled={loading} onClick={onCreateRoom} type="button">
               {t('connect.createRoom')}
             </button>
 

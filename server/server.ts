@@ -1153,5 +1153,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Stay Away multiplayer server listening on http://${host}:${port}`);
+  console.log(`Нечто multiplayer server listening on http://${host}:${port}`);
 });

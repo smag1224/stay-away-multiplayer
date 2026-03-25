@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono:wght@400;500;700&family=Cormorant+Garamond:wght@600;700&display=swap');
 
 /* ═══ DESIGN TOKENS ═══ */
 :root {
@@ -2899,8 +2899,59 @@ img {
   padding: 36px 20px;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(4, 5, 7, 0.28), rgba(4, 5, 7, 0.82)),
+    linear-gradient(180deg, rgba(4, 5, 7, 0.18) 0%, rgba(4, 5, 7, 0.36) 40%, rgba(4, 5, 7, 0.72) 100%),
     url('./assets/lab_bg.png') center/cover no-repeat;
+}
+
+/* ── Entrance animations ── */
+@keyframes connectFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes connectTerminalFlicker {
+  0%   { opacity: 0; }
+  4%   { opacity: 0.7; }
+  8%   { opacity: 0.2; }
+  14%  { opacity: 0.85; }
+  20%  { opacity: 0.4; }
+  30%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+@keyframes connectGlowPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(189, 155, 73, 0.08), var(--shadow-lg); }
+  50%      { box-shadow: 0 0 50px rgba(189, 155, 73, 0.16), var(--shadow-lg); }
+}
+
+.connect-screen .connect-briefing {
+  animation: connectFadeUp 0.7s ease-out both;
+  animation-delay: 0.15s;
+}
+
+.connect-screen .connect-terminal {
+  animation: connectTerminalFlicker 1.2s ease-out both;
+  animation-delay: 0.05s;
+}
+
+.connect-screen .signal-pill {
+  animation: connectFadeUp 0.5s ease-out both;
+  animation-delay: 0.3s;
+}
+
+.connect-screen .hero-title {
+  animation: connectFadeUp 0.6s ease-out both;
+  animation-delay: 0.4s;
+}
+
+.connect-screen .hero-subtitle {
+  animation: connectFadeUp 0.6s ease-out both;
+  animation-delay: 0.55s;
+}
+
+.connect-screen .connect-chip-row {
+  animation: connectFadeUp 0.5s ease-out both;
+  animation-delay: 0.65s;
 }
 
 .connect-layout {
@@ -2950,14 +3001,16 @@ img {
 
 .hero-title {
   margin: 0;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(2.6rem, 8vw, 6rem);
-  line-height: .9;
-  letter-spacing: .08em;
+  font-family: 'Cormorant Garamond', 'Bebas Neue', serif;
+  font-weight: 700;
+  font-size: clamp(3.2rem, 10vw, 7.5rem);
+  line-height: .85;
+  letter-spacing: .04em;
   text-transform: uppercase;
   color: #efe3ce;
   text-shadow:
-    0 0 40px rgba(189, 155, 73, 0.18),
+    0 0 60px rgba(189, 155, 73, 0.24),
+    0 0 120px rgba(140, 60, 30, 0.12),
     0 12px 28px rgba(0, 0, 0, 0.55);
 }
 
@@ -3065,6 +3118,7 @@ img {
   box-shadow: var(--shadow-lg);
   text-align: left;
   backdrop-filter: blur(12px);
+  animation: connectGlowPulse 4s ease-in-out infinite;
 }
 
 .terminal-head {
@@ -4544,7 +4598,8 @@ img {
   }
 
   .connect-screen {
-    padding: max(72px, calc(env(safe-area-inset-top) + 16px)) 16px max(20px, env(safe-area-inset-bottom));
+    padding: max(28px, calc(env(safe-area-inset-top) + 16px)) 16px max(20px, env(safe-area-inset-bottom));
+    align-items: flex-start;
   }
 
   .connect-layout {

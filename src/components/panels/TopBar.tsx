@@ -40,7 +40,7 @@ export function TopBar({
 
   return (
     <div className="top-bar">
-      <span className="top-bar-brand">STAY AWAY!</span>
+      <span className="top-bar-brand">НЕЧТО</span>
       {mobileQuickActionLabel && onMobileQuickAction && (
         <button
           className={`top-bar-quick-action ${mobileQuickActionVariant}`}
