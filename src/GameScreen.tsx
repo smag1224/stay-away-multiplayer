@@ -160,9 +160,8 @@ export function GameScreen({
   const lastReshuffleCountRef = useRef(game.reshuffleCount);
   const prevLogLenRef = useRef(game.log.length);
   // Refs for sound effect triggers
+  const prevLogLenSfx = useRef(game.log.length);
   const prevDeckLenSfx = useRef(game.deck.length);
-  const prevDiscardLenSfx = useRef(game.discard.length);
-  const prevStepSfx = useRef(game.step);
   const prevCurrentPlayerSfx = useRef(game.currentPlayerIndex);
   const prevPhaseSfx = useRef(game.phase);
   const prevAliveCountSfx = useRef(game.players.filter(p => p.isAlive).length);
@@ -295,18 +294,6 @@ export function GameScreen({
     for (let i = 0; i < newCount; i++) {
       const entry = game.log[i];
 
-      // Defense card played — play block sound
-      const DEFENSE_CARDS = ['no_barbecue', 'no_thanks', 'miss', 'im_fine_here'];
-      if (entry.cardDefId && DEFENSE_CARDS.includes(entry.cardDefId)) {
-        playDefenseBlock();
-      }
-
-      // Trade completed — detect from log text
-      if (entry.text.includes('traded') || entry.text.includes('offered') ||
-          entry.textRu?.includes('обмен') || entry.textRu?.includes('передал')) {
-        playCardSwap();
-      }
-
       if (!entry.cardDefId) {
         continue;
       }
@@ -345,18 +332,16 @@ export function GameScreen({
 
   // ── Sound effects based on game state changes ──────────────────
   useEffect(() => {
+    const prevLogLen = prevLogLenSfx.current;
     const dDeck = game.deck.length - prevDeckLenSfx.current;
-    const dDiscard = game.discard.length - prevDiscardLenSfx.current;
-    const stepChanged = game.step !== prevStepSfx.current;
     const currentPlayerChanged = game.currentPlayerIndex !== prevCurrentPlayerSfx.current;
     const phaseChanged = game.phase !== prevPhaseSfx.current;
     const aliveCount = game.players.filter(p => p.isAlive).length;
     const aliveDecreased = aliveCount < prevAliveCountSfx.current;
     const reshuffled = game.reshuffleCount > prevReshuffleSfx.current;
 
+    prevLogLenSfx.current = game.log.length;
     prevDeckLenSfx.current = game.deck.length;
-    prevDiscardLenSfx.current = game.discard.length;
-    prevStepSfx.current = game.step;
     prevCurrentPlayerSfx.current = game.currentPlayerIndex;
     prevPhaseSfx.current = game.phase;
     prevAliveCountSfx.current = aliveCount;
@@ -368,42 +353,64 @@ export function GameScreen({
       return; // don't stack other sounds on reshuffle
     }
 
-    // Card drawn from deck
+    // ── Log-driven sounds: analyse new log entries ──
+    const newLogCount = game.log.length - prevLogLen;
+    if (newLogCount > 0) {
+      // Log is newest-first (index 0 = latest)
+      let soundPlayed = false;
+      for (let i = 0; i < newLogCount && !soundPlayed; i++) {
+        const entry = game.log[i];
+
+        // Defense cards
+        const DEFENSE_IDS = ['no_barbecue', 'no_thanks', 'miss', 'im_fine_here'];
+        if (entry.cardDefId && DEFENSE_IDS.includes(entry.cardDefId)) {
+          playDefenseBlock();
+          soundPlayed = true;
+          continue;
+        }
+
+        // Trade completed
+        if (entry.text.includes('traded') || entry.text.includes('exchanged') ||
+            entry.textRu?.includes('обмен') || entry.textRu?.includes('передал')) {
+          playCardSwap();
+          soundPlayed = true;
+          continue;
+        }
+
+        // Card played (has cardDefId AND "played"/"сыграл" in text)
+        const wasPlayed = entry.cardDefId && (
+          entry.text.includes(' played ') || entry.textRu?.includes(' сыграл')
+        );
+        if (wasPlayed) {
+          if (entry.cardDefId === 'locked_door') {
+            playLockedDoor();
+          } else if (entry.cardDefId === 'quarantine') {
+            playQuarantine();
+          } else {
+            playCardPlay();
+          }
+          soundPlayed = true;
+          continue;
+        }
+
+        // Card discarded (text contains "discarded"/"сбросил")
+        if (entry.text.includes('discarded') || entry.textRu?.includes('сбросил')) {
+          playCardDrop();
+          soundPlayed = true;
+          continue;
+        }
+      }
+    }
+
+    // Card drawn from deck (deck shrank)
     if (dDeck < 0) {
-      // Check if it was a panic card (deck shrank AND discard grew simultaneously)
-      const isPanic = dDiscard > 0 && dDeck === -1;
-      if (isPanic) {
-        // Slight delay so draw sound plays first, then panic reveal
+      // Check if panic (panicAnnouncement is set when panic card drawn)
+      if (game.panicAnnouncement) {
         playCardDraw(0.3);
         setTimeout(() => playPanicReveal(), 200);
       } else {
         playCardDraw();
       }
-    }
-
-    // Card played/discarded to discard pile (but NOT during panic-draw combo)
-    if (dDiscard > 0 && dDeck >= 0) {
-      // Check recent log for "played" vs "discarded"
-      const latestLog = game.log[0];
-      const wasPlayed = latestLog?.cardDefId && (
-        latestLog.text.includes(' played ') || latestLog.textRu.includes(' сыграл')
-      );
-      if (wasPlayed) {
-        if (latestLog.cardDefId === 'locked_door') {
-          playLockedDoor();
-        } else if (latestLog.cardDefId === 'quarantine') {
-          playQuarantine();
-        } else {
-          playCardPlay();
-        }
-      } else {
-        playCardDrop();
-      }
-    }
-
-    // Trade completed (step changed to end_turn from trade_response)
-    if (stepChanged && game.step === 'end_turn' && prevStepSfx.current === 'trade_response') {
-      // This was already set to end_turn — but check prev
     }
 
     // Your turn notification
@@ -425,7 +432,7 @@ export function GameScreen({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.deck.length, game.discard.length, game.step, game.currentPlayerIndex, game.phase, game.reshuffleCount]);
+  }, [game.log.length, game.deck.length, game.currentPlayerIndex, game.phase, game.reshuffleCount]);
 
   /* ── GAME OVER ─────────────────────────────────────────────── */
   if (game.phase === 'game_over') {
