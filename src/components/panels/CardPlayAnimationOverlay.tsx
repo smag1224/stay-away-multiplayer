@@ -640,6 +640,51 @@ function GenericBeamAnimation({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Whiskey – video effect poured over target avatar                   */
+/* ------------------------------------------------------------------ */
+
+function WhiskeyAnimation({
+  to, triggerKey, onDone,
+}: {
+  to: { x: number; y: number };
+  triggerKey: number;
+  onDone: () => void;
+}) {
+  const SIZE = 38; // % of container — covers avatar nicely
+
+  return (
+    <motion.div
+      key={triggerKey}
+      style={{
+        position: 'absolute',
+        left: `${to.x}%`,
+        top: `${to.y}%`,
+        width: `${SIZE}%`,
+        aspectRatio: '1 / 1',
+        transform: 'translate(-50%, -58%)',
+        pointerEvents: 'none',
+        zIndex: 25,
+        mixBlendMode: 'screen', // black bg becomes transparent
+        borderRadius: '50%',
+        overflow: 'hidden',
+      }}
+      initial={{ opacity: 0, scale: 0.7 }}
+      animate={{ opacity: [0, 1, 1, 0.6, 0], scale: [0.7, 1.1, 1.05, 1, 0.9] }}
+      transition={{ duration: 3.5, times: [0, 0.08, 0.6, 0.85, 1] }}
+      onAnimationComplete={onDone}
+    >
+      <video
+        src="/effects/whiskey.mp4"
+        autoPlay
+        muted
+        playsInline
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main overlay – routes to the right animation                       */
 /* ------------------------------------------------------------------ */
 
@@ -683,6 +728,16 @@ export function CardPlayAnimationOverlay({
     return (
       <AnalysisScanAnimation
         from={from}
+        to={to}
+        triggerKey={trigger.key}
+        onDone={onDone}
+      />
+    );
+  }
+
+  if (trigger.cardDefId === 'whisky') {
+    return (
+      <WhiskeyAnimation
         to={to}
         triggerKey={trigger.key}
         onDone={onDone}
