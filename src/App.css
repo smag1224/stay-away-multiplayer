@@ -1,4 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono:wght@400;500;700&family=Cormorant+Garamond:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap');
+
+@font-face {
+  font-family: 'Creepster';
+  src: url('./assets/fonts/creepster.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Neucha';
+  src: url('./assets/fonts/Neucha-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ═══ DESIGN TOKENS ═══ */
 :root {
@@ -71,7 +87,7 @@ body,
 
 body {
   color: var(--text);
-  font-family: 'Share Tech Mono', monospace;
+  font-family: 'Neucha', monospace;
   font-size: 15px;
   background: var(--bg);
   overflow: hidden;
@@ -362,7 +378,7 @@ img {
 }
 
 .top-bar-brand {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.5rem;
   letter-spacing: .15em;
   color: #f0ddc4;
@@ -569,7 +585,7 @@ img {
 }
 
 .panic-banner-name {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.1rem;
   color: #ffebeb;
 }
@@ -639,7 +655,7 @@ img {
 }
 
 .spectator-prompt-text {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.2rem;
   letter-spacing: 0.05em;
   margin: 0;
@@ -845,7 +861,7 @@ img {
 
 .status-card>strong {
   font-size: 1.1rem;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   letter-spacing: .08em;
   color: var(--table-panel-text);
 }
@@ -929,7 +945,7 @@ img {
   display: block;
   margin-top: 6px;
   color: var(--table-panel-text);
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.08rem;
   letter-spacing: .06em;
   line-height: 1.15;
@@ -951,7 +967,7 @@ img {
 
 .table-pill.subtle strong {
   font-size: .95rem;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: 'Neucha', monospace;
   letter-spacing: 0;
 }
 
@@ -1030,7 +1046,7 @@ img {
 
 .circle-core strong {
   display: block;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 2.2rem;
   color: #e7cba3;
   line-height: 1;
@@ -1208,7 +1224,7 @@ img {
 }
 
 .player-avatar-fallback {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.15rem;
   letter-spacing: .08em;
   color: #d9e8de;
@@ -1632,7 +1648,7 @@ img {
 
 .deck-stack strong {
   display: block;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.8rem;
   color: var(--gold-bright);
   margin-top: 4px;
@@ -1719,7 +1735,7 @@ img {
   display: block;
   margin-top: 8px;
   color: var(--table-panel-text);
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.24rem;
   letter-spacing: .06em;
 }
@@ -2584,7 +2600,7 @@ img {
 }
 
 .card-name {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.2rem;
   color: #f0ece4;
   line-height: 1;
@@ -2641,7 +2657,7 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.3rem;
   letter-spacing: 0.2em;
   color: rgba(90, 155, 90, 0.6);
@@ -2653,7 +2669,7 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.3rem;
   letter-spacing: 0.2em;
   color: rgba(160, 65, 65, 0.6);
@@ -2713,7 +2729,7 @@ img {
 .table-deck__count {
   position: relative;
   z-index: 10;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 0.85rem;
   color: rgba(255, 235, 200, 0.95);
   text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7);
@@ -3076,7 +3092,7 @@ img {
 
 .hero-title {
   margin: 0;
-  font-family: 'Cormorant Garamond', 'Bebas Neue', serif;
+  font-family: 'Cormorant Garamond', 'Creepster', serif;
   font-weight: 700;
   font-size: clamp(3.2rem, 10vw, 7.5rem);
   line-height: .85;
@@ -3204,7 +3220,7 @@ img {
 
 .terminal-head strong {
   color: #f1e8d9;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.8rem;
   letter-spacing: .08em;
 }
@@ -3346,7 +3362,7 @@ img {
 
 .room-code {
   margin: 0;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: clamp(2.5rem, 6vw, 4rem);
   letter-spacing: .18em;
   color: var(--gold-bright);
@@ -3405,7 +3421,7 @@ img {
 
 .room-stat-card strong {
   color: #efe4cf;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Creepster', sans-serif;
   font-size: 1.22rem;
   line-height: 1;
   letter-spacing: .06em;
@@ -4218,7 +4234,7 @@ img {
   }
 
   .mobile-draw-btn {
-    font-family: 'Bebas Neue', sans-serif;
+    font-family: 'Creepster', sans-serif;
     font-size: .95rem;
     letter-spacing: .12em;
     padding: 10px 16px;
