@@ -8,10 +8,12 @@ function useBgMusic() {
   const playing = useSyncExternalStore(
     bgMusic.subscribe.bind(bgMusic),
     () => bgMusic.playing,
+    () => false,
   );
   const volume = useSyncExternalStore(
     bgMusic.subscribe.bind(bgMusic),
     () => bgMusic.volume,
+    () => 0,
   );
   return { playing, volume };
 }

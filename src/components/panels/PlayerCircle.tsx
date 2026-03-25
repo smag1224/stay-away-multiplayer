@@ -9,9 +9,9 @@ import type { RoomMemberView, ShoutEntry, ViewerGameState, ViewerPlayerState } f
 import type { GameAction } from '../../types.ts';
 import { getPlayerAvatarPresentation, getPlayerAvatarSrc } from '../../playerAvatarImages.ts';
 import { PLAYER_AVATAR_IDS } from '../../avatarCatalog.ts';
-import quarantineOverlay from '../../assets/quarantine_overlay.png';
-import thingOverlay from '../../assets/thing_overlay.png';
-import infectedOverlay from '../../assets/infected_overlay.png';
+import quarantineOverlay from '../../assets/quarantine_overlay.webp';
+import thingOverlay from '../../assets/thing_overlay.webp';
+import infectedOverlay from '../../assets/infected_overlay.webp';
 import { CardView } from './CardView.tsx';
 import { TableAnimationBoundary } from './TableAnimationBoundary.tsx';
 import { TableDecks } from './TableDecks.tsx';

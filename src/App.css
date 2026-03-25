@@ -237,7 +237,7 @@ img {
   flex-direction: column;
   overflow: hidden;
   background-color: #120805;
-  background-image: url('./assets/game_table.png');
+  background-image: url('./assets/game_table.webp');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -3719,7 +3719,7 @@ img {
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
-    background-image: url('./assets/game_table_mobile.png');
+    background-image: url('./assets/game_table_mobile.webp');
     background-size: 112% auto;
     background-position: center 88px;
   }
@@ -4158,7 +4158,7 @@ img {
     position: relative;
     z-index: 17;
     background:
-      url('./assets/game_table_mobile_bottom.png') center top / cover no-repeat;
+      url('./assets/game_table_mobile_bottom.webp') center top / cover no-repeat;
     overflow: visible;
     justify-content: flex-start;
     flex-direction: column;
