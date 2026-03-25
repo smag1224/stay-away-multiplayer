@@ -46,6 +46,7 @@ function buildViewerGame(playerCount: number): {
     inQuarantine: player.inQuarantine,
     quarantineTurnsLeft: player.quarantineTurnsLeft,
     position: player.position,
+    isKnownInfectedToMe: false,
   }));
 
   const game: ViewerGameState = {

@@ -81,7 +81,7 @@ function getHint(
     if (pa.type === 'suspicion_pick') {
       return isRu ? '🔍 Выбери карту из веера подозреваемого.' : '🔍 Pick a card from the suspect\'s fan.';
     }
-    if (pa.type === 'defense_choice') {
+    if (pa.type === 'trade_defense') {
       return isRu ? '🛡 Можешь защититься картой или пропустить.' : '🛡 You can play a defense card or skip.';
     }
     if (pa.type === 'persistence_pick') {

@@ -329,7 +329,7 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
 
 // ── Target picking ──────────────────────────────────────────────────────────
 
-function pickBestTarget(vs: BotVisibleState, memory: BotMemory, targets: number[], defId: string, w: Weights, stage: GameStage): number {
+function _pickBestTarget(vs: BotVisibleState, memory: BotMemory, targets: number[], defId: string, w: Weights, stage: GameStage): number {
   if (targets.length === 1) return targets[0];
 
   let best = targets[0];
@@ -346,7 +346,7 @@ function pickBestTarget(vs: BotVisibleState, memory: BotMemory, targets: number[
   return best;
 }
 
-function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, cardDefId: string, w: Weights, stage: GameStage): number {
+function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, cardDefId: string, w: Weights, _stage: GameStage): number {
   let score = 5;
   const susp = getSuspicion(memory, targetId);
   const obs = memory.observations.get(targetId);
@@ -422,7 +422,7 @@ function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, c
 
 // ── Trade phase ─────────────────────────────────────────────────────────────
 
-function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, w: Weights, actions: ScoredAction[], stage: GameStage): void {
+function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, _w: Weights, actions: ScoredAction[], stage: GameStage): void {
   if (vs.tradeableCards.length === 0) return;
 
   const partnerSusp = vs.tradePartnerId ? getSuspicion(memory, vs.tradePartnerId) : 0;
@@ -855,7 +855,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
 // ── Defense scoring ─────────────────────────────────────────────────────────
 
-function scoreDefenseCard(vs: BotVisibleState, memory: BotMemory, defenseDefId: string, reason: string, w: Weights, fromId: number, stage: GameStage): number {
+function scoreDefenseCard(vs: BotVisibleState, memory: BotMemory, defenseDefId: string, _reason: string, w: Weights, fromId: number, _stage: GameStage): number {
   const fromSusp = getSuspicion(memory, fromId);
 
   switch (defenseDefId) {

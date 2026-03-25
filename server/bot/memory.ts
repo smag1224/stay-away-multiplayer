@@ -247,7 +247,7 @@ export function updateMemoryFromLog(memory: BotMemory, game: GameState): void {
 
 function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): void {
   const text = entry.text;
-  const textEn = entry.textEn ?? '';
+  const textEn = entry.text ?? '';
   const from = entry.fromPlayerId;
   const target = entry.targetPlayerId;
   const turn = memory.globalTurnCount;
