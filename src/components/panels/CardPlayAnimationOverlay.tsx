@@ -34,7 +34,7 @@ function getPlayerPos(position: number, total: number) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Flamethrower – 3-second continuous flame stream                    */
+/*  Flamethrower – video effect rotated toward target                  */
 /* ------------------------------------------------------------------ */
 
 function FlamethrowerAnimation({
@@ -45,246 +45,75 @@ function FlamethrowerAnimation({
   triggerKey: number;
   onDone: () => void;
 }) {
-  const TOTAL = 5;
-  const TRAVEL = 0.5;
-  const STREAM_COUNT = 90;
-  const BURN_COUNT = 32;
-  const TRAIL_COUNT = 40; // fire particles along the beam path
+  const TOTAL = 4;
 
+  // Container uses a real pixel size for correct aspect ratio.
+  // The video is horizontal (wider than tall), so width = distance between players,
+  // anchored at `from`, rotated to face `to`.
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  const len = Math.sqrt(dx * dx + dy * dy) || 1;
-  const perpX = -dy / len;
-  const perpY = dx / len;
+  // Angle in degrees: video points right by default → rotate to face target
+  const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+  // Width as % of container to roughly span from→to (plus a bit of overshoot)
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const widthPct = dist * 1.5; // 150% of distance so flame overshoots target
 
-  const streamParticles = useMemo(() =>
-    Array.from({ length: STREAM_COUNT }).map((_, i) => {
-      const spread = (Math.random() - 0.5) * 3.5;
-      return {
-        delay: (i / STREAM_COUNT) * (TOTAL - TRAVEL),
-        targetX: to.x + perpX * spread + (Math.random() - 0.5) * 1.5,
-        targetY: to.y + perpY * spread + (Math.random() - 0.5) * 1.5,
-        color: ['#ff2200', '#ff4400', '#ff6600', '#ff8800', '#ffaa00', '#ffcc33'][Math.floor(Math.random() * 6)],
-        size: 8 + Math.random() * 14,
-      };
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [triggerKey],
-  );
-
-  // Fire particles that sit along the beam path (trail decoration)
-  const trailParticles = useMemo(() =>
-    Array.from({ length: TRAIL_COUNT }).map(() => {
-      const t = 0.1 + Math.random() * 0.8; // position along beam 10%-90%
-      const spread = (Math.random() - 0.5) * 4;
-      return {
-        x: from.x + dx * t + perpX * spread,
-        y: from.y + dy * t + perpY * spread,
-        riseY: 1 + Math.random() * 2.5,
-        startDelay: 0.3 + Math.random() * 0.6, // appear after beam starts
-        color: ['#ff4400', '#ff6600', '#ff8800', '#ffaa00', '#ffcc33'][Math.floor(Math.random() * 5)],
-        size: 5 + Math.random() * 9,
-        cycleDuration: 0.3 + Math.random() * 0.4,
-        repeatCount: 4 + Math.floor(Math.random() * 5),
-      };
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [triggerKey],
-  );
-
-  const burnParticles = useMemo(() =>
-    Array.from({ length: BURN_COUNT }).map(() => {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 1 + Math.random() * 3;
-      return {
-        startDelay: TRAVEL + Math.random() * 0.5,
-        cx: to.x + Math.cos(angle) * radius,
-        cy: to.y + Math.sin(angle) * radius,
-        riseY: 2 + Math.random() * 4,
-        color: ['#ff3300', '#ff6600', '#ffaa00', '#ffdd33'][Math.floor(Math.random() * 4)],
-        size: 6 + Math.random() * 12,
-        cycleDuration: 0.35 + Math.random() * 0.4,
-        repeatCount: 5 + Math.floor(Math.random() * 5),
-      };
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [triggerKey],
-  );
-
-  // Play flamethrower sound for the duration of the animation
+  // Play sound
   useEffect(() => {
     const stop = playFlamethrowerSound(TOTAL);
     return stop;
   }, [triggerKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filterId = `flame-glow-${triggerKey}`;
-  const pathD = `M ${from.x.toFixed(2)} ${from.y.toFixed(2)} L ${to.x.toFixed(2)} ${to.y.toFixed(2)}`;
-
   return (
     <>
-      {/* SVG: persistent flame beam core */}
-      <svg
-        className="card-play-anim-overlay"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        aria-hidden="true"
+      {/* Video rotated from `from` toward `to` */}
+      <motion.div
+        key={triggerKey}
+        style={{
+          position: 'absolute',
+          left: `${from.x}%`,
+          top: `${from.y}%`,
+          width: `${widthPct}%`,
+          aspectRatio: '16 / 9',
+          // Anchor left-center so flame origin is at player position
+          transform: `translate(0%, -50%) rotate(${angleDeg}deg)`,
+          transformOrigin: '0% 50%',
+          pointerEvents: 'none',
+          zIndex: 25,
+          mixBlendMode: 'screen',
+        }}
+        initial={{ opacity: 0, scaleX: 0.2 }}
+        animate={{ opacity: [0, 1, 1, 0.7, 0], scaleX: [0.2, 1.05, 1, 1, 0.9] }}
+        transition={{ duration: TOTAL, times: [0, 0.06, 0.3, 0.8, 1] }}
+        onAnimationComplete={onDone}
       >
-        <defs>
-          <filter id={filterId} x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="1.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* Wide flame glow */}
-        <motion.path
-          d={pathD}
-          stroke="rgba(255,100,0,0.3)"
-          strokeWidth={8}
-          fill="none"
-          vectorEffect="non-scaling-stroke"
-          filter={`url(#${filterId})`}
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 0.8, 0.8, 0.6, 0] }}
-          transition={{ duration: TOTAL, times: [0, 0.1, 0.7, 0.9, 1] }}
+        <video
+          src="/effects/flamethrower.mp4"
+          autoPlay
+          muted
+          playsInline
+          style={{ width: '100%', height: '100%', objectFit: 'fill' }}
         />
+      </motion.div>
 
-        {/* Core beam */}
-        <motion.path
-          d={pathD}
-          stroke="rgba(255,180,0,0.7)"
-          strokeWidth={2.5}
-          fill="none"
-          vectorEffect="non-scaling-stroke"
-          filter={`url(#${filterId})`}
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 1, 1, 0.8, 0] }}
-          transition={{ duration: TOTAL, times: [0, 0.08, 0.7, 0.9, 1] }}
-        />
-      </svg>
-
-      {/* Stream particles flying from source → target */}
-      {streamParticles.map((p, i) => (
-        <motion.div
-          key={`s-${triggerKey}-${i}`}
-          style={{
-            position: 'absolute',
-            width: p.size,
-            height: p.size,
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 30% 30%, ${p.color}, rgba(255,50,0,0.3) 60%, transparent)`,
-            boxShadow: `0 0 ${p.size * 0.6}px ${p.size * 0.2}px rgba(255,80,0,0.4)`,
-            marginLeft: -p.size / 2,
-            marginTop: -p.size / 2,
-            pointerEvents: 'none',
-            zIndex: 21,
-          }}
-          initial={{ left: `${from.x}%`, top: `${from.y}%`, opacity: 0.85, scale: 0.6 }}
-          animate={{
-            left: `${p.targetX}%`,
-            top: `${p.targetY}%`,
-            opacity: [0.85, 0.9, 0.3],
-            scale: [0.6, 1, 0.2],
-          }}
-          transition={{
-            duration: TRAVEL,
-            delay: p.delay,
-            ease: [0.2, 0, 0.8, 1],
-            opacity: { times: [0, 0.4, 1] },
-            scale: { times: [0, 0.3, 1] },
-          }}
-        />
-      ))}
-
-      {/* Trail fire particles along the beam path */}
-      {trailParticles.map((p, i) => (
-        <motion.div
-          key={`t-${triggerKey}-${i}`}
-          style={{
-            position: 'absolute',
-            width: p.size,
-            height: p.size,
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${p.color}, rgba(255,60,0,0.2) 70%, transparent)`,
-            boxShadow: `0 0 ${p.size * 0.5}px ${p.size * 0.15}px rgba(255,80,0,0.3)`,
-            marginLeft: -p.size / 2,
-            marginTop: -p.size / 2,
-            pointerEvents: 'none',
-            zIndex: 21,
-          }}
-          initial={{ left: `${p.x}%`, top: `${p.y}%`, opacity: 0, scale: 0.4 }}
-          animate={{
-            top: [`${p.y}%`, `${p.y - p.riseY}%`],
-            opacity: [0, 0.85, 0.7, 0],
-            scale: [0.4, 1, 0.15],
-          }}
-          transition={{
-            duration: p.cycleDuration,
-            delay: p.startDelay,
-            repeat: p.repeatCount,
-            repeatType: 'loop',
-            ease: 'easeOut',
-            opacity: { times: [0, 0.15, 0.6, 1] },
-            scale: { times: [0, 0.25, 1] },
-          }}
-        />
-      ))}
-
-      {/* Burn particles rising around target */}
-      {burnParticles.map((p, i) => (
-        <motion.div
-          key={`b-${triggerKey}-${i}`}
-          style={{
-            position: 'absolute',
-            width: p.size,
-            height: p.size,
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${p.color}, transparent)`,
-            marginLeft: -p.size / 2,
-            marginTop: -p.size / 2,
-            pointerEvents: 'none',
-            zIndex: 21,
-          }}
-          initial={{ left: `${p.cx}%`, top: `${p.cy}%`, opacity: 0, scale: 0.5 }}
-          animate={{
-            top: [`${p.cy}%`, `${p.cy - p.riseY}%`],
-            opacity: [0, 0.9, 0.9, 0],
-            scale: [0.5, 1.1, 0.2],
-          }}
-          transition={{
-            duration: p.cycleDuration,
-            delay: p.startDelay,
-            repeat: p.repeatCount,
-            repeatType: 'loop',
-            ease: 'easeOut',
-            opacity: { times: [0, 0.15, 0.6, 1] },
-            scale: { times: [0, 0.3, 1] },
-          }}
-        />
-      ))}
-
-      {/* Heat haze / glow on target */}
+      {/* Burn glow on target */}
       <motion.div
         style={{
           position: 'absolute',
           left: `${to.x}%`,
           top: `${to.y}%`,
-          width: 60,
-          height: 60,
+          width: 80,
+          height: 80,
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,100,0,0.35), rgba(255,50,0,0.1) 50%, transparent 70%)',
-          marginLeft: -30,
-          marginTop: -30,
+          background: 'radial-gradient(circle, rgba(255,120,0,0.5), rgba(255,50,0,0.15) 50%, transparent 70%)',
+          marginLeft: -40,
+          marginTop: -40,
           pointerEvents: 'none',
-          zIndex: 20,
+          zIndex: 24,
         }}
-        initial={{ opacity: 0, scale: 0.5 }}
-        animate={{ opacity: [0, 0.8, 0.9, 0.7, 0], scale: [0.5, 1.2, 1, 1.3, 0.5] }}
+        initial={{ opacity: 0, scale: 0.4 }}
+        animate={{ opacity: [0, 0.9, 1, 0.8, 0], scale: [0.4, 1.3, 1.1, 1.4, 0.5] }}
         transition={{ duration: TOTAL, times: [0, 0.15, 0.5, 0.85, 1] }}
-        onAnimationComplete={onDone}
       />
     </>
   );
