@@ -16,7 +16,7 @@ import {
   NOISE_AMPLITUDE,
   BEST_ACTION_PROB,
   CARD_VALUES,
-  SUSPICION_THRESHOLD_HIGH,
+  suspicionThreshold(vs.aliveCount),
   SUSPICION_THRESHOLD_TRUSTED,
   STAGE,
   THING_SAFE_TURNS,
@@ -25,6 +25,14 @@ import {
   infoCardMultiplier,
   aggressionMultiplier,
 } from './config.ts';
+
+// ── Dynamic suspicion threshold ─────────────────────────────────────────────
+// Lower threshold late-game: fewer suspects = more certainty needed to act
+function suspicionThreshold(aliveCount: number): number {
+  if (aliveCount <= 3) return 0.20;
+  if (aliveCount <= 5) return 0.35;
+  return 0.45;
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -35,6 +43,23 @@ export interface ScoredAction {
 }
 
 type Weights = typeof HUMAN_WEIGHTS | typeof THING_WEIGHTS | typeof INFECTED_WEIGHTS;
+type PositionMap = Map<number, number>;
+type ObservedPlayer = BotMemory['observations'] extends Map<number, infer T> ? T : never;
+
+interface IncomingTradePolicySnapshot {
+  observation: ObservedPlayer;
+  freshSeenDefs: string[];
+  freshSeenCounts: Map<string, number>;
+  totalFreshSeen: number;
+  thingCount: number;
+  infectedCount: number;
+  safeSeenCount: number;
+  infectedPassability: number;
+  safeEscapeWeight: number;
+  effectiveInfectedThreat: number;
+  forcedness: number;
+  behavioralIntentModifier: number;
+}
 
 // ── Game stage ──────────────────────────────────────────────────────────────
 
@@ -131,17 +156,495 @@ function getWeights(role: string): Weights {
   return HUMAN_WEIGHTS;
 }
 
-/** Check who will be our trade partner based on current direction */
-function getNextTradeNeighborSuspicion(vs: BotVisibleState, memory: BotMemory): number {
-  if (!vs.tradePartnerId) return 0;
-  return getSuspicion(memory, vs.tradePartnerId);
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getCurrentPositions(vs: BotVisibleState): PositionMap {
+  return new Map(vs.alivePlayers.map(player => [player.id, player.position]));
+}
+
+function swapPositionsInMap(positions: PositionMap, playerId: number, targetId: number): PositionMap {
+  const next = new Map(positions);
+  const playerPos = next.get(playerId);
+  const targetPos = next.get(targetId);
+
+  if (playerPos === undefined || targetPos === undefined) return next;
+
+  next.set(playerId, targetPos);
+  next.set(targetId, playerPos);
+  return next;
+}
+
+function getTradePartnerIdForState(
+  vs: BotVisibleState,
+  positions: PositionMap,
+  direction: 1 | -1,
+): number | null {
+  const myPos = positions.get(vs.myId);
+  if (myPos === undefined) return null;
+
+  const alivePositions = [...positions.values()].sort((a, b) => a - b);
+  if (alivePositions.length <= 1) return null;
+
+  const myIdx = alivePositions.indexOf(myPos);
+  if (myIdx === -1) return null;
+
+  const nextIdx = (myIdx + direction + alivePositions.length) % alivePositions.length;
+  const nextPos = alivePositions[nextIdx];
+
+  for (const [playerId, position] of positions.entries()) {
+    if (position === nextPos) return playerId;
+  }
+
+  return null;
+}
+
+function hasDoorBetweenPositions(vs: BotVisibleState, pos1: number, pos2: number): boolean {
+  return vs.doors.some(door =>
+    (door.between[0] === pos1 && door.between[1] === pos2) ||
+    (door.between[0] === pos2 && door.between[1] === pos1)
+  );
+}
+
+function scoreTradePartnerUtility(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  partnerId: number,
+  positions: PositionMap,
+): number {
+  const partnerInfo = vs.alivePlayers.find(player => player.id === partnerId);
+  const myPos = positions.get(vs.myId);
+  const partnerPos = positions.get(partnerId);
+  if (!partnerInfo || myPos === undefined || partnerPos === undefined) return 0;
+
+  const obs = memory.observations.get(partnerId);
+  const susp = getSuspicion(memory, partnerId);
+  const blocked = hasDoorBetweenPositions(vs, myPos, partnerPos);
+
+  if (vs.myRole === 'human') {
+    let score = clamp((0.2 - susp) * 12, -7, 7);
+    if (obs?.confirmedClean) score += 4;
+    if (obs?.confirmedInfected) score = -12;
+    if (partnerInfo.inQuarantine) score -= 3;
+    if (blocked) score += score < 0 ? 2.5 : -2.5;
+    return score;
+  }
+
+  if (vs.myRole === 'thing') {
+    let score = obs?.confirmedInfected ? -8 : 8;
+    score += clamp((0.15 - susp) * 4, -2, 2);
+    if (partnerInfo.inQuarantine) score -= 4;
+    if (blocked) score -= 6;
+    return score;
+  }
+
+  let score = 0;
+  if (partnerInfo.canReceiveInfectedCardFromMe) score += 9;
+  else if (obs?.confirmedInfected) score += 5;
+  else score += vs.aliveCount <= 3 ? 4 : 1;
+
+  if (!partnerInfo.canReceiveInfectedCardFromMe) {
+    score += clamp((0.15 - susp) * 4, -2, 2);
+  }
+  if (partnerInfo.inQuarantine) score -= 3;
+  if (blocked) score -= (partnerInfo.canReceiveInfectedCardFromMe || obs?.confirmedInfected) ? 3 : 4;
+  return score;
+}
+
+function getTradePartnerUtility(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  positions: PositionMap,
+  direction: 1 | -1,
+): number {
+  const partnerId = getTradePartnerIdForState(vs, positions, direction);
+  if (partnerId === null) return 0;
+  return scoreTradePartnerUtility(vs, memory, partnerId, positions);
+}
+
+function getReversedDirectionTradePartnerDelta(vs: BotVisibleState, memory: BotMemory): number {
+  const positions = getCurrentPositions(vs);
+  const current = getTradePartnerUtility(vs, memory, positions, vs.direction);
+  const reversedDirection = (vs.direction === 1 ? -1 : 1) as 1 | -1;
+  const reversed = getTradePartnerUtility(vs, memory, positions, reversedDirection);
+  return reversed - current;
+}
+
+function getPostMoveTradePartnerDelta(vs: BotVisibleState, memory: BotMemory, targetId: number): number {
+  const currentPositions = getCurrentPositions(vs);
+  const current = getTradePartnerUtility(vs, memory, currentPositions, vs.direction);
+  const movedPositions = swapPositionsInMap(currentPositions, vs.myId, targetId);
+  const moved = getTradePartnerUtility(vs, memory, movedPositions, vs.direction);
+  return moved - current;
+}
+
+function getBestPostMoveTradePartnerDelta(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targets: number[],
+): number {
+  if (targets.length === 0) return 0;
+  return targets.reduce((best, targetId) => Math.max(best, getPostMoveTradePartnerDelta(vs, memory, targetId)), Number.NEGATIVE_INFINITY);
+}
+
+function scoreTradeCardForPartner(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  card: { defId: string; uid: string },
+  partnerId: number | null,
+  stage: GameStage,
+): number {
+  const def = getCardDef(card.defId);
+  const dv = dynamicCardValue(card.defId, stage, vs.players.length);
+  let score = 12 - dv;
+
+  const partnerSusp = partnerId !== null ? getSuspicion(memory, partnerId) : 0;
+  const partnerObs = partnerId !== null ? memory.observations.get(partnerId) : undefined;
+  const partnerInfo = partnerId !== null ? vs.alivePlayers.find(player => player.id === partnerId) : undefined;
+
+  if (vs.myRole === 'thing' && card.defId === 'infected') {
+    if (memory.globalTurnCount < THING_SAFE_TURNS) {
+      score = 4;
+    } else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) {
+      score = 15;
+    } else {
+      score = 10;
+    }
+  }
+
+  if (vs.myRole === 'infected' && card.defId === 'infected') {
+    score = 3;
+  }
+
+  if (vs.myRole === 'infected' && partnerId !== null) {
+    const partnerIsAlly = Boolean(partnerObs?.confirmedInfected);
+
+    if (partnerIsAlly) {
+      if (card.defId === 'axe') {
+        const allyHasDoorProblem = vs.doors.length > 0 && vs.aliveCount <= 5;
+        score = allyHasDoorProblem ? 14 : 8;
+      }
+      if (['swap_places', 'you_better_run'].includes(card.defId)) {
+        score = vs.aliveCount <= 4 ? 12 : 7;
+      }
+      if (card.defId === 'no_barbecue') {
+        score = 16; // Protecting Thing from flamethrower > most offensive plays
+      }
+      if (card.defId === 'anti_analysis') {
+        score = 10;
+      }
+      if (card.defId === 'flamethrower' && vs.aliveCount <= 3) {
+        const partnerAdjacentHuman = partnerInfo && vs.alivePlayers.some(player => {
+          if (player.id === partnerId || player.id === vs.myId) return false;
+          const playerObs = memory.observations.get(player.id);
+          return !playerObs?.confirmedInfected;
+        });
+        if (partnerAdjacentHuman) score = 15;
+      }
+      if (card.defId === 'infected') {
+        const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
+        score = myInfectedCards >= 2 ? 9 : 1;
+      }
+    }
+
+    if (!partnerIsAlly && vs.aliveCount <= 3 && card.defId === 'flamethrower') {
+      score = 0.5;
+    }
+  }
+
+  if (vs.myRole === 'human' && partnerSusp > suspicionThreshold(vs.aliveCount)) {
+    if (['flamethrower', 'analysis', 'no_barbecue'].includes(card.defId)) {
+      score *= 0.2;
+    }
+  }
+
+  if (def.category === 'defense') score *= 0.3;
+  if (['flamethrower', 'analysis', 'persistence'].includes(card.defId)) score *= 0.25;
+
+  return Math.max(0.1, score);
+}
+
+function getFreshSeenCardDefs(memory: BotMemory, playerId: number): string[] {
+  const obs = memory.observations.get(playerId);
+  if (!obs) return [];
+
+  return obs.seenCards
+    .filter(card => obs.lastHandChangeTurn === null || card.turn > obs.lastHandChangeTurn)
+    .map(card => card.defId);
+}
+
+function countCardDefs(defIds: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const defId of defIds) {
+    counts.set(defId, (counts.get(defId) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function getSeenSafeCardEscapeWeight(defId: string, stage: GameStage, playerCount: number): number {
+  if (['infected', 'the_thing'].includes(defId)) return 0;
+
+  const value = dynamicCardValue(defId, stage, playerCount);
+  const keepPressure = clamp(value / 8, 0.1, 1.4);
+
+  return clamp(1.15 - keepPressure, 0.12, 1.05);
+}
+
+function getInfectedPassability(
+  obs: ObservedPlayer,
+  recipientRole: BotVisibleState['myRole'],
+  infectedCount: number,
+  safeSeenCount: number,
+): number {
+  if (infectedCount <= 0) return 0;
+  if (obs.knownRole === 'infected' && recipientRole === 'human') return 0;
+  if (obs.knownRole !== 'infected') return 1;
+  if (infectedCount >= 2) return 1;
+  if (safeSeenCount > 0) return 0.15;
+  return 0.45;
+}
+
+function getBehavioralTradeIntentModifier(
+  vs: BotVisibleState,
+  obs: ObservedPlayer,
+): number {
+  const directAttacks = obs.attackedPlayers.filter(playerId => playerId === vs.myId).length;
+  const directQuarantines = obs.quarantineTargets.filter(playerId => playerId === vs.myId).length;
+  const directFlamethrowers = obs.flamethrowerTargets.filter(playerId => playerId === vs.myId).length;
+  const directProtections = obs.protectedPlayers.filter(playerId => playerId === vs.myId).length;
+  const directFrees = obs.freedTargets.filter(playerId => playerId === vs.myId).length;
+
+  return clamp(
+    directAttacks * 0.9 +
+    directQuarantines * 0.6 +
+    directFlamethrowers * 1.5 -
+    directProtections * 0.45 -
+    directFrees * 0.75,
+    -2,
+    4,
+  );
+}
+
+function buildIncomingTradePolicySnapshot(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  partnerId: number | null,
+  stage: GameStage,
+): IncomingTradePolicySnapshot | null {
+  if (partnerId === null) return null;
+
+  const observation = memory.observations.get(partnerId);
+  if (!observation) return null;
+
+  const freshSeenDefs = getFreshSeenCardDefs(memory, partnerId);
+  const freshSeenCounts = countCardDefs(freshSeenDefs);
+  const totalFreshSeen = [...freshSeenCounts.values()].reduce((sum, count) => sum + count, 0);
+  const thingCount = freshSeenCounts.get('the_thing') ?? 0;
+  const infectedCount = freshSeenCounts.get('infected') ?? 0;
+  const safeSeenCount = Math.max(0, totalFreshSeen - thingCount - infectedCount);
+  const infectedPassability = getInfectedPassability(
+    observation,
+    vs.myRole,
+    infectedCount,
+    safeSeenCount,
+  );
+  const safeEscapeWeight = freshSeenDefs.reduce((sum, defId) => (
+    sum + getSeenSafeCardEscapeWeight(defId, stage, vs.players.length)
+  ), 0);
+  const effectiveInfectedThreat = infectedCount * infectedPassability;
+  const dangerWeight = thingCount * 1.3 + effectiveInfectedThreat;
+  const forcedness = dangerWeight > 0
+    ? clamp(dangerWeight / (dangerWeight + safeEscapeWeight), 0.25, 1)
+    : (totalFreshSeen > 0 ? 0.25 : 1);
+  const behavioralIntentModifier = getBehavioralTradeIntentModifier(vs, observation);
+
+  return {
+    observation,
+    freshSeenDefs,
+    freshSeenCounts,
+    totalFreshSeen,
+    thingCount,
+    infectedCount,
+    safeSeenCount,
+    infectedPassability,
+    safeEscapeWeight,
+    effectiveInfectedThreat,
+    forcedness,
+    behavioralIntentModifier,
+  };
+}
+
+function scoreHumanIncomingTradeRisk(snapshot: IncomingTradePolicySnapshot): number {
+  let risk = 0;
+
+  if (snapshot.observation.knownRole === 'thing') risk += 10;
+  if (snapshot.thingCount > 0) {
+    risk = Math.max(risk, 12 * snapshot.forcedness);
+  }
+  if (snapshot.infectedCount > 0) {
+    risk +=
+      (5 + Math.max(0, snapshot.infectedCount - 1) * 3) *
+      snapshot.forcedness *
+      snapshot.infectedPassability;
+  }
+
+  risk += snapshot.behavioralIntentModifier;
+  return risk;
+}
+
+export function getIncomingTradeRisk(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  partnerId: number | null,
+  stage: GameStage,
+): number {
+  const snapshot = buildIncomingTradePolicySnapshot(vs, memory, partnerId, stage);
+  if (!snapshot) return 0;
+
+  if (vs.myRole === 'human') return scoreHumanIncomingTradeRisk(snapshot);
+
+  return 0;
+}
+
+function getBestTradeFollowUpForPartner(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  partnerId: number | null,
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  if (vs.tradeSkipped || partnerId === null) return 0;
+
+  const remainingTradeCards = vs.tradeableCards.filter(card => card.uid !== excludeCardUid);
+  if (remainingTradeCards.length === 0) return 0;
+
+  const bestOutgoing = remainingTradeCards.reduce((best, card) => (
+    Math.max(best, scoreTradeCardForPartner(vs, memory, card, partnerId, stage))
+  ), 0);
+  const incomingRisk = getIncomingTradeRisk(vs, memory, partnerId, stage);
+
+  return bestOutgoing - incomingRisk;
+}
+
+function getTradeFollowUpForLayout(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  positions: PositionMap,
+  direction: 1 | -1,
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  const partnerId = getTradePartnerIdForState(vs, positions, direction);
+  return getBestTradeFollowUpForPartner(vs, memory, partnerId, stage, excludeCardUid);
+}
+
+function getTradeFollowUpScoreForReversedLayout(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  const positions = getCurrentPositions(vs);
+  const reversedDirection = (vs.direction === 1 ? -1 : 1) as 1 | -1;
+  return getTradeFollowUpForLayout(vs, memory, positions, reversedDirection, stage, excludeCardUid);
+}
+
+function getTradeFollowUpScoreForMovedLayout(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targetId: number,
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  const positions = swapPositionsInMap(getCurrentPositions(vs), vs.myId, targetId);
+  return getTradeFollowUpForLayout(vs, memory, positions, vs.direction, stage, excludeCardUid);
+}
+
+function getReversedTradeFollowUpDelta(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  const positions = getCurrentPositions(vs);
+  const current = getTradeFollowUpForLayout(vs, memory, positions, vs.direction, stage, excludeCardUid);
+  const reversedDirection = (vs.direction === 1 ? -1 : 1) as 1 | -1;
+  const reversed = getTradeFollowUpForLayout(vs, memory, positions, reversedDirection, stage, excludeCardUid);
+  return reversed - current;
+}
+
+function getPostMoveTradeFollowUpDelta(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targetId: number,
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  const currentPositions = getCurrentPositions(vs);
+  const current = getTradeFollowUpForLayout(vs, memory, currentPositions, vs.direction, stage, excludeCardUid);
+  const movedPositions = swapPositionsInMap(currentPositions, vs.myId, targetId);
+  const moved = getTradeFollowUpForLayout(vs, memory, movedPositions, vs.direction, stage, excludeCardUid);
+  return moved - current;
+}
+
+function getBestPostMoveTradeFollowUpDelta(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targets: number[],
+  stage: GameStage,
+  excludeCardUid?: string,
+): number {
+  if (targets.length === 0) return 0;
+  return targets.reduce((best, targetId) => (
+    Math.max(best, getPostMoveTradeFollowUpDelta(vs, memory, targetId, stage, excludeCardUid))
+  ), Number.NEGATIVE_INFINITY);
+}
+
+function getBestPostMovePlanValue(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targets: number[],
+  stage: GameStage,
+  excludeCardUid: string | undefined,
+  partnerDeltaWeight: number,
+  tradeDeltaWeight: number,
+  tradeScoreWeight: number,
+): number {
+  if (targets.length === 0) return 0;
+
+  return targets.reduce((best, targetId) => {
+    const value =
+      getPostMoveTradePartnerDelta(vs, memory, targetId) * partnerDeltaWeight +
+      getPostMoveTradeFollowUpDelta(vs, memory, targetId, stage, excludeCardUid) * tradeDeltaWeight +
+      getTradeFollowUpScoreForMovedLayout(vs, memory, targetId, stage, excludeCardUid) * tradeScoreWeight;
+    return Math.max(best, value);
+  }, Number.NEGATIVE_INFINITY);
+}
+
+function getReversePlanValue(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  stage: GameStage,
+  excludeCardUid: string | undefined,
+  partnerDeltaWeight: number,
+  tradeDeltaWeight: number,
+  tradeScoreWeight: number,
+): number {
+  return (
+    getReversedDirectionTradePartnerDelta(vs, memory) * partnerDeltaWeight +
+    getReversedTradeFollowUpDelta(vs, memory, stage, excludeCardUid) * tradeDeltaWeight +
+    getTradeFollowUpScoreForReversedLayout(vs, memory, stage, excludeCardUid) * tradeScoreWeight
+  );
 }
 
 // ── Play phase ──────────────────────────────────────────────────────────────
 
 function evaluatePlayPhase(vs: BotVisibleState, memory: BotMemory, w: Weights, actions: ScoredAction[], stage: GameStage): void {
   for (const pc of vs.playableCards) {
-    const score = scorePlayCard(vs, memory, pc.defId, pc.targets, w, stage);
+    const score = scorePlayCard(vs, memory, pc.card.uid, pc.defId, pc.targets, w, stage);
     if (score > 0 && pc.targets.length > 0) {
       actions.push({
         action: { type: 'PLAY_CARD', cardUid: pc.card.uid },
@@ -180,14 +683,22 @@ function evaluatePlayPhase(vs: BotVisibleState, memory: BotMemory, w: Weights, a
   }
 }
 
-function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, targets: number[], w: Weights, stage: GameStage): number {
+function scorePlayCard(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  cardUid: string,
+  defId: string,
+  targets: number[],
+  w: Weights,
+  stage: GameStage,
+): number {
   const isEarly = stage === 'early';
   const isLate = stage === 'late';
 
   switch (defId) {
     case 'flamethrower': {
       const hasConfirmed = targets.some(t => memory.observations.get(t)?.confirmedInfected);
-      const hasStrong = targets.some(t => getSuspicion(memory, t) > SUSPICION_THRESHOLD_HIGH);
+      const hasStrong = targets.some(t => getSuspicion(memory, t) > suspicionThreshold(vs.aliveCount));
 
       // Infected endgame: burn the last human!
       if (vs.myRole === 'infected' && vs.aliveCount <= 3) {
@@ -251,7 +762,7 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
 
     case 'quarantine': {
       if (vs.myRole === 'human') {
-        const susTargs = targets.filter(t => t !== vs.myId && getSuspicion(memory, t) > SUSPICION_THRESHOLD_HIGH);
+        const susTargs = targets.filter(t => t !== vs.myId && getSuspicion(memory, t) > suspicionThreshold(vs.aliveCount));
         if (susTargs.length > 0) return (w as any).playQuarantine * 1.8;
         return (w as any).playQuarantine * 0.4;
       }
@@ -268,7 +779,7 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
       let score = (w as any).playLockedDoor;
       // Place door between us and suspicious neighbor
       if (vs.myRole === 'human') {
-        const susNeighbor = vs.myAdjacentIds.find(id => getSuspicion(memory, id) > SUSPICION_THRESHOLD_HIGH);
+        const susNeighbor = vs.myAdjacentIds.find(id => getSuspicion(memory, id) > suspicionThreshold(vs.aliveCount));
         if (susNeighbor !== undefined) score *= 1.5;
       }
       // Thing: place doors to isolate dangerous humans
@@ -340,10 +851,20 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
       }
       // Human: move away from suspicious neighbors
       if (vs.myRole === 'human') {
-        const dangerousNeighbor = vs.myAdjacentIds.find(id => getSuspicion(memory, id) > SUSPICION_THRESHOLD_HIGH);
+        const dangerousNeighbor = vs.myAdjacentIds.find(id => getSuspicion(memory, id) > suspicionThreshold(vs.aliveCount));
         if (dangerousNeighbor !== undefined) score *= 1.5;
       }
-      return score;
+      score += getBestPostMovePlanValue(
+        vs,
+        memory,
+        targets,
+        stage,
+        cardUid,
+        0.8,
+        1.2,
+        0.35,
+      );
+      return Math.max(0.1, score);
     }
 
     case 'you_better_run': {
@@ -361,18 +882,31 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
         if (blocked.length > 0) score *= 2.5;
         else score *= 1.3;
       }
-      return score;
+      score += getBestPostMovePlanValue(
+        vs,
+        memory,
+        targets,
+        stage,
+        cardUid,
+        0.7,
+        1.05,
+        0.3,
+      );
+      return Math.max(0.1, score);
     }
 
     case 'watch_your_back': {
       let score = (w as any).playWatchYourBack;
-      // Check if reversing direction improves our trade partner
-      const currentPartnerSusp = getNextTradeNeighborSuspicion(vs, memory);
-      // If current partner is suspicious and we're human, maybe reverse is good
-      if (vs.myRole === 'human' && currentPartnerSusp > SUSPICION_THRESHOLD_HIGH) score += 2;
-      // Thing: reverse if it puts us next to non-infected human for trade
-      if (vs.myRole === 'thing') score += 1.5;
-      return score;
+      score += getReversePlanValue(
+        vs,
+        memory,
+        stage,
+        cardUid,
+        vs.myRole === 'human' ? 1.05 : 0.8,
+        1.4,
+        0.3,
+      );
+      return Math.max(0.1, score);
     }
 
     case 'whisky': {
@@ -419,7 +953,15 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
 
 // ── Target picking ──────────────────────────────────────────────────────────
 
-function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, cardDefId: string, w: Weights, _stage: GameStage): number {
+function scoreTarget(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targetId: number,
+  cardDefId: string,
+  w: Weights,
+  stage: GameStage,
+  cardUid?: string,
+): number {
   let score = 5;
   const susp = getSuspicion(memory, targetId);
   const targetInfo = vs.alivePlayers.find(p => p.id === targetId);
@@ -439,7 +981,7 @@ function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, c
   // Axe: Human — remove quarantine from self or door blocking suspected player
   if (cardDefId === 'axe' && vs.myRole === 'human') {
     if (targetId === vs.myId) score += (vs.me.inQuarantine ? 8 : -3);
-    if (susp > SUSPICION_THRESHOLD_HIGH) score += 2; // Remove their door to verify
+    if (susp > suspicionThreshold(vs.aliveCount)) score += 2; // Remove their door to verify
   }
 
   // swap_places / you_better_run: Thing — swap toward uninfected human
@@ -452,11 +994,17 @@ function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, c
   if (cardDefId === 'swap_places' && vs.myRole === 'infected' && vs.aliveCount <= 3) {
     if (!targetObs?.confirmedInfected) score += 12;
   }
+
+  if (['swap_places', 'you_better_run'].includes(cardDefId)) {
+    score += getPostMoveTradePartnerDelta(vs, memory, targetId) * (vs.myRole === 'human' ? 2.2 : 1.5);
+    score += getPostMoveTradeFollowUpDelta(vs, memory, targetId, stage, cardUid) * (vs.myRole === 'human' ? 1.8 : 1.3);
+  }
+
   const obs = memory.observations.get(targetId);
 
   if (vs.myRole === 'human') {
     if (obs?.confirmedInfected) score += 10;
-    else if (susp > SUSPICION_THRESHOLD_HIGH) score += susp * (w as any).targetSuspiciousMult;
+    else if (susp > suspicionThreshold(vs.aliveCount)) score += susp * (w as any).targetSuspiciousMult;
     else if (susp < SUSPICION_THRESHOLD_TRUSTED) score -= 3;
 
     // Info cards: prefer unknown targets
@@ -510,7 +1058,7 @@ function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, c
     else score += (w as any).targetHumanMult * 0.8;
 
     // Redirect suspicion: target players already under suspicion to "pile on"
-    if (susp > SUSPICION_THRESHOLD_HIGH && vs.myRole === 'infected') {
+    if (susp > suspicionThreshold(vs.aliveCount) && vs.myRole === 'infected') {
       score += (w as any).redirectSuspicionBonus ?? 2;
     }
   }
@@ -523,102 +1071,185 @@ function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, c
   return Math.max(0.1, score);
 }
 
+function scoreSuspicionPreview(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targetId: number,
+  cardUid: string,
+  _stage: GameStage,
+): number {
+  const obs = memory.observations.get(targetId);
+  const susp = getSuspicion(memory, targetId);
+  const seenEntry = obs?.seenCards
+    .filter(entry => entry.uid === cardUid)
+    .sort((a, b) => b.turn - a.turn)[0];
+
+  let score = 5;
+
+  if (!seenEntry) {
+    score += 6;
+  } else {
+    score -= 2;
+
+    if (['flamethrower', 'analysis', 'axe', 'no_barbecue', 'anti_analysis'].includes(seenEntry.defId)) {
+      score += 1;
+    }
+
+    if (['infected', 'the_thing'].includes(seenEntry.defId)) {
+      score -= 2.5;
+    }
+  }
+
+  if (obs && !obs.confirmedClean && !obs.confirmedInfected) {
+    score += 2;
+  }
+
+  if (obs?.lastHandChangeTurn !== null && obs?.lastHandChangeTurn !== undefined) {
+    score += 1.5;
+  }
+
+  if (vs.myRole === 'human') {
+    score += susp * 4;
+    if (obs?.confirmedInfected) score -= 4;
+  } else {
+    score += Math.max(0, 0.15 - susp) * 2;
+    if (obs?.confirmedInfected) score += 1;
+  }
+
+  return Math.max(0.1, score);
+}
+
+function scorePanicTarget(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targetId: number,
+  panicDefId: string,
+  w: Weights,
+  stage: GameStage,
+): number {
+  const susp = getSuspicion(memory, targetId);
+  const obs = memory.observations.get(targetId);
+  const targetInfo = vs.players.find(player => player.id === targetId);
+
+  switch (panicDefId) {
+    case 'cant_be_friends':
+      return scoreTarget(vs, memory, targetId, 'temptation', w, stage) + 1.5;
+    case 'get_out_of_here':
+      return scoreTarget(vs, memory, targetId, 'swap_places', w, stage) + 1;
+    case 'panic_one_two':
+      return scoreTarget(vs, memory, targetId, 'swap_places', w, stage);
+    case 'panic_between_us': {
+      let score = 5;
+
+      if (vs.myRole === 'human') {
+        if (vs.myInfectedCount === 0) {
+          if (obs?.confirmedInfected) score -= 8;
+          else if (susp < SUSPICION_THRESHOLD_TRUSTED) score += 6;
+          else if (susp > suspicionThreshold(vs.aliveCount)) score -= 4;
+        } else {
+          if (susp > suspicionThreshold(vs.aliveCount)) score += 4;
+          else score -= 2;
+        }
+      } else if (vs.myRole === 'thing') {
+        if (obs?.confirmedInfected) score += 8;
+        else if (susp > suspicionThreshold(vs.aliveCount)) score += 2;
+      } else {
+        if (targetInfo?.canReceiveInfectedCardFromMe) score += 8;
+        else if (obs?.confirmedInfected) score += 6;
+        else if (susp < SUSPICION_THRESHOLD_TRUSTED) score -= 1.5;
+      }
+
+      if (vs.myAdjacentIds.includes(targetId)) score += 1;
+
+      return Math.max(0.1, score);
+    }
+    default: {
+      let score = 5;
+      if (vs.myRole === 'human') score += susp * 2;
+      if (vs.myRole === 'thing') score -= susp;
+      return Math.max(0.1, score);
+    }
+  }
+}
+
+function scoreAxeChoice(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  targetId: number,
+  choice: 'quarantine' | 'door',
+): number {
+  const targetInfo = vs.players.find(player => player.id === targetId);
+  const targetObs = memory.observations.get(targetId);
+  const doorBetween = Boolean(
+    targetInfo && vs.doors.some(door =>
+      (door.between[0] === vs.me.position && door.between[1] === targetInfo.position) ||
+      (door.between[0] === targetInfo.position && door.between[1] === vs.me.position)
+    )
+  );
+  const susp = getSuspicion(memory, targetId);
+
+  let score = 5;
+
+  if (choice === 'quarantine') {
+    if (targetId === vs.myId) {
+      score += vs.me.inQuarantine ? 12 : -6;
+    }
+
+    if (targetInfo?.inQuarantine) {
+      if (vs.myRole === 'human') {
+        if (targetId !== vs.myId && (targetObs?.confirmedInfected || susp > suspicionThreshold(vs.aliveCount))) {
+          score -= 10;
+        } else {
+          score += 5;
+        }
+      } else if (targetObs?.confirmedInfected) {
+        score += 12;
+      } else {
+        score -= 4;
+      }
+    } else {
+      score -= 6;
+    }
+  } else {
+    if (!doorBetween) score -= 8;
+
+    if (doorBetween) {
+      if (vs.myRole === 'human') {
+        if (targetObs?.confirmedInfected || susp > suspicionThreshold(vs.aliveCount)) {
+          score += 6;
+        } else {
+          score += 2;
+        }
+      } else if (!targetObs?.confirmedInfected) {
+        score += 10;
+      } else {
+        score -= 1;
+      }
+    }
+  }
+
+  return Math.max(0.1, score);
+}
+
+function chooseRevelationsAction(vs: BotVisibleState): GameAction {
+  if (vs.myRole === 'human') {
+    if (vs.myInfectedCount === 0) {
+      return { type: 'REVELATIONS_RESPOND', show: true, mode: 'all' };
+    }
+
+    return { type: 'REVELATIONS_RESPOND', show: true, mode: 'infected_only' };
+  }
+
+  return { type: 'REVELATIONS_RESPOND', show: false };
+}
+
 // ── Trade phase ─────────────────────────────────────────────────────────────
 
 function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, _w: Weights, actions: ScoredAction[], stage: GameStage): void {
   if (vs.tradeableCards.length === 0) return;
 
-  const partnerSusp = vs.tradePartnerId ? getSuspicion(memory, vs.tradePartnerId) : 0;
-
   for (const card of vs.tradeableCards) {
-    const def = getCardDef(card.defId);
-    const dv = dynamicCardValue(card.defId, stage, vs.players.length);
-    let score = 12 - dv;
-
-    // Thing: infect through trade!
-    if (vs.myRole === 'thing' && card.defId === 'infected') {
-      // Don't infect too early
-      if (memory.globalTurnCount < THING_SAFE_TURNS) {
-        score = 4; // Hold off
-      } else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) {
-        score = 15; // Go aggressive
-      } else {
-        score = 10; // Normal priority
-      }
-    }
-
-    // Infected trading with Thing
-    if (vs.myRole === 'infected' && card.defId === 'infected') {
-      score = 3;
-    }
-
-    // ── Infected coalition trades ────────────────────────────────────────────
-    if (vs.myRole === 'infected' && vs.tradePartnerId !== null) {
-      const partnerObs = memory.observations.get(vs.tradePartnerId);
-      const partnerIsAlly = partnerObs?.confirmedInfected; // known Thing/Infected
-
-      if (partnerIsAlly) {
-        // Pass axe to ally so they can remove doors blocking infection path
-        if (card.defId === 'axe') {
-          const allyHasDoorProblem = vs.doors.length > 0 && vs.aliveCount <= 5;
-          score = allyHasDoorProblem ? 14 : 8;
-        }
-        // Pass swap_places / you_better_run to ally to help reach humans
-        if (['swap_places', 'you_better_run'].includes(card.defId)) {
-          score = vs.aliveCount <= 4 ? 12 : 7;
-        }
-        // Pass no_barbecue to protect Thing from flamethrower
-        if (card.defId === 'no_barbecue') {
-          score = 13; // Critical coalition support
-        }
-        // Pass anti_analysis to protect ally
-        if (card.defId === 'anti_analysis') {
-          score = 10;
-        }
-        // Pass flamethrower to infected ally who is next to a human
-        if (card.defId === 'flamethrower' && vs.aliveCount <= 3) {
-          const partnerInfo = vs.alivePlayers.find(p => p.id === vs.tradePartnerId);
-          const partnerAdjacentHuman = partnerInfo && vs.alivePlayers.some(p => {
-            if (p.id === vs.tradePartnerId || p.id === vs.myId) return false;
-            const pObs = memory.observations.get(p.id);
-            return !pObs?.confirmedInfected; // human neighbour
-          });
-          if (partnerAdjacentHuman) score = 15; // Give flamethrower to finish the game!
-        }
-        // Pass extra infected card back to Thing if they might need it
-        // (priority lower than no_barbecue=13, but higher than holding it)
-        if (card.defId === 'infected') {
-          const myInfectedCards = vs.myHand.filter(c => c.defId === 'infected').length;
-          if (myInfectedCards >= 2) {
-            // Have a spare — pass one back to Thing so they don't run dry
-            score = 9;
-          } else {
-            // Only one — keep it, might need to trade it to a human
-            score = 1;
-          }
-        }
-      }
-
-      // Endgame: infected knows who the last human is — use flamethrower directly
-      if (!partnerIsAlly && vs.aliveCount <= 3 && card.defId === 'flamethrower') {
-        // Partner is the last human — but we're passing, not playing
-        // Score low so we'd rather PLAY it than pass it
-        score = 0.5;
-      }
-    }
-
-    // Human: avoid giving strong cards to suspicious partners
-    if (vs.myRole === 'human' && partnerSusp > SUSPICION_THRESHOLD_HIGH) {
-      if (['flamethrower', 'analysis', 'no_barbecue'].includes(card.defId)) {
-        score *= 0.2; // Don't give weapons to suspects
-      }
-    }
-
-    // Keep defense cards (but not if ally needs them)
-    if (def.category === 'defense') score *= 0.3;
-
-    // Keep strong action cards
-    if (['flamethrower', 'analysis', 'persistence'].includes(card.defId)) score *= 0.25;
+    const score = scoreTradeCardForPartner(vs, memory, card, vs.tradePartnerId, stage);
 
     actions.push({
       action: { type: 'OFFER_TRADE', cardUid: card.uid },
@@ -637,7 +1268,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
     case 'choose_target': {
       if (vs.currentPlayerId !== vs.myId) break;
       for (const t of pa.targets) {
-        const score = scoreTarget(vs, memory, t, pa.cardDefId, w, stage);
+        const score = scoreTarget(vs, memory, t, pa.cardDefId, w, stage, pa.cardUid);
         actions.push({
           action: { type: 'SELECT_TARGET', targetPlayerId: t },
           score: score + (Math.random() - 0.5) * NOISE_AMPLITUDE,
@@ -650,13 +1281,11 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
     case 'panic_choose_target': {
       if (vs.currentPlayerId !== vs.myId) break;
       for (const t of pa.targets) {
-        let score = 5 + (Math.random() - 0.5) * 2;
-        if (vs.myRole === 'human') score += getSuspicion(memory, t) * 2;
-        if (vs.myRole === 'thing') score -= getSuspicion(memory, t); // Move toward trusted (non-suspected)
+        const score = scorePanicTarget(vs, memory, t, pa.panicDefId, w, stage);
         actions.push({
           action: { type: 'PANIC_SELECT_TARGET', targetPlayerId: t },
           score,
-          reason: `Panic target ${t}`,
+          reason: `Panic target ${t} for ${pa.panicDefId}`,
         });
       }
       break;
@@ -689,7 +1318,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
           // Human: be wary of accepting trades from suspicious players
           if (vs.myRole === 'human') {
             const fromSusp = getSuspicion(memory, pa.fromId);
-            if (fromSusp > SUSPICION_THRESHOLD_HIGH) {
+            if (fromSusp > suspicionThreshold(vs.aliveCount)) {
               // Accepting trade from suspect risks infection — prefer defense
               score *= 0.5;
             }
@@ -728,8 +1357,8 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
         for (const uid of pa.selectableCardUids) {
           actions.push({
             action: { type: 'SUSPICION_PREVIEW_CARD', cardUid: uid },
-            score: 5 + Math.random(),
-            reason: `Preview card`,
+            score: scoreSuspicionPreview(vs, memory, pa.targetPlayerId, uid, stage),
+            reason: `Preview suspicion card ${uid}`,
           });
         }
       } else {
@@ -845,14 +1474,14 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
       if (pa.canRemoveQuarantine) {
         actions.push({
           action: { type: 'AXE_CHOOSE_EFFECT', targetPlayerId: pa.targetPlayerId, choice: 'quarantine' },
-          score: 6,
+          score: scoreAxeChoice(vs, memory, pa.targetPlayerId, 'quarantine'),
           reason: 'Remove quarantine',
         });
       }
       if (pa.canRemoveDoor) {
         actions.push({
           action: { type: 'AXE_CHOOSE_EFFECT', targetPlayerId: pa.targetPlayerId, choice: 'door' },
-          score: 5,
+          score: scoreAxeChoice(vs, memory, pa.targetPlayerId, 'door'),
           reason: 'Remove door',
         });
       }
@@ -862,11 +1491,16 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
     case 'revelations_round': {
       const currentRevealer = pa.revealOrder[pa.currentRevealerIdx];
       if (currentRevealer !== vs.myId) break;
-      const shouldShow = vs.myRole === 'human' && vs.myInfectedCount === 0;
+      const action = chooseRevelationsAction(vs);
       actions.push({
-        action: { type: 'REVELATIONS_RESPOND', show: shouldShow },
+        action,
         score: 10,
-        reason: shouldShow ? 'Show clean hand' : 'Hide hand',
+        reason:
+          action.type === 'REVELATIONS_RESPOND' && action.show
+            ? action.mode === 'infected_only'
+              ? 'Reveal only infection'
+              : 'Show clean hand'
+            : 'Hide hand',
       });
       break;
     }
@@ -1038,7 +1672,7 @@ function scoreDefenseCard(vs: BotVisibleState, memory: BotMemory, defenseDefId: 
     case 'fear': {
       let score = (w as any).defendFear;
       // Human: more valuable when trade partner is suspicious (see their card + block trade)
-      if (vs.myRole === 'human' && fromSusp > SUSPICION_THRESHOLD_HIGH) score *= 1.5;
+      if (vs.myRole === 'human' && fromSusp > suspicionThreshold(vs.aliveCount)) score *= 1.5;
       // Thing: less valuable (we want to accept trades to infect)
       if (vs.myRole === 'thing') score *= 0.5;
       return score;
@@ -1047,7 +1681,7 @@ function scoreDefenseCard(vs: BotVisibleState, memory: BotMemory, defenseDefId: 
     case 'no_thanks': {
       let score = (w as any).defendNoThanks;
       // Human: block trades from suspicious players
-      if (vs.myRole === 'human' && fromSusp > SUSPICION_THRESHOLD_HIGH) score *= 1.5;
+      if (vs.myRole === 'human' && fromSusp > suspicionThreshold(vs.aliveCount)) score *= 1.5;
       if (vs.myRole === 'thing') score *= 0.4;
       return score;
     }
