@@ -189,6 +189,24 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
       const hasConfirmed = targets.some(t => memory.observations.get(t)?.confirmedInfected);
       const hasStrong = targets.some(t => getSuspicion(memory, t) > SUSPICION_THRESHOLD_HIGH);
 
+      // Infected endgame: burn the last human!
+      if (vs.myRole === 'infected' && vs.aliveCount <= 3) {
+        const lastHuman = targets.find(t => {
+          const obs = memory.observations.get(t);
+          return !obs?.confirmedInfected;
+        });
+        if (lastHuman !== undefined) return 18; // Win condition
+      }
+
+      // Thing endgame: if all remaining are infected, use flamethrower on human
+      if (vs.myRole === 'thing' && vs.aliveCount <= 3) {
+        const lastHuman = targets.find(t => {
+          const obs = memory.observations.get(t);
+          return !obs?.confirmedInfected;
+        });
+        if (lastHuman !== undefined) return 16;
+      }
+
       if (hasConfirmed) return (w as any).playFlamethrower + 4;
       if (hasStrong) return (w as any).playFlamethrower * (isLate ? 1.3 : 0.9);
 
@@ -260,14 +278,65 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
       return score;
     }
 
-    case 'axe':
-      return (w as any).playAxe;
+    case 'axe': {
+      let score = (w as any).playAxe;
+      // Thing/Infected: massive bonus to remove door blocking infection path
+      if (vs.myRole === 'thing' || vs.myRole === 'infected') {
+        const blockedHumans = vs.alivePlayers.filter(p => {
+          if (p.id === vs.myId) return false;
+          const obs = memory.observations.get(p.id);
+          if (obs?.confirmedInfected) return false; // already infected
+          // Is there a door blocking us from this human?
+          return vs.doors.some(d =>
+            (d.between[0] === vs.me.position && d.between[1] === p.position) ||
+            (d.between[0] === p.position && d.between[1] === vs.me.position)
+          );
+        });
+        if (blockedHumans.length > 0) {
+          score *= (vs.aliveCount <= 4 ? 4 : 2.5); // Critical in endgame
+        }
+        // Infected: bonus to remove quarantine from confirmed ally
+        const blockedAlly = vs.alivePlayers.find(p => {
+          const obs = memory.observations.get(p.id);
+          return obs?.confirmedInfected && p.inQuarantine;
+        });
+        if (blockedAlly) score *= 2;
+      }
+      // Human: bonus to remove door blocking suspected player for better info
+      if (vs.myRole === 'human' && vs.aliveCount <= 4) {
+        score += 1;
+      }
+      return score;
+    }
 
     case 'swap_places': {
       let score = (w as any).playSwapPlaces;
-      // Thing: move toward infection targets
+      // Thing: high priority if door blocks path to last human
       if (vs.myRole === 'thing') {
-        score *= 1.3;
+        const uninfectedHumans = vs.alivePlayers.filter(p => {
+          if (p.id === vs.myId) return false;
+          const obs = memory.observations.get(p.id);
+          return !obs?.confirmedInfected;
+        });
+        const doorBlocked = uninfectedHumans.some(p =>
+          vs.doors.some(d =>
+            (d.between[0] === vs.me.position && d.between[1] === p.position) ||
+            (d.between[0] === p.position && d.between[1] === vs.me.position)
+          )
+        );
+        if (doorBlocked && vs.aliveCount <= 4) score *= 3; // Escape blockade!
+        else score *= 1.3;
+      }
+      // Infected: swap to get adjacent to last human in endgame
+      if (vs.myRole === 'infected' && vs.aliveCount <= 3) {
+        const confirmedThingId = vs.alivePlayers.find(p => {
+          const obs = memory.observations.get(p.id);
+          return obs?.confirmedInfected && p.id !== vs.myId;
+        })?.id;
+        // If I'm next to Thing, swap to get next to the human instead
+        if (confirmedThingId && vs.myAdjacentIds.includes(confirmedThingId)) {
+          score *= 2;
+        }
       }
       // Human: move away from suspicious neighbors
       if (vs.myRole === 'human') {
@@ -279,7 +348,19 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
 
     case 'you_better_run': {
       let score = (w as any).playYouBetterRun;
-      if (vs.myRole === 'thing') score *= 1.3;
+      if (vs.myRole === 'thing') {
+        // High value if door-blocked from humans
+        const blocked = vs.alivePlayers.filter(p => {
+          if (p.id === vs.myId) return false;
+          const obs = memory.observations.get(p.id);
+          return !obs?.confirmedInfected && vs.doors.some(d =>
+            (d.between[0] === vs.me.position && d.between[1] === p.position) ||
+            (d.between[0] === p.position && d.between[1] === vs.me.position)
+          );
+        });
+        if (blocked.length > 0) score *= 2.5;
+        else score *= 1.3;
+      }
       return score;
     }
 
@@ -301,8 +382,17 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
       return 0.1; // Thing/Infected: never reveal
     }
 
-    case 'persistence':
-      return (w as any).playPersistence;
+    case 'persistence': {
+      let score = (w as any).playPersistence;
+      // Thing/Infected: use persistence to dig for axe/swap when door-blocked
+      if (vs.myRole === 'thing' || vs.myRole === 'infected') {
+        const doorBlocked = vs.aliveCount <= 5 && vs.doors.some(d =>
+          d.between[0] === vs.me.position || d.between[1] === vs.me.position
+        );
+        if (doorBlocked) score *= 2.5; // Dig for axe/swap!
+      }
+      return score;
+    }
 
     case 'temptation': {
       if (vs.myRole === 'thing') {
@@ -332,6 +422,36 @@ function scorePlayCard(vs: BotVisibleState, memory: BotMemory, defId: string, ta
 function scoreTarget(vs: BotVisibleState, memory: BotMemory, targetId: number, cardDefId: string, w: Weights, _stage: GameStage): number {
   let score = 5;
   const susp = getSuspicion(memory, targetId);
+  const targetInfo = vs.alivePlayers.find(p => p.id === targetId);
+  const targetObs = memory.observations.get(targetId);
+
+  // Axe: Thing/Infected — prioritise the target ACROSS THE DOOR blocking infection
+  if (cardDefId === 'axe' && (vs.myRole === 'thing' || vs.myRole === 'infected')) {
+    const doorBetween = vs.doors.some(d =>
+      (d.between[0] === vs.me.position && d.between[1] === targetInfo?.position) ||
+      (d.between[0] === targetInfo?.position && d.between[1] === vs.me.position)
+    );
+    if (doorBetween && !targetObs?.confirmedInfected) score += 15; // Remove door to human!
+    if (doorBetween && targetObs?.confirmedInfected && targetInfo?.inQuarantine) score += 10; // Free ally
+    if (!doorBetween && !targetInfo?.inQuarantine) score -= 4; // No reason to axe here
+  }
+
+  // Axe: Human — remove quarantine from self or door blocking suspected player
+  if (cardDefId === 'axe' && vs.myRole === 'human') {
+    if (targetId === vs.myId) score += (vs.me.inQuarantine ? 8 : -3);
+    if (susp > SUSPICION_THRESHOLD_HIGH) score += 2; // Remove their door to verify
+  }
+
+  // swap_places / you_better_run: Thing — swap toward uninfected human
+  if (['swap_places', 'you_better_run'].includes(cardDefId) && vs.myRole === 'thing') {
+    if (!targetObs?.confirmedInfected) score += 8; // Swap toward human!
+    else score -= 4; // Don't swap with infected ally
+  }
+
+  // swap_places: Infected endgame — swap with human (then use flamethrower)
+  if (cardDefId === 'swap_places' && vs.myRole === 'infected' && vs.aliveCount <= 3) {
+    if (!targetObs?.confirmedInfected) score += 12;
+  }
   const obs = memory.observations.get(targetId);
 
   if (vs.myRole === 'human') {
@@ -432,6 +552,51 @@ function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, _w: Weights,
       score = 3;
     }
 
+    // ── Infected coalition trades ────────────────────────────────────────────
+    if (vs.myRole === 'infected' && vs.tradePartnerId !== null) {
+      const partnerObs = memory.observations.get(vs.tradePartnerId);
+      const partnerIsAlly = partnerObs?.confirmedInfected; // known Thing/Infected
+
+      if (partnerIsAlly) {
+        // Pass axe to ally so they can remove doors blocking infection path
+        if (card.defId === 'axe') {
+          const allyHasDoorProblem = vs.doors.length > 0 && vs.aliveCount <= 5;
+          score = allyHasDoorProblem ? 14 : 8;
+        }
+        // Pass swap_places / you_better_run to ally to help reach humans
+        if (['swap_places', 'you_better_run'].includes(card.defId)) {
+          score = vs.aliveCount <= 4 ? 12 : 7;
+        }
+        // Pass no_barbecue to protect Thing from flamethrower
+        if (card.defId === 'no_barbecue') {
+          score = 13; // Critical coalition support
+        }
+        // Pass anti_analysis to protect ally
+        if (card.defId === 'anti_analysis') {
+          score = 10;
+        }
+        // Pass flamethrower to infected ally who is next to a human
+        if (card.defId === 'flamethrower' && vs.aliveCount <= 3) {
+          const partnerInfo = vs.alivePlayers.find(p => p.id === vs.tradePartnerId);
+          const partnerAdjacentHuman = partnerInfo && vs.alivePlayers.some(p => {
+            if (p.id === vs.tradePartnerId || p.id === vs.myId) return false;
+            const pObs = memory.observations.get(p.id);
+            return !pObs?.confirmedInfected; // human neighbour
+          });
+          if (partnerAdjacentHuman) score = 15; // Give flamethrower to finish the game!
+        }
+        // Don't give infected card to already-infected ally
+        if (card.defId === 'infected') score = 1;
+      }
+
+      // Endgame: infected knows who the last human is — use flamethrower directly
+      if (!partnerIsAlly && vs.aliveCount <= 3 && card.defId === 'flamethrower') {
+        // Partner is the last human — but we're passing, not playing
+        // Score low so we'd rather PLAY it than pass it
+        score = 0.5;
+      }
+    }
+
     // Human: avoid giving strong cards to suspicious partners
     if (vs.myRole === 'human' && partnerSusp > SUSPICION_THRESHOLD_HIGH) {
       if (['flamethrower', 'analysis', 'no_barbecue'].includes(card.defId)) {
@@ -439,7 +604,7 @@ function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, _w: Weights,
       }
     }
 
-    // Keep defense cards
+    // Keep defense cards (but not if ally needs them)
     if (def.category === 'defense') score *= 0.3;
 
     // Keep strong action cards
