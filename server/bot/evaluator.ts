@@ -7,7 +7,7 @@
 import type { GameAction, PendingAction } from '../../src/types.ts';
 import { getCardDef } from '../../src/cards.ts';
 import type { BotVisibleState } from './visibleState.ts';
-import type { BotMemory } from './memory.ts';
+import type { BotMemory, BotIntent } from './memory.ts';
 import { getSuspicion, getGameProgress, getAllianceScore } from './memory.ts';
 import {
   HUMAN_WEIGHTS,
@@ -16,7 +16,6 @@ import {
   NOISE_AMPLITUDE,
   BEST_ACTION_PROB,
   CARD_VALUES,
-  suspicionThreshold(vs.aliveCount),
   SUSPICION_THRESHOLD_TRUSTED,
   STAGE,
   THING_SAFE_TURNS,
@@ -32,6 +31,113 @@ function suspicionThreshold(aliveCount: number): number {
   if (aliveCount <= 3) return 0.20;
   if (aliveCount <= 5) return 0.35;
   return 0.45;
+}
+
+// ── Intent planning helpers ──────────────────────────────────────────────────
+const INTENT_MAX_AGE = 2; // Expire intents older than 2 turns
+
+/** Cards worth creating an intent for when drawn */
+const INTENT_WORTHY_CARDS: Record<string, string> = {
+  axe: 'Break a door or free ally next turn',
+  flamethrower: 'Burn suspected enemy next turn',
+  swap_places: 'Swap with target next turn',
+  you_better_run: 'Force move target next turn',
+  analysis: 'Analyze suspicious player next turn',
+  suspicion: 'Inspect suspicious player next turn',
+};
+
+function isIntentStale(intent: BotIntent, currentTurn: number): boolean {
+  return currentTurn - intent.createdOnTurn > INTENT_MAX_AGE;
+}
+
+function expireStaleIntent(memory: BotMemory): void {
+  if (memory.intent && isIntentStale(memory.intent, memory.currentTurn)) {
+    memory.intent = null;
+  }
+}
+
+/** Score boost when a playable card matches the stored intent */
+function intentBoost(memory: BotMemory, defId: string): number {
+  if (!memory.intent) return 0;
+  if (memory.intent.playCardDefId === defId) return 4;
+  return 0;
+}
+
+/** After evaluating play phase, create an intent for next turn if hand has key cards */
+function maybeCreateIntent(
+  vs: BotVisibleState,
+  memory: BotMemory,
+  stage: GameStage,
+): void {
+  // Only create intent during play_or_discard — bot just drew and is choosing what to play
+  // If bot plays the card now, no intent needed; intent is for cards held for next turn
+  const heldDefIds = vs.myHand.map(c => c.defId);
+
+  // Find the highest-priority intent-worthy card in hand that we're NOT playing this turn
+  let bestCard: string | null = null;
+  let bestPriority = -1;
+  const priorities: Record<string, number> = {
+    flamethrower: 5, axe: 4, swap_places: 3, you_better_run: 3,
+    analysis: 2, suspicion: 1,
+  };
+
+  for (const defId of heldDefIds) {
+    if (defId in INTENT_WORTHY_CARDS && (priorities[defId] ?? 0) > bestPriority) {
+      bestCard = defId;
+      bestPriority = priorities[defId] ?? 0;
+    }
+  }
+
+  if (bestCard) {
+    // Find best target for the intent
+    let bestTarget: number | undefined;
+    if (['flamethrower', 'analysis', 'suspicion'].includes(bestCard)) {
+      // Target the most suspicious alive player, or confirmed enemy
+      let highestSusp = -1;
+      for (const p of vs.alivePlayers) {
+        if (p.id === vs.myId) continue;
+        const obs = memory.observations.get(p.id);
+        // Confirmed infected gets highest priority
+        const effectiveSusp = obs?.confirmedInfected ? 10 : getSuspicion(memory, p.id);
+        if (effectiveSusp > highestSusp) { highestSusp = effectiveSusp; bestTarget = p.id; }
+      }
+    } else if (bestCard === 'axe') {
+      // Target a door or quarantined ally
+      const door = vs.doors.find(d =>
+        d.between[0] === vs.me.position || d.between[1] === vs.me.position
+      );
+      if (door) {
+        const otherPos = door.between[0] === vs.me.position ? door.between[1] : door.between[0];
+        const otherPlayer = vs.alivePlayers.find(p => p.position === otherPos);
+        if (otherPlayer) bestTarget = otherPlayer.id;
+      }
+    }
+
+    memory.intent = {
+      playCardDefId: bestCard,
+      targetPlayerId: bestTarget,
+      createdOnTurn: memory.currentTurn,
+      reason: INTENT_WORTHY_CARDS[bestCard],
+    };
+    return;
+  }
+
+  // No intent-worthy card in hand — but if we know an enemy, set "hunt" intent
+  // This motivates the bot to draw cards and look for flamethrower
+  if (vs.myRole === 'human') {
+    const confirmedEnemy = vs.alivePlayers.find(p => {
+      if (p.id === vs.myId) return false;
+      return memory.observations.get(p.id)?.confirmedInfected;
+    });
+    if (confirmedEnemy) {
+      memory.intent = {
+        playCardDefId: 'flamethrower', // "I want a flamethrower"
+        targetPlayerId: confirmedEnemy.id,
+        createdOnTurn: memory.currentTurn,
+        reason: 'Hunt: find flamethrower to burn confirmed enemy',
+      };
+    }
+  }
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -353,9 +459,29 @@ function scoreTradeCardForPartner(
     }
   }
 
-  if (vs.myRole === 'human' && partnerSusp > suspicionThreshold(vs.aliveCount)) {
+  // Human trading with confirmed enemy: never give them weapons/defense
+  if (vs.myRole === 'human' && partnerObs?.confirmedInfected) {
+    if (['flamethrower', 'analysis', 'no_barbecue', 'axe'].includes(card.defId)) {
+      score *= 0.05; // Almost never trade these to known enemy
+    }
+  } else if (vs.myRole === 'human' && partnerSusp > suspicionThreshold(vs.aliveCount)) {
     if (['flamethrower', 'analysis', 'no_barbecue'].includes(card.defId)) {
       score *= 0.2;
+    }
+  }
+
+  // Card-style profiling: avoid giving strong cards to dangerous partners
+  if (vs.myRole === 'human' && partnerId !== null) {
+    const partnerThreat = playerThreatFromHand(memory, partnerId);
+    if (partnerThreat >= 3 && ['no_barbecue', 'no_thanks'].includes(card.defId)) {
+      score *= 0.15; // Don't arm a dangerous/suspicious player with defense
+    }
+  }
+
+  // Thing: lower infection trade score if partner likely has flamethrower (risky target)
+  if (vs.myRole === 'thing' && card.defId === 'infected' && partnerId !== null) {
+    if (playerLikelyHasCard(memory, partnerId, 'flamethrower')) {
+      score *= 0.4; // They might burn us if we infect them
     }
   }
 
@@ -372,6 +498,40 @@ function getFreshSeenCardDefs(memory: BotMemory, playerId: number): string[] {
   return obs.seenCards
     .filter(card => obs.lastHandChangeTurn === null || card.turn > obs.lastHandChangeTurn)
     .map(card => card.defId);
+}
+
+// ── Card-style profiling ────────────────────────────────────────────────────
+// Check if a player likely has a specific card based on recent observations.
+// Returns true if the card was seen in their hand and no hand change since.
+function playerLikelyHasCard(memory: BotMemory, playerId: number, defId: string): boolean {
+  const fresh = getFreshSeenCardDefs(memory, playerId);
+  return fresh.includes(defId);
+}
+
+// Check if a player likely has ANY defense card that blocks a specific attack.
+function playerLikelyHasDefenseAgainst(memory: BotMemory, playerId: number, attackDefId: string): boolean {
+  const fresh = getFreshSeenCardDefs(memory, playerId);
+  switch (attackDefId) {
+    case 'flamethrower': return fresh.includes('no_barbecue');
+    case 'analysis': return fresh.includes('anti_analysis');
+    case 'swap_places':
+    case 'you_better_run': return fresh.includes('im_fine_here');
+    default: return fresh.includes('no_thanks') || fresh.includes('fear');
+  }
+}
+
+// Score how threatening a player's known hand is (higher = more dangerous)
+function playerThreatFromHand(memory: BotMemory, playerId: number): number {
+  const fresh = getFreshSeenCardDefs(memory, playerId);
+  let threat = 0;
+  for (const defId of fresh) {
+    if (defId === 'flamethrower') threat += 4;
+    else if (defId === 'analysis') threat += 2;
+    else if (defId === 'suspicion') threat += 1.5;
+    else if (defId === 'axe') threat += 1;
+    else if (defId === 'no_barbecue') threat += 0.5;
+  }
+  return threat;
 }
 
 function countCardDefs(defIds: string[]): Map<string, number> {
@@ -643,22 +803,39 @@ function getReversePlanValue(
 // ── Play phase ──────────────────────────────────────────────────────────────
 
 function evaluatePlayPhase(vs: BotVisibleState, memory: BotMemory, w: Weights, actions: ScoredAction[], stage: GameStage): void {
+  // Expire stale intents
+  expireStaleIntent(memory);
+
   for (const pc of vs.playableCards) {
-    const score = scorePlayCard(vs, memory, pc.card.uid, pc.defId, pc.targets, w, stage);
+    let score = scorePlayCard(vs, memory, pc.card.uid, pc.defId, pc.targets, w, stage);
+
+    // Intent boost: if this card matches what bot planned last turn, boost it
+    const boost = intentBoost(memory, pc.defId);
+    if (boost > 0) {
+      score += boost;
+      // Extra boost if target also matches the intent
+      if (memory.intent?.targetPlayerId !== undefined && pc.targets.includes(memory.intent.targetPlayerId)) {
+        score += 2;
+      }
+    }
+
     if (score > 0 && pc.targets.length > 0) {
       actions.push({
         action: { type: 'PLAY_CARD', cardUid: pc.card.uid },
         score,
-        reason: `Play ${pc.defId}`,
+        reason: boost > 0 ? `Play ${pc.defId} (planned)` : `Play ${pc.defId}`,
       });
     } else if (score > 0 && pc.targets.length === 0) {
       actions.push({
         action: { type: 'PLAY_CARD', cardUid: pc.card.uid },
         score,
-        reason: `Play ${pc.defId}`,
+        reason: boost > 0 ? `Play ${pc.defId} (planned)` : `Play ${pc.defId}`,
       });
     }
   }
+
+  // Clear intent after play evaluation — it was either used or is no longer relevant
+  if (memory.intent) memory.intent = null;
 
   for (const dc of vs.discardableCards) {
     const def = getCardDef(dc.defId);
@@ -681,6 +858,9 @@ function evaluatePlayPhase(vs: BotVisibleState, memory: BotMemory, w: Weights, a
       reason: `Discard ${dc.defId}`,
     });
   }
+
+  // After scoring, create intent for next turn based on cards still in hand
+  maybeCreateIntent(vs, memory, stage);
 }
 
 function scorePlayCard(
@@ -718,7 +898,16 @@ function scorePlayCard(
         if (lastHuman !== undefined) return 16;
       }
 
-      if (hasConfirmed) return (w as any).playFlamethrower + 4;
+      if (hasConfirmed) {
+        // Even if target has no_barbecue — burn anyway to force them to spend the defense!
+        // After they waste it, next flamethrower will kill. This is the optimal human strategy.
+        const confirmedTargets = targets.filter(t => memory.observations.get(t)?.confirmedInfected);
+        const someDefended = confirmedTargets.some(t => playerLikelyHasDefenseAgainst(memory, t, 'flamethrower'));
+        // Slightly lower score if defended (we know it'll be blocked), but still high — burning defense is valuable
+        return someDefended
+          ? (w as any).playFlamethrower + 2  // Force out no_barbecue
+          : (w as any).playFlamethrower + 4; // Clean kill
+      }
       if (hasStrong) return (w as any).playFlamethrower * (isLate ? 1.3 : 0.9);
 
       // Thing/Infected: consider bluffing — burn a "burned" infected ally to look innocent
@@ -849,10 +1038,13 @@ function scorePlayCard(
           score *= 2;
         }
       }
-      // Human: move away from suspicious neighbors
+      // Human: move away from suspicious/confirmed enemies
       if (vs.myRole === 'human') {
         const dangerousNeighbor = vs.myAdjacentIds.find(id => getSuspicion(memory, id) > suspicionThreshold(vs.aliveCount));
         if (dangerousNeighbor !== undefined) score *= 1.5;
+        // If adjacent to confirmed enemy, strongly prefer swapping away to avoid forced trade
+        const confirmedEnemyAdjacent = vs.myAdjacentIds.find(id => memory.observations.get(id)?.confirmedInfected);
+        if (confirmedEnemyAdjacent !== undefined) score *= 2.5;
       }
       score += getBestPostMovePlanValue(
         vs,
@@ -869,6 +1061,11 @@ function scorePlayCard(
 
     case 'you_better_run': {
       let score = (w as any).playYouBetterRun;
+      // Human: push confirmed enemy away to avoid trade / buy time to find flamethrower
+      if (vs.myRole === 'human') {
+        const confirmedEnemyTarget = targets.find(id => memory.observations.get(id)?.confirmedInfected);
+        if (confirmedEnemyTarget !== undefined) score *= 2.5;
+      }
       if (vs.myRole === 'thing') {
         // High value if door-blocked from humans
         const blocked = vs.alivePlayers.filter(p => {
@@ -967,6 +1164,11 @@ function scoreTarget(
   const targetInfo = vs.alivePlayers.find(p => p.id === targetId);
   const targetObs = memory.observations.get(targetId);
 
+  // Intent target bonus: if bot planned to target this player, boost
+  if (memory.intent?.targetPlayerId === targetId && memory.intent?.playCardDefId === cardDefId) {
+    score += 3;
+  }
+
   // Axe: Thing/Infected — prioritise the target ACROSS THE DOOR blocking infection
   if (cardDefId === 'axe' && (vs.myRole === 'thing' || vs.myRole === 'infected')) {
     const doorBetween = vs.doors.some(d =>
@@ -982,6 +1184,33 @@ function scoreTarget(
   if (cardDefId === 'axe' && vs.myRole === 'human') {
     if (targetId === vs.myId) score += (vs.me.inQuarantine ? 8 : -3);
     if (susp > suspicionThreshold(vs.aliveCount)) score += 2; // Remove their door to verify
+  }
+
+  // ── Card-style profiling adjustments ──────────────────────────────────
+  // Flamethrower: penalise target if we saw no_barbecue in their hand
+  if (cardDefId === 'flamethrower' && playerLikelyHasDefenseAgainst(memory, targetId, 'flamethrower')) {
+    score -= 8; // Likely wasted — they'll block it
+  }
+  // Analysis: penalise if they have anti_analysis
+  if (cardDefId === 'analysis' && playerLikelyHasDefenseAgainst(memory, targetId, 'analysis')) {
+    score -= 6;
+  }
+  // Swap: penalise if they have im_fine_here
+  if (['swap_places', 'you_better_run'].includes(cardDefId) && playerLikelyHasDefenseAgainst(memory, targetId, cardDefId)) {
+    score -= 5;
+  }
+
+  // Thing/Infected: avoid players with flamethrower in hand (they're dangerous)
+  if ((vs.myRole === 'thing' || vs.myRole === 'infected') && playerLikelyHasCard(memory, targetId, 'flamethrower')) {
+    if (cardDefId === 'swap_places' || cardDefId === 'you_better_run') {
+      score -= 4; // Don't swap next to someone with flamethrower
+    }
+  }
+
+  // Human: prioritise attacking players who hold threatening cards
+  if (vs.myRole === 'human' && cardDefId === 'flamethrower') {
+    const threat = playerThreatFromHand(memory, targetId);
+    if (threat >= 3 && susp > 0.15) score += 3; // Dangerous suspected enemy
   }
 
   // swap_places / you_better_run: Thing — swap toward uninfected human

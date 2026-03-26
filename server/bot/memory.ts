@@ -15,9 +15,13 @@ import {
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface PlayerObservation {
-  seenCards: { defId: string; turn: number }[];
+  seenCards: { uid?: string; defId: string; turn: number }[];
   confirmedClean: boolean;
   confirmedInfected: boolean;
+  knownRole: 'human' | 'thing' | 'infected' | null;
+  lastFullHandInfectionFreeTurn: number | null;
+  lastHandChangeTurn: number | null;
+  seenInfectionCardTurns: number[];
   exchangeCount: number;
   exchangePartners: number[];
   refusedTradeCount: number;
@@ -43,6 +47,18 @@ export interface InteractionEdge {
   turn: number;
 }
 
+/** Intent for next turn — bot remembers what it planned to do */
+export interface BotIntent {
+  /** Card defId the bot wants to play next turn (e.g. 'axe' after drawing it) */
+  playCardDefId?: string;
+  /** Target player for the intended card */
+  targetPlayerId?: number;
+  /** Turn when the intent was created */
+  createdOnTurn: number;
+  /** Short reason for logging/debugging */
+  reason: string;
+}
+
 export interface BotMemory {
   botPlayerId: number;
   suspicion: Map<number, number>;
@@ -57,6 +73,8 @@ export interface BotMemory {
   globalTurnCount: number;
   /** Total players at game start */
   totalPlayers: number;
+  /** Intent for the next turn — what the bot plans to do */
+  intent: BotIntent | null;
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -66,6 +84,10 @@ function emptyObs(): PlayerObservation {
     seenCards: [],
     confirmedClean: false,
     confirmedInfected: false,
+    knownRole: null,
+    lastFullHandInfectionFreeTurn: null,
+    lastHandChangeTurn: null,
+    seenInfectionCardTurns: [],
     exchangeCount: 0,
     exchangePartners: [],
     refusedTradeCount: 0,
@@ -101,6 +123,7 @@ export function createBotMemory(botPlayerId: number, playerIds: number[]): BotMe
     currentTurn: 0,
     globalTurnCount: 0,
     totalPlayers: playerIds.length,
+    intent: null,
   };
 }
 
@@ -127,6 +150,33 @@ function getObs(memory: BotMemory, playerId: number): PlayerObservation {
     memory.observations.set(playerId, obs);
   }
   return obs;
+}
+
+function refreshCertainty(obs: PlayerObservation): void {
+  obs.confirmedInfected = obs.knownRole === 'thing' || obs.knownRole === 'infected';
+
+  const cleanKnowledgeIsFresh =
+    obs.lastFullHandInfectionFreeTurn !== null &&
+    (obs.lastHandChangeTurn === null || obs.lastFullHandInfectionFreeTurn > obs.lastHandChangeTurn);
+
+  obs.confirmedClean = !obs.confirmedInfected && cleanKnowledgeIsFresh;
+}
+
+function markHandChanged(memory: BotMemory, playerId: number, turn: number): void {
+  const obs = getObs(memory, playerId);
+  obs.lastHandChangeTurn = turn;
+  refreshCertainty(obs);
+}
+
+export function setKnownRole(
+  memory: BotMemory,
+  playerId: number,
+  role: 'human' | 'thing' | 'infected',
+): void {
+  if (playerId === memory.botPlayerId) return;
+  const obs = getObs(memory, playerId);
+  obs.knownRole = role;
+  refreshCertainty(obs);
 }
 
 function addInteraction(memory: BotMemory, edge: InteractionEdge): void {
@@ -246,14 +296,14 @@ export function updateMemoryFromLog(memory: BotMemory, game: GameState): void {
 }
 
 function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): void {
-  const text = entry.text;
   const textEn = entry.text ?? '';
+  const textRu = entry.textRu ?? '';
   const from = entry.fromPlayerId;
   const target = entry.targetPlayerId;
   const turn = memory.globalTurnCount;
 
   // --- Flamethrower ---
-  if (textEn.includes('played Flamethrower') || text.includes('Огнемёт')) {
+  if (textEn.includes('played Flamethrower') || textRu.includes('Огнемёт')) {
     if (from !== undefined) {
       const obs = getObs(memory, from);
       if (target !== undefined) {
@@ -266,7 +316,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Necronomicon ---
-  if (textEn.includes('Necronomicon') || text.includes('Некрономикон')) {
+  if (textEn.includes('Necronomicon') || textRu.includes('Некрономикон')) {
     if (from !== undefined && target !== undefined) {
       const obs = getObs(memory, from);
       obs.attackedPlayers.push(target);
@@ -276,21 +326,21 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Analysis ---
-  if (textEn.includes('played Analysis') || text.includes('Анализ')) {
+  if (textEn.includes('played Analysis') || textRu.includes('Анализ')) {
     if (from !== undefined) {
       adjustSuspicion(memory, from, SUSPICION_DELTAS.analyzedSomeone);
     }
   }
 
   // --- Suspicion card ---
-  if (textEn.includes('played Suspicion') || text.includes('Подозрение')) {
+  if (textEn.includes('played Suspicion') || textRu.includes('Подозрение')) {
     if (from !== undefined) {
       adjustSuspicion(memory, from, SUSPICION_DELTAS.analyzedSomeone * 0.5);
     }
   }
 
   // --- Quarantine ---
-  if (textEn.includes('placed in quarantine') || text.includes('карантин')) {
+  if (textEn.includes('placed in quarantine') || textRu.includes('карантин')) {
     if (from !== undefined && target !== undefined) {
       const obs = getObs(memory, from);
       obs.quarantineTargets.push(target);
@@ -301,7 +351,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
 
   // --- Axe removing quarantine ---
   if ((textEn.includes('freed') && textEn.includes('quarantine')) ||
-      (text.includes('освобожд') && text.includes('карантин'))) {
+      (textRu.includes('освобожд') && textRu.includes('карантин'))) {
     if (from !== undefined && target !== undefined) {
       const obs = getObs(memory, from);
       obs.freedTargets.push(target);
@@ -312,14 +362,14 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Locked door placed ---
-  if (textEn.includes('locked door') || text.includes('Заколоченная дверь')) {
+  if (textEn.includes('locked door') || textRu.includes('Заколоченная дверь')) {
     if (from !== undefined) {
       adjustSuspicion(memory, from, SUSPICION_DELTAS.placedDoorDefensively);
     }
   }
 
   // --- Position swap ---
-  if (textEn.includes('swapped places') || text.includes('меняется местами') || text.includes('поменялся')) {
+  if (textEn.includes('swapped places') || textRu.includes('меняется местами') || textRu.includes('поменялся')) {
     if (from !== undefined) {
       const obs = getObs(memory, from);
       obs.positionChanges++;
@@ -331,7 +381,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Direction reversal ---
-  if (textEn.includes('Watch Your Back') || text.includes('Оглянись')) {
+  if (textEn.includes('Watch Your Back') || textRu.includes('Оглянись')) {
     // Reversing direction can be strategic — slight suspicion if it benefits them
     if (from !== undefined) {
       adjustSuspicion(memory, from, SUSPICION_DELTAS.swappedTowardSuspect * 0.3);
@@ -339,7 +389,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Defense: no_barbecue ---
-  if (textEn.includes('No barbecue') || text.includes('Никакого шашлыка')) {
+  if (textEn.includes('No barbecue') || textRu.includes('Никакого шашлыка')) {
     if (target !== undefined) {
       adjustSuspicion(memory, target, SUSPICION_DELTAS.survivedFlamethrower);
     }
@@ -347,7 +397,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
 
   // --- Defense: anti_analysis ---
   if (textEn.includes('blocked analysis') || textEn.includes('Anti-Analysis') ||
-      text.includes('Антианализ') || text.includes('заблокировал анализ')) {
+      textRu.includes('Антианализ') || textRu.includes('заблокировал анализ')) {
     if (target !== undefined || from !== undefined) {
       const blocker = target ?? from;
       if (blocker !== undefined) {
@@ -359,7 +409,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
 
   // --- Defense: trade refusal (fear/no_thanks/miss) ---
   if (textEn.includes('played Fear') || textEn.includes('played No thanks') || textEn.includes('played Miss') ||
-      text.includes('Страх') || text.includes('Нет уж, спасибо') || text.includes('Мимо')) {
+      textRu.includes('Страх') || textRu.includes('Нет уж, спасибо') || textRu.includes('Мимо')) {
     if (from !== undefined || target !== undefined) {
       const refuser = target ?? from;
       if (refuser !== undefined) {
@@ -371,10 +421,17 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Exchange happened ---
-  if (textEn.includes('exchanged cards') || text.includes('обменял')) {
+  if (
+    textEn.includes('exchanged cards') ||
+    textEn.includes('traded due to Just Between Us') ||
+    textRu.includes('обменял') ||
+    textRu.includes('обменялись')
+  ) {
     if (from !== undefined && target !== undefined) {
       const obsFrom = getObs(memory, from);
       const obsTarget = getObs(memory, target);
+      markHandChanged(memory, from, turn);
+      markHandChanged(memory, target, turn);
       obsFrom.exchangeCount++;
       obsTarget.exchangeCount++;
       if (!obsFrom.exchangePartners.includes(target)) obsFrom.exchangePartners.push(target);
@@ -396,8 +453,23 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
     }
   }
 
+  // --- Visible hand changes invalidate stale certainty ---
+  if (
+    from !== undefined &&
+    (
+      textEn.includes('drew a card') ||
+      textEn.includes('drew new cards') ||
+      textEn.includes('swapped a card with the deck') ||
+      textRu.includes('взял(а) карту') ||
+      textRu.includes('взял(а) новые карты') ||
+      textRu.includes('обменял(а) карту с колодой')
+    )
+  ) {
+    markHandChanged(memory, from, turn);
+  }
+
   // --- Player eliminated ---
-  if (textEn.includes('eliminated') || text.includes('выбыва') || text.includes('устранён')) {
+  if (textEn.includes('eliminated') || textRu.includes('выбыва') || textRu.includes('устранён')) {
     // Remove eliminated player from active suspicion tracking
     if (target !== undefined) {
       memory.suspicion.delete(target);
@@ -405,7 +477,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Public hand reveal (whisky/panic) ---
-  if (textEn.includes('shows their hand') || text.includes('показывает свою руку') || text.includes('показал')) {
+  if (textEn.includes('shows their hand') || textRu.includes('показывает свою руку') || textRu.includes('показал')) {
     if (from !== undefined) {
       const obs = getObs(memory, from);
       obs.publicReveals.push({ turn, hadInfection: false }); // Updated when we see cards
@@ -413,7 +485,7 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Revelations: declined ---
-  if (textEn.includes('declined to show') || text.includes('отказался показ') || text.includes('не показал')) {
+  if (textEn.includes('declined to show') || textRu.includes('отказался показ') || textRu.includes('не показал')) {
     if (from !== undefined) {
       adjustSuspicion(memory, from, SUSPICION_DELTAS.declinedReveal);
       const obs = getObs(memory, from);
@@ -422,10 +494,10 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
   }
 
   // --- Revelations: showed clean ---
-  if (textEn.includes('showed their hand') || text.includes('показал свою руку')) {
+  if (textEn.includes('showed their hand') || textRu.includes('показал свою руку')) {
     if (from !== undefined) {
       // If the log doesn't mention infection, assume clean
-      if (!textEn.includes('infected') && !text.includes('заражён')) {
+      if (!textEn.includes('infected') && !textRu.includes('заражён')) {
         adjustSuspicion(memory, from, SUSPICION_DELTAS.acceptedRevealClean);
       }
     }
@@ -443,29 +515,35 @@ export function recordSeenCards(
 ): void {
   const obs = getObs(memory, playerId);
   for (const c of cards) {
-    obs.seenCards.push({ defId: c.defId, turn });
+    obs.seenCards.push({ uid: 'uid' in c ? c.uid : undefined, defId: c.defId, turn });
   }
 
-  const hasInfection = cards.some(c => c.defId === 'infected' || c.defId === 'the_thing');
+  const hasThingCard = cards.some(c => c.defId === 'the_thing');
+  const hasInfectionCard = cards.some(c => c.defId === 'infected');
+
+  if (hasThingCard) {
+    obs.knownRole = 'thing';
+  }
+
+  if (hasInfectionCard) {
+    obs.seenInfectionCardTurns.push(turn);
+    adjustSuspicion(memory, playerId, SUSPICION_DELTAS.revealedInfected);
+  }
 
   if (isFullHand) {
-    if (hasInfection) {
-      obs.confirmedInfected = true;
-      obs.confirmedClean = false;
-      adjustSuspicion(memory, playerId, SUSPICION_DELTAS.revealedInfected);
-      // Propagate infection chain
-      propagateInfectionChain(memory, playerId);
-    } else {
-      obs.confirmedClean = true;
-      obs.confirmedInfected = false;
+    if (!hasThingCard && !hasInfectionCard) {
+      obs.lastFullHandInfectionFreeTurn = turn;
       adjustSuspicion(memory, playerId, SUSPICION_DELTAS.revealedClean);
+    } else {
+      // We saw a full hand, but future deductions must not treat this as permanent cleanliness.
+      obs.lastFullHandInfectionFreeTurn = null;
     }
-  } else {
-    if (hasInfection) {
-      obs.confirmedInfected = true;
-      adjustSuspicion(memory, playerId, SUSPICION_DELTAS.revealedInfected);
-      propagateInfectionChain(memory, playerId);
-    }
+  }
+
+  refreshCertainty(obs);
+
+  if (obs.confirmedInfected) {
+    propagateInfectionChain(memory, playerId);
   }
 }
 

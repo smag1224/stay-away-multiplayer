@@ -18,6 +18,10 @@ export interface PublicPlayerInfo {
   inQuarantine: boolean;
   quarantineTurnsLeft: number;
   handCount: number;
+  /** True when this player is a legal infection target from my perspective */
+  canReceiveInfectedCardFromMe: boolean;
+  /** True when this player is known to be infected from my perspective */
+  isKnownInfectedToMe: boolean;
   /** Only set for the bot's own player */
   hand?: CardInstance[];
   /** Only set for the bot's own player */
@@ -114,6 +118,16 @@ export function buildVisibleState(game: GameState, botPlayerId: number): BotVisi
     inQuarantine: p.inQuarantine,
     quarantineTurnsLeft: p.quarantineTurnsLeft,
     handCount: p.hand.length,
+    canReceiveInfectedCardFromMe:
+      p.id !== botPlayerId &&
+      (
+        bot.role === 'thing' ||
+        (bot.role === 'infected' && p.role === 'thing')
+      ),
+    isKnownInfectedToMe:
+      p.id !== botPlayerId &&
+      bot.role === 'thing' &&
+      p.role === 'infected',
     ...(p.id === botPlayerId ? { hand: p.hand, role: p.role } : {}),
   }));
 

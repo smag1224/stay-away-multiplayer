@@ -138,6 +138,7 @@ export function applyPanicEffect(s: GameState, card: CardInstance): void {
           if (drawn) cur.hand.push(drawn);
         }
         log(s, `${cur.name} drew new cards (Forgetful).`, `${cur.name} взял(а) новые карты (Забывчивость).`);
+        s.log[0].fromPlayerId = cur.id;
       } else {
         s.pendingAction = { type: 'forgetful_discard', remaining: toDiscard };
       }

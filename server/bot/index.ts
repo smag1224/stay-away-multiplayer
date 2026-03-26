@@ -16,7 +16,7 @@
 
 import type { GameAction, GameState } from '../../src/types.ts';
 import { buildVisibleState } from './visibleState.ts';
-import { createBotMemory, updateMemoryFromLog, recordSeenCards, type BotMemory } from './memory.ts';
+import { createBotMemory, updateMemoryFromLog, recordSeenCards, setKnownRole, type BotMemory } from './memory.ts';
 import { evaluateActions, selectAction } from './evaluator.ts';
 
 // ── Per-bot persistent memory ───────────────────────────────────────────────
@@ -57,14 +57,17 @@ export function decideBotAction(game: GameState, botPlayerId: number, roomCode: 
   const memory = getOrCreateMemory(roomCode, botPlayerId, game);
   updateMemoryFromLog(memory, game);
 
-  // 3. Handle observations from pending view actions
+  // 3. Sync legal role knowledge that this bot is allowed to have
+  syncVisibleKnowledge(vs, memory);
+
+  // 4. Handle observations from pending view actions
   handlePendingObservations(vs, memory, game);
 
-  // 4. Evaluate all legal actions
+  // 5. Evaluate all legal actions
   const scored = evaluateActions(vs, memory);
   if (scored.length === 0) return null;
 
-  // 5. Select best action with controlled randomness
+  // 6. Select best action with controlled randomness
   const action = selectAction(scored);
 
   // Optional debug
@@ -74,6 +77,28 @@ export function decideBotAction(game: GameState, botPlayerId: number, roomCode: 
   }
 
   return action;
+}
+
+function syncVisibleKnowledge(
+  vs: ReturnType<typeof buildVisibleState>,
+  memory: BotMemory,
+): void {
+  if (vs.myRole === 'thing') {
+    for (const player of vs.players) {
+      if (player.id === vs.myId) continue;
+      setKnownRole(memory, player.id, player.isKnownInfectedToMe ? 'infected' : 'human');
+    }
+    return;
+  }
+
+  if (vs.myRole === 'infected') {
+    for (const player of vs.players) {
+      if (player.id === vs.myId) continue;
+      if (player.canReceiveInfectedCardFromMe) {
+        setKnownRole(memory, player.id, 'thing');
+      }
+    }
+  }
 }
 
 // ── Observation handling ────────────────────────────────────────────────────

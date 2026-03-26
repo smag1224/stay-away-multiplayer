@@ -172,6 +172,7 @@ export function handleDrawCard(s: GameState, _originalState: GameState, _action:
       `${cur.name} drew panic card: ${def.name}`,
       `${cur.name} вытянул(а) панику: ${def.nameRu}`
     );
+    s.log[0].fromPlayerId = cur.id;
     s.panicAnnouncement = card.defId;
     applyPanicEffect(s, card);
     s.discard.push(card);
@@ -182,6 +183,7 @@ export function handleDrawCard(s: GameState, _originalState: GameState, _action:
     cur.role = 'thing';
     cur.hand.push(card);
     log(s, `${cur.name} drew a card.`, `${cur.name} взял(а) карту.`);
+    s.log[0].fromPlayerId = cur.id;
     s.step = 'play_or_discard';
   } else {
     cur.hand.push(card);
@@ -189,6 +191,7 @@ export function handleDrawCard(s: GameState, _originalState: GameState, _action:
       `${cur.name} drew a card.`,
       `${cur.name} взял(а) карту.`
     );
+    s.log[0].fromPlayerId = cur.id;
 
     if (cur.inQuarantine) {
       s.pendingAction = { type: 'choose_card_to_discard' };
@@ -342,6 +345,8 @@ export function handleOfferTrade(s: GameState, _originalState: GameState, action
     `${cur.name} offers a trade to ${partner.name}.`,
     `${cur.name} предлагает обмен ${partner.name}.`
   );
+  s.log[0].fromPlayerId = cur.id;
+  s.log[0].targetPlayerId = partner.id;
   return s;
 }
 
@@ -370,6 +375,8 @@ export function handleRespondTrade(s: GameState, _originalState: GameState, acti
     `${from.name} and ${defender.name} traded cards.`,
     `${from.name} и ${defender.name} обменялись картами.`
   );
+  s.log[0].fromPlayerId = from.id;
+  s.log[0].targetPlayerId = defender.id;
 
   s.pendingAction = null;
   s.step = 'end_turn';
@@ -882,6 +889,8 @@ export function handleJustBetweenUsPick(s: GameState, _originalState: GameState,
       `${first.name} and ${second.name} traded due to Just Between Us.`,
       `${first.name} и ${second.name} обменялись из-за «Только между нами».`
     );
+    s.log[0].fromPlayerId = first.id;
+    s.log[0].targetPlayerId = second.id;
   }
   return s;
 }
@@ -916,6 +925,7 @@ export function handleBlindDatePick(s: GameState, _originalState: GameState, act
   s.pendingAction = null;
   log(s, `${cur.name} swapped a card with the deck (Blind Date).`,
       `${cur.name} обменял(а) карту с колодой (Свидание вслепую).`);
+  s.log[0].fromPlayerId = cur.id;
   s.step = 'end_turn';
   advanceTurn(s);
   return s;
@@ -943,6 +953,7 @@ export function handleForgetfulDiscardPick(s: GameState, _originalState: GameSta
     s.pendingAction = null;
     log(s, `${cur.name} discarded and drew new cards (Forgetful).`,
         `${cur.name} сбросил(а) и взял(а) новые карты (Забывчивость).`);
+    s.log[0].fromPlayerId = cur.id;
     s.step = 'draw';
   }
   return s;
@@ -1018,6 +1029,8 @@ export function handlePanicTradeRespond(s: GameState, _originalState: GameState,
     `${from.name} and ${target.name} traded cards (Can't We Be Friends?).`,
     `${from.name} и ${target.name} обменялись картами (Давай дружить?).`
   );
+  s.log[0].fromPlayerId = from.id;
+  s.log[0].targetPlayerId = target.id;
   s.step = 'draw';
   return s;
 }
