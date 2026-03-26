@@ -1488,6 +1488,8 @@ img {
   max-width: min(12rem, calc(100vw - 32px));
   backdrop-filter: blur(4px);
   position: relative;
+  z-index: 10;
+  position: relative;
   z-index: 3;
   text-align: center;
   white-space: nowrap;
@@ -1514,7 +1516,7 @@ img {
   left: 50%;
   top: -38px;
   transform: translateX(-50%);
-  z-index: 3;
+  z-index: 10;
 }
 
 .player-node.is-left-seat .player-meta {
@@ -4093,7 +4095,7 @@ img {
     top: -28px;
     transform: translateX(-50%);
     max-width: 96px;
-    z-index: 4;
+    z-index: 10;
   }
 
   .player-node.is-left-seat .player-meta {
@@ -4444,13 +4446,6 @@ img {
     transform: translateY(-4px) scale(1.04) rotate(0deg) !important;
   }
 
-  /* Suspicion card specifically: shrink when selected so it doesn't cover the fan —
-     player still needs to see/tap other fan cards while suspicion target-pick is active */
-  .fan-card.is-suspicion-card.selected {
-    transform: translateY(20px) scale(0.5) rotate(0deg) !important;
-    transform-origin: bottom center;
-    z-index: 100 !important;
-  }
 
   .fan-card .hand-card-actions {
     left: 4px;

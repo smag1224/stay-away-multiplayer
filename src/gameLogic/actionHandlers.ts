@@ -411,6 +411,7 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
     case 'no_thanks': {
       log(s, `${defender.name} played No Thanks! Trade refused.`,
           `${defender.name} сыграл(а) «Нет уж, спасибо!» Обмен отклонён.`);
+      s.log[0].cardDefId = card.defId;
       s.pendingAction = null;
       if (reason === 'panic_trade') {
         s.step = 'draw';
@@ -433,12 +434,14 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
       }
       log(s, `${defender.name} played Fear! Trade refused, card viewed.`,
           `${defender.name} сыграл(а) «Страх!» Обмен отклонён, карта просмотрена.`);
+      s.log[0].cardDefId = card.defId;
       break;
     }
     case 'miss': {
       if (reason === 'temptation') {
         log(s, `${defender.name} played Miss! Temptation cancelled.`,
             `${defender.name} сыграл(а) «Мимо!» «Соблазн» отменён.`);
+        s.log[0].cardDefId = card.defId;
         s.pendingAction = null;
         s.step = 'end_turn';
         advanceTurn(s);
@@ -447,6 +450,7 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
 
       log(s, `${defender.name} played Miss! Next player must trade instead.`,
           `${defender.name} сыграл(а) «Мимо!» Следующий игрок обменивается.`);
+      s.log[0].cardDefId = card.defId;
       const alivePos = alivePositions(s);
       const defPosIdx = alivePos.indexOf(defender.position);
       const nextIdx = (defPosIdx + s.direction + alivePos.length) % alivePos.length;
@@ -493,6 +497,7 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
     case 'im_fine_here': {
       log(s, `${defender.name} played I'm Fine Here! Swap cancelled.`,
           `${defender.name} сыграл(а) «Мне и здесь неплохо!» Обмен местами отменён.`);
+      s.log[0].cardDefId = card.defId;
       s.pendingAction = null;
       if (s.step === 'play_or_discard') {
         s.step = 'trade';
