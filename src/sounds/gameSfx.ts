@@ -106,6 +106,11 @@ export function playVictoryThing(volume = 0.5): void {
   playSfx('Игрок выбывает.mp3', volume);
 }
 
+/** Whisky card played */
+export function playWhisky(volume = 0.7): void {
+  playSfx('виски.mp3', volume);
+}
+
 /** UI button click — silent, no dedicated file */
 export function playButtonClick(_volume = 0.5): void {
   // No custom file provided — skip

@@ -118,6 +118,7 @@ import {
   playButtonClick,
   playLockedDoor,
   playQuarantine,
+  playWhisky,
 } from './sounds/gameSfx.ts';
 
 export function GameScreen({
@@ -422,6 +423,8 @@ export function GameScreen({
             playLockedDoor();
           } else if (entry.cardDefId === 'quarantine') {
             playQuarantine();
+          } else if (entry.cardDefId === 'whisky') {
+            playWhisky();
           } else {
             playCardPlay();
           }
