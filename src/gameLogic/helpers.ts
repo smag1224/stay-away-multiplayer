@@ -99,25 +99,22 @@ export function drawFromDeck(state: GameState): CardInstance | null {
 }
 
 /** Draw an event card (skip panics, put them face-down in discard).
- *  Fallback: if only panic cards remain in the entire system, return
- *  a panic card rather than null so players never end up short-handed. */
+ *  Returns null if no event cards remain (all are in players' hands) —
+ *  this is an accepted edge case in very late game. */
 export function drawEventCard(state: GameState): CardInstance | null {
+  // Count event cards still available (deck + discard)
+  const available = [...state.deck, ...state.discard]
+    .filter(c => getCardDef(c.defId).back === 'event').length;
+  if (available === 0) return null;
+
   let attempts = 0;
-  let lastPanic: CardInstance | null = null;
   while (attempts < 200) {
     const card = drawFromDeck(state);
-    if (!card) break;
+    if (!card) return null;
     const def = getCardDef(card.defId);
     if (def.back === 'event') return card;
-    lastPanic = card;
     state.discard.push(card);
     attempts++;
-  }
-  // Only panic cards remain — return one as a last resort to keep hand size correct
-  if (lastPanic) {
-    const idx = state.discard.findIndex(c => c.uid === lastPanic!.uid);
-    if (idx !== -1) state.discard.splice(idx, 1);
-    return lastPanic;
   }
   return null;
 }
