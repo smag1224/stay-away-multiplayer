@@ -200,6 +200,18 @@ export function GameScreen({
       game.pendingAction?.type === 'panic_trade_response' && game.pendingAction.toId === me.id
     );
   const isSecondDeck = game.reshuffleCount > 0;
+  const deckOrdinals: Record<string, string[]> = {
+    ru: ['Первая', 'Вторая', 'Третья', 'Четвёртая', 'Пятая', 'Шестая'],
+    en: ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'],
+  };
+  const deckLabel = (() => {
+    const lang = i18n.language?.startsWith('ru') ? 'ru' : 'en';
+    const ordinals = deckOrdinals[lang];
+    const idx = Math.min(game.reshuffleCount, ordinals.length - 1);
+    return lang === 'ru'
+      ? `${ordinals[idx]} колода`
+      : `${ordinals[idx]} deck`;
+  })();
   const myTurnSafe = (currentSafe?.id ?? -1) === me.id && game.phase === 'playing';
   const viewerNeedsResponse = (() => {
     const pending = game.pendingAction;
@@ -378,9 +390,16 @@ export function GameScreen({
       for (let i = 0; i < newLogCount && !soundPlayed; i++) {
         const entry = game.log[i];
 
-        // Defense cards
-        const DEFENSE_IDS = ['no_barbecue', 'no_thanks', 'miss', 'im_fine_here'];
-        if (entry.cardDefId && DEFENSE_IDS.includes(entry.cardDefId)) {
+        // Defense cards — check cardDefId OR log text (fallback for older server versions)
+        const DEFENSE_IDS = ['no_barbecue', 'no_thanks', 'miss', 'im_fine_here', 'fear', 'anti_analysis'];
+        const isDefenseByText =
+          entry.text.includes('No Thanks!') || entry.text.includes('No Barbecue!') ||
+          entry.text.includes("I'm Fine Here!") || entry.text.includes('Miss!') ||
+          entry.text.includes('Fear!') || entry.text.includes('Anti-Analysis!') ||
+          entry.textRu?.includes('Нет уж, спасибо') || entry.textRu?.includes('Никакого шашлыка') ||
+          entry.textRu?.includes('Мне и здесь неплохо') || entry.textRu?.includes('Мимо!') ||
+          entry.textRu?.includes('Страх!') || entry.textRu?.includes('Анти-Анализ');
+        if ((entry.cardDefId && DEFENSE_IDS.includes(entry.cardDefId)) || isDefenseByText) {
           playDefenseBlock();
           soundPlayed = true;
           continue;
@@ -766,7 +785,7 @@ export function GameScreen({
               )}
               {isSecondDeck && (
                 <div className="notice-box deck-notice">
-                  <strong>{t('game.secondDeckActive')}</strong>
+                  <strong>{deckLabel}</strong>
                   <p>{t('game.secondDeckWarning')}</p>
                 </div>
               )}
@@ -783,12 +802,12 @@ export function GameScreen({
                 </div>
                 <div className={`table-pill subtle ${isSecondDeck ? 'danger' : ''}`}>
                   <span>{t('game.deckCycle')}</span>
-                  <strong>{isSecondDeck ? t('game.secondDeckActive') : t('game.firstDeckActive')}</strong>
+                  <strong>{deckLabel}</strong>
                 </div>
               </div>
               {isSecondDeck && showSecondDeckAlert && (
                 <div className="deck-phase-alert">
-                  <strong>{t('game.secondDeckActive')}</strong>
+                  <strong>{deckLabel}</strong>
                   <span>{t('game.secondDeckWarning')}</span>
                 </div>
               )}

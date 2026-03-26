@@ -140,6 +140,15 @@ export function advanceTurn(s: GameState): void {
   }
 
   checkInfectionOverload(s, finishingPlayer);
+
+  // Sanity check: warn if player ends turn with unexpected hand size
+  if (finishingPlayer.isAlive && finishingPlayer.hand.length !== 4) {
+    console.warn(
+      `[HAND-SIZE] ${finishingPlayer.name} ended turn with ${finishingPlayer.hand.length} cards`,
+      finishingPlayer.hand.map(c => c.defId)
+    );
+  }
+
   if (resolveThingVictoryIfNoHumans(s)) {
     s.step = 'draw';
     s.tradeSkipped = false;
