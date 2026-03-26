@@ -585,8 +585,18 @@ function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, _w: Weights,
           });
           if (partnerAdjacentHuman) score = 15; // Give flamethrower to finish the game!
         }
-        // Don't give infected card to already-infected ally
-        if (card.defId === 'infected') score = 1;
+        // Pass extra infected card back to Thing if they might need it
+        // (priority lower than no_barbecue=13, but higher than holding it)
+        if (card.defId === 'infected') {
+          const myInfectedCards = vs.myHand.filter(c => c.defId === 'infected').length;
+          if (myInfectedCards >= 2) {
+            // Have a spare — pass one back to Thing so they don't run dry
+            score = 9;
+          } else {
+            // Only one — keep it, might need to trade it to a human
+            score = 1;
+          }
+        }
       }
 
       // Endgame: infected knows who the last human is — use flamethrower directly
