@@ -3686,9 +3686,7 @@ img {
   align-items: center;
   justify-content: center;
   padding: 32px 16px;
-  background:
-    linear-gradient(to bottom, rgba(2, 5, 8, 0.45), rgba(2, 5, 8, 0.72)),
-    url('/backgrounds/connect-desktop.webp') center center / cover no-repeat;
+  background: url('/backgrounds/connect-desktop.webp') center center / cover no-repeat;
 }
 
 /* Frame */
@@ -5352,9 +5350,7 @@ img {
   .lobby-screen.abyss-screen {
     padding: 20px 12px;
     align-items: flex-start;
-    background:
-      linear-gradient(to bottom, rgba(2, 5, 8, 0.45), rgba(2, 5, 8, 0.72)),
-      url('/backgrounds/connect-mobile.webp') center center / cover no-repeat;
+    background: url('/backgrounds/connect-mobile.webp') center center / cover no-repeat;
   }
   .lp-frame {
     width: 100%;
