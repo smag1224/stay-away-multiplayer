@@ -385,15 +385,6 @@ function getPostMoveTradePartnerDelta(vs: BotVisibleState, memory: BotMemory, ta
   return moved - current;
 }
 
-function _getBestPostMoveTradePartnerDelta(
-  vs: BotVisibleState,
-  memory: BotMemory,
-  targets: number[],
-): number {
-  if (targets.length === 0) return 0;
-  return targets.reduce((best, targetId) => Math.max(best, getPostMoveTradePartnerDelta(vs, memory, targetId)), Number.NEGATIVE_INFINITY);
-}
-
 function scoreTradeCardForPartner(
   vs: BotVisibleState,
   memory: BotMemory,
@@ -748,19 +739,6 @@ function getPostMoveTradeFollowUpDelta(
   const movedPositions = swapPositionsInMap(currentPositions, vs.myId, targetId);
   const moved = getTradeFollowUpForLayout(vs, memory, movedPositions, vs.direction, stage, excludeCardUid);
   return moved - current;
-}
-
-function _getBestPostMoveTradeFollowUpDelta(
-  vs: BotVisibleState,
-  memory: BotMemory,
-  targets: number[],
-  stage: GameStage,
-  excludeCardUid?: string,
-): number {
-  if (targets.length === 0) return 0;
-  return targets.reduce((best, targetId) => (
-    Math.max(best, getPostMoveTradeFollowUpDelta(vs, memory, targetId, stage, excludeCardUid))
-  ), Number.NEGATIVE_INFINITY);
 }
 
 function getBestPostMovePlanValue(
