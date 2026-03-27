@@ -205,10 +205,8 @@ function App() {
           error={error}
           loading={loading}
           room={room}
-          shareUrl={shareUrl}
           onCopy={updateCopied}
           onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
-          onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
           gameMode={gameMode}
           onGameModeChange={setGameMode}
           onStart={() => callRoomEndpoint(`/api/rooms/${room.code}/start`, {

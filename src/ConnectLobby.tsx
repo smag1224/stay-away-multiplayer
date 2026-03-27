@@ -144,11 +144,9 @@ export function LobbyScreen({
   error,
   loading,
   room,
-  shareUrl,
   gameMode,
   onCopy,
   onLeave,
-  onReset,
   onStart,
   onAddBot,
   onRemoveBot,
@@ -158,11 +156,9 @@ export function LobbyScreen({
   error: string | null;
   loading: boolean;
   room: RoomView;
-  shareUrl: string;
   gameMode: 'standard' | 'thing_in_deck' | 'anomaly';
   onCopy: () => Promise<void>;
   onLeave: () => void;
-  onReset: () => Promise<void>;
   onStart: () => Promise<void>;
   onAddBot: () => Promise<void>;
   onRemoveBot: (botSessionId: string) => Promise<void>;
@@ -177,106 +173,104 @@ export function LobbyScreen({
 
   return (
     <main className="lobby-screen abyss-screen">
+      <h2 className="lp-code lp-code-floating">{room.code}</h2>
       <div className="lp-frame">
-        <span className="lp-corner lp-corner-tl" aria-hidden="true" />
-        <span className="lp-corner lp-corner-tr" aria-hidden="true" />
-        <span className="lp-corner lp-corner-bl" aria-hidden="true" />
-        <span className="lp-corner lp-corner-br" aria-hidden="true" />
-
         <div className="lp-inner">
-          {/* Header */}
-          <div className="lp-header">
-            <h2 className="lp-code">{room.code}</h2>
-            <span className={`lp-pill ${isReady ? 'ready' : 'waiting'}`}>
-              {isReady ? t('connect.readyToStart') : t('connect.awaitingPlayers')}
-            </span>
-          </div>
-          <p className="lp-subtitle">
-            {t('connect.roomStatus', { count: room.members.length, needed: playersNeeded })}
-          </p>
-
-          <hr className="lp-divider" />
-
-          {/* Player list */}
-          <p className="lp-section-label">{t('connect.players')}</p>
-          <div className="lp-roster">
-            {Array.from({ length: totalSlots }, (_, i) => {
-              const member = room.members[i];
-              return (
-                <div className={`lp-row${member ? (member.connected ? '' : ' offline') : ' empty'}`} key={member?.sessionId ?? `empty-${i}`}>
-                  <span className="lp-row-n">{i + 1}.</span>
-                  <span className={`lp-row-dot${member?.connected ? ' on' : ''}`} />
-                  <div className="lp-row-body">
-                    {member && (
-                      <strong className="lp-row-name">
-                        {member.name}
-                        {member.sessionId === room.me.sessionId && ` ${t('connect.you')}`}
-                      </strong>
-                    )}
-                    <div className="lp-row-tags">
-                      {member?.isHost && <span className="lp-tag">{t('connect.host')}</span>}
-                      {member?.isBot && <span className="lp-tag bot">BOT</span>}
+          <section className="lp-body">
+            <div className="lp-section-head">
+              <p className="lp-section-label">{t('connect.players')}</p>
+              <span className={`lp-pill ${isReady ? 'ready' : 'waiting'}`}>
+                {isReady ? t('connect.readyToStart') : t('connect.awaitingPlayers')}
+              </span>
+              <p className="lp-subtitle">
+                {t('connect.roomStatus', { count: room.members.length, needed: playersNeeded })}
+              </p>
+            </div>
+            <div className="lp-roster-shell">
+              <div className="lp-roster">
+                {Array.from({ length: totalSlots }, (_, i) => {
+                  const member = room.members[i];
+                  return (
+                    <div className={`lp-row${member ? (member.connected ? '' : ' offline') : ' empty'}`} key={member?.sessionId ?? `empty-${i}`}>
+                      <span className="lp-row-n">{i + 1}</span>
+                      <span className={`lp-row-dot${member?.connected ? ' on' : ''}`} />
+                      <div className="lp-row-body">
+                        {member ? (
+                          <>
+                            <strong className="lp-row-name">
+                              {member.name}
+                              {member.sessionId === room.me.sessionId && ` ${t('connect.you')}`}
+                            </strong>
+                            <div className="lp-row-tags">
+                              {member.isHost && <span className="lp-tag">{t('connect.host')}</span>}
+                              {member.isBot && <span className="lp-tag bot">BOT</span>}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="lp-row-empty-mark">··</span>
+                        )}
+                      </div>
+                      <span className="lp-row-sep">— —</span>
+                      {member?.isBot && room.me.isHost ? (
+                        <button
+                          className="lp-rm-bot"
+                          onClick={() => void onRemoveBot(member.sessionId)}
+                          type="button"
+                          title={t('connect.removeBot', 'Убрать бота')}
+                        >
+                          ✕
+                        </button>
+                      ) : null}
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="lp-bottom">
+              {room.me.isHost ? (
+                <>
+                  <div className="lp-controls-row">
+                    <label className="lp-mode-wrap">
+                      <span className="lp-mode-lbl">{t('connect.gameMode')}</span>
+                      <select
+                        className="lp-mode-sel"
+                        value={gameMode}
+                        onChange={(event) => onGameModeChange(event.target.value as 'standard' | 'thing_in_deck' | 'anomaly')}
+                      >
+                        <option value="standard">{t('connect.modeStandard')}</option>
+                        <option value="thing_in_deck">{t('connect.modeThingInDeck')}</option>
+                        <option value="anomaly">{t('connect.modeAnomaly')}</option>
+                      </select>
+                    </label>
+                    {room.members.length < 12 && (
+                      <button className="lp-btn-bot" disabled={loading} onClick={() => void onAddBot()} type="button">
+                        {t('connect.addBot', 'Добавить бота')}
+                      </button>
+                    )}
                   </div>
-                  <span className="lp-row-sep">— —</span>
-                  {member?.isBot && room.me.isHost && (
-                    <button className="lp-rm-bot" onClick={() => void onRemoveBot(member.sessionId)} type="button" title={t('connect.removeBot', 'Убрать бота')}>✕</button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
 
-          <hr className="lp-divider" />
-
-          {/* Mode + bot */}
-          {room.me.isHost ? (
-            <>
-              <div className="lp-controls-row">
-                <label className="lp-mode-wrap">
-                  <span className="lp-mode-lbl">{t('connect.gameMode')}</span>
-                  <select
-                    className="lp-mode-sel"
-                    value={gameMode}
-                    onChange={(e) => onGameModeChange(e.target.value as 'standard' | 'thing_in_deck' | 'anomaly')}
-                  >
-                    <option value="standard">{t('connect.modeStandard')}</option>
-                    <option value="thing_in_deck">{t('connect.modeThingInDeck')}</option>
-                    <option value="anomaly">{t('connect.modeAnomaly')}</option>
-                  </select>
-                </label>
-                {room.members.length < 12 && (
-                  <button className="lp-btn-bot" disabled={loading} onClick={() => void onAddBot()} type="button">
-                    {t('connect.addBot', 'Добавить бота')}
+                  <button className="lp-btn-start" disabled={!canStart || loading} onClick={() => void onStart()} type="button">
+                    {t('connect.startMatch')}
                   </button>
-                )}
+                </>
+              ) : (
+                <p className="lp-waiting-msg">{t('connect.onlyHostStart')}</p>
+              )}
+
+              <div className="lp-footer">
+                <button className="lp-btn-ghost" onClick={() => void onCopy()} type="button">
+                  {t('connect.copyLink')}
+                </button>
+                <button className="lp-btn-ghost lp-btn-leave" onClick={onLeave} type="button">
+                  {t('connect.leave')}
+                </button>
               </div>
 
-              <button className="lp-btn-start" disabled={!canStart || loading} onClick={() => void onStart()} type="button">
-                {t('connect.startMatch')}
-              </button>
-            </>
-          ) : (
-            <p className="lp-waiting-msg">{t('connect.onlyHostStart')}</p>
-          )}
-
-          {/* Footer */}
-          <div className="lp-footer">
-            <button className="lp-btn-ghost" onClick={() => void onCopy()} type="button">
-              {t('connect.copyLink')}
-            </button>
-            {room.me.isHost && (
-              <button className="lp-btn-ghost" disabled={loading} onClick={() => void onReset()} type="button">
-                {t('connect.resetRoom')}
-              </button>
-            )}
-            <button className="lp-btn-ghost" onClick={onLeave} type="button">
-              {t('connect.leave')}
-            </button>
-          </div>
-
-          {copied && <p className="lp-feedback success">{t('connect.linkCopied')}</p>}
-          {error && <p className="lp-feedback error">{error}</p>}
+              {copied && <p className="lp-feedback success">{t('connect.linkCopied')}</p>}
+              {error && <p className="lp-feedback error">{error}</p>}
+            </div>
+          </section>
         </div>
       </div>
     </main>
