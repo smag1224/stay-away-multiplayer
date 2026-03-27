@@ -515,7 +515,7 @@ export function recordSeenCards(
 ): void {
   const obs = getObs(memory, playerId);
   for (const c of cards) {
-    obs.seenCards.push({ uid: 'uid' in c ? c.uid : undefined, defId: c.defId, turn });
+    obs.seenCards.push({ uid: 'uid' in c ? (c as { uid?: string }).uid : undefined, defId: c.defId, turn });
   }
 
   const hasThingCard = cards.some(c => c.defId === 'the_thing');

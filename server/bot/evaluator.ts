@@ -67,7 +67,7 @@ function intentBoost(memory: BotMemory, defId: string): number {
 function maybeCreateIntent(
   vs: BotVisibleState,
   memory: BotMemory,
-  stage: GameStage,
+  _stage: GameStage,
 ): void {
   // Only create intent during play_or_discard — bot just drew and is choosing what to play
   // If bot plays the card now, no intent needed; intent is for cards held for next turn
@@ -385,7 +385,7 @@ function getPostMoveTradePartnerDelta(vs: BotVisibleState, memory: BotMemory, ta
   return moved - current;
 }
 
-function getBestPostMoveTradePartnerDelta(
+function _getBestPostMoveTradePartnerDelta(
   vs: BotVisibleState,
   memory: BotMemory,
   targets: number[],
@@ -750,7 +750,7 @@ function getPostMoveTradeFollowUpDelta(
   return moved - current;
 }
 
-function getBestPostMoveTradeFollowUpDelta(
+function _getBestPostMoveTradeFollowUpDelta(
   vs: BotVisibleState,
   memory: BotMemory,
   targets: number[],
