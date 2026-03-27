@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RoomView } from './multiplayer.ts';
 
@@ -24,105 +23,118 @@ export function ConnectScreen({
   onNameChange: (value: string) => void;
 }) {
   const { t } = useTranslation();
-  const [briefingExpanded, setBriefingExpanded] = useState(false);
 
   return (
-    <main className="connect-screen">
-      <div className="connect-layout">
-        <section className={`connect-briefing ${briefingExpanded ? 'is-expanded' : 'is-collapsed'}`}>
-          <div className="signal-pill">{t('connect.briefingLabel')}</div>
-          <h1 className="hero-title">Нечто</h1>
-          <p className="version-tag">v1.3 multiplayer</p>
-          <p className="hero-subtitle">{t('connect.tagline')}</p>
+    <main className="connect-screen abyss-screen">
+      <section className="menu-wrap">
+        <div className="logo-wrap" aria-label="Нечто из глубокой бездны">
+          <svg className="game-logo" viewBox="0 0 920 420" role="img" aria-hidden="true">
+            <defs>
+              <linearGradient id="logoGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#eee8d7" />
+                <stop offset="16%" stopColor="#d7cfb8" />
+                <stop offset="34%" stopColor="#a59d81" />
+                <stop offset="54%" stopColor="#716c57" />
+                <stop offset="72%" stopColor="#c9c0a8" />
+                <stop offset="100%" stopColor="#575241" />
+              </linearGradient>
 
-          <div className="connect-chip-row">
-            <span className="connect-chip">{t('connect.playersRange')}</span>
-            <span className="connect-chip danger">{t('connect.hiddenRoles')}</span>
-            <span className="connect-chip">{t('connect.mobileReady')}</span>
-          </div>
+              <linearGradient id="ornamentGold" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="rgba(0,0,0,0)" />
+                <stop offset="28%" stopColor="#675f46" />
+                <stop offset="50%" stopColor="#a79a6b" />
+                <stop offset="72%" stopColor="#675f46" />
+                <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+              </linearGradient>
 
-          <button
-            aria-expanded={briefingExpanded}
-            className="connect-briefing-toggle btn ghost small"
-            onClick={() => setBriefingExpanded((value) => !value)}
-            type="button"
-          >
-            {briefingExpanded ? t('connect.hideBriefing') : t('connect.showBriefing')}
-          </button>
+              <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="160%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.5" />
+                <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor="#000000" floodOpacity="0.35" />
+              </filter>
 
-          <div className="connect-briefing-body">
-            <p className="connect-summary">{t('connect.summary')}</p>
+              <filter id="logoTexture" x="-10%" y="-10%" width="120%" height="120%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="8" result="noise" />
+                <feColorMatrix in="noise" type="saturate" values="0" result="monoNoise" />
+                <feComponentTransfer in="monoNoise" result="fadedNoise">
+                  <feFuncA type="table" tableValues="0 0.035" />
+                </feComponentTransfer>
+              </filter>
 
-            <div className="briefing-grid">
-              <article className="briefing-card">
-                <span className="briefing-index">01</span>
-                <strong>{t('connect.briefingRolesTitle')}</strong>
-                <p>{t('connect.briefingRolesBody')}</p>
-              </article>
-              <article className="briefing-card">
-                <span className="briefing-index">02</span>
-                <strong>{t('connect.briefingTradeTitle')}</strong>
-                <p>{t('connect.briefingTradeBody')}</p>
-              </article>
-              <article className="briefing-card">
-                <span className="briefing-index">03</span>
-                <strong>{t('connect.briefingBurnTitle')}</strong>
-                <p>{t('connect.briefingBurnBody')}</p>
-              </article>
-            </div>
-          </div>
-        </section>
+              <mask id="textMask">
+                <rect width="100%" height="100%" fill="black" />
+                <text x="460" y="132" textAnchor="middle" className="svg-title svg-title-main">Нечто</text>
+                <text x="460" y="232" textAnchor="middle" className="svg-title svg-title-sub">из глубокой</text>
+                <text x="460" y="332" textAnchor="middle" className="svg-title svg-title-sub">бездны</text>
+              </mask>
+            </defs>
 
-        <section className="connect-terminal">
-          <div className="connect-card">
-            <div className="terminal-head">
-              <span className="terminal-kicker">{t('connect.accessTerminal')}</span>
-              <strong>{t('connect.accessTitle')}</strong>
-              <p>{t('connect.createHint')}</p>
-            </div>
+            <g opacity="0.72">
+              <line x1="275" y1="34" x2="645" y2="34" stroke="url(#ornamentGold)" strokeWidth="1.5" />
+              <path d="M445 34h-18m48 0h-18" stroke="#857a57" strokeWidth="1.4" fill="none" />
+              <path d="M454 24l6 6-6 6-6-6 6-6Z" fill="none" stroke="#8f8460" strokeWidth="1.2" />
+              <path d="M438 34c8-2 12-8 16-10m12 10c-8-2-12-8-16-10" fill="none" stroke="#7d7354" strokeWidth="1" />
+            </g>
 
-            <label className="field-label">
-              {t('connect.yourName')}
-              <input
-                className="text-input"
-                maxLength={20}
-                onChange={(event) => onNameChange(event.target.value)}
-                placeholder={t('connect.nameExample')}
-                type="text"
-                value={name}
-              />
-            </label>
+            <g filter="url(#logoShadow)">
+              <text x="460" y="132" textAnchor="middle" className="svg-title svg-title-main outline">Нечто</text>
+              <text x="460" y="232" textAnchor="middle" className="svg-title svg-title-sub outline">из глубокой</text>
+              <text x="460" y="332" textAnchor="middle" className="svg-title svg-title-sub outline">бездны</text>
 
-            <button className="btn accent wide" disabled={loading} onClick={onCreateRoom} type="button">
-              {t('connect.createRoom')}
-            </button>
+              <text x="460" y="132" textAnchor="middle" className="svg-title svg-title-main fill">Нечто</text>
+              <text x="460" y="232" textAnchor="middle" className="svg-title svg-title-sub fill">из глубокой</text>
+              <text x="460" y="332" textAnchor="middle" className="svg-title svg-title-sub fill">бездны</text>
 
-            <div className="divider">
-              <span>{t('connect.orJoinByCode')}</span>
-            </div>
+              <rect width="100%" height="100%" fill="url(#logoGold)" mask="url(#textMask)" opacity="0.2" filter="url(#logoTexture)" />
+            </g>
 
-            <label className="field-label">
-              {t('connect.roomCode')}
-              <input
-                className="text-input code-input"
-                maxLength={5}
-                onChange={(event) => onJoinCodeChange(event.target.value.toUpperCase())}
-                placeholder="AB12C"
-                type="text"
-                value={joinCode}
-              />
-            </label>
+            <g opacity="0.72">
+              <line x1="275" y1="368" x2="645" y2="368" stroke="url(#ornamentGold)" strokeWidth="1.5" />
+              <path d="M445 368h-18m48 0h-18" stroke="#857a57" strokeWidth="1.4" fill="none" />
+              <path d="M454 358l6 6-6 6-6-6 6-6Z" fill="none" stroke="#8f8460" strokeWidth="1.2" />
+              <path d="M438 368c8-2 12-8 16-10m12 10c-8-2-12-8-16-10" fill="none" stroke="#7d7354" strokeWidth="1" />
+            </g>
+          </svg>
+        </div>
 
-            <button className="btn secondary wide" disabled={loading} onClick={onJoinRoom} type="button">
-              {t('connect.joinRoom')}
-            </button>
+        <form className="lobby-form" onSubmit={(event) => event.preventDefault()}>
+          <label className="ui-label" htmlFor="nickname">{t('connect.yourName')}</label>
+          <input
+            className="ui-input"
+            id="nickname"
+            name="nickname"
+            type="text"
+            placeholder={t('connect.nameExample')}
+            autoComplete="nickname"
+            maxLength={20}
+            onChange={(event) => onNameChange(event.target.value)}
+            value={name}
+          />
 
-            <p className="helper-text terminal-footnote">{t('connect.joinHint')}</p>
-            {copied && <p className="success-text">{t('connect.linkCopied')}</p>}
-            {error && <p className="error-text">{error}</p>}
-          </div>
-        </section>
-      </div>
+          <label className="ui-label" htmlFor="lobbyCode">{t('connect.roomCode')}</label>
+          <input
+            className="ui-input"
+            id="lobbyCode"
+            name="lobbyCode"
+            type="text"
+            placeholder={t('connect.joinHint').includes('код') ? 'Введите код лобби...' : 'Enter lobby code...'}
+            autoComplete="off"
+            maxLength={5}
+            onChange={(event) => onJoinCodeChange(event.target.value.toUpperCase())}
+            value={joinCode}
+          />
+
+          <button className="ui-button" disabled={loading} onClick={onJoinRoom} type="button">{t('connect.joinRoom')}</button>
+          <button className="ui-button ui-button-secondary" disabled={loading} onClick={onCreateRoom} type="button">{t('connect.createRoom')}</button>
+          {copied && <p className="success-text menu-feedback">{t('connect.linkCopied')}</p>}
+          {error && <p className="error-text menu-feedback">{error}</p>}
+        </form>
+
+        <p className="flavor-text">
+          «Временами просыпается Оно.
+          <br />
+          И тогда Нечто смотрит на нас из глубины...»
+        </p>
+      </section>
     </main>
   );
 }
@@ -161,138 +173,112 @@ export function LobbyScreen({
   const canStart = room.me.isHost && room.members.length >= minPlayers;
   const playersNeeded = Math.max(0, minPlayers - room.members.length);
   const isReady = playersNeeded === 0;
+  const totalSlots = Math.max(room.members.length, minPlayers);
 
   return (
-    <main className="lobby-screen">
-      <section className="room-banner">
-        <div className="room-banner-copy">
-          <p className="eyebrow">{t('connect.roomCode')}</p>
-          <div className="room-code-row">
-            <h2 className="room-code">{room.code}</h2>
-            <span className={`room-state-pill ${isReady ? 'ready' : 'waiting'}`}>
+    <main className="lobby-screen abyss-screen">
+      <div className="lp-frame">
+        <span className="lp-corner lp-corner-tl" aria-hidden="true" />
+        <span className="lp-corner lp-corner-tr" aria-hidden="true" />
+        <span className="lp-corner lp-corner-bl" aria-hidden="true" />
+        <span className="lp-corner lp-corner-br" aria-hidden="true" />
+
+        <div className="lp-inner">
+          {/* Header */}
+          <div className="lp-header">
+            <h2 className="lp-code">{room.code}</h2>
+            <span className={`lp-pill ${isReady ? 'ready' : 'waiting'}`}>
               {isReady ? t('connect.readyToStart') : t('connect.awaitingPlayers')}
             </span>
           </div>
-          <p className="helper-text room-status-line">
-            {t('connect.roomStatus', { count: room.members.length, needed: Math.max(0, minPlayers - room.members.length) })}
+          <p className="lp-subtitle">
+            {t('connect.roomStatus', { count: room.members.length, needed: playersNeeded })}
           </p>
-        </div>
-        <div className="room-banner-stats">
-          <div className="room-stat-card">
-            <span>{t('connect.playersStat')}</span>
-            <strong>{room.members.length}/12</strong>
-          </div>
-          <div className="room-stat-card">
-            <span>{t('connect.hostStat')}</span>
-            <strong>{room.members.find((member) => member.isHost)?.name ?? '—'}</strong>
-          </div>
-          <div className="room-stat-card">
-            <span>{t('connect.startStat')}</span>
-            <strong>{isReady ? t('connect.startStatReady') : t('connect.startStatWaiting', { count: playersNeeded })}</strong>
-          </div>
-        </div>
-        <div className="room-banner-actions">
-          <button className="btn secondary" onClick={() => void onCopy()} type="button">
-            {t('connect.copyLink')}
-          </button>
-          <button className="btn ghost" onClick={onLeave} type="button">
-            {t('connect.leave')}
-          </button>
-        </div>
-      </section>
 
-      <section className="lobby-grid">
-        <div className="panel lobby-panel">
-          <div className="panel-header">
-            <h3>{t('connect.players')}</h3>
-            <span className="panel-kicker">{t('connect.playerRoster')}</span>
-          </div>
-          <div className="member-grid">
-            {room.members.map((member, index) => (
-              <div className={`member-card ${member.connected ? '' : 'offline'}`} key={member.sessionId}>
-                <div className="member-card-head">
-                  <span className="member-index">{index + 1}</span>
-                  <span className={`member-status-dot ${member.connected ? 'online' : 'offline'}`} />
-                </div>
-                <div className="member-card-body">
-                  <strong className="member-name">
-                    {member.name}
-                    {member.sessionId === room.me.sessionId && ` ${t('connect.you')}`}
-                  </strong>
-                  <span className="member-role-line">
-                    {member.connected ? t('connect.online') : t('connect.offline')}
-                  </span>
-                </div>
-                <div className="member-badges">
-                  {member.isHost && <span className="badge host">{t('connect.host')}</span>}
-                  {member.isBot && <span className="badge bot">BOT</span>}
-                  {!member.connected && !member.isBot && <span className="badge dim">{t('connect.offline')}</span>}
-                  {member.isBot && room.me.isHost && (
-                    <button
-                      className="btn ghost small bot-remove-btn"
-                      onClick={() => void onRemoveBot(member.sessionId)}
-                      type="button"
-                      title={t('connect.removeBot', 'Убрать бота')}
-                    >✕</button>
+          <hr className="lp-divider" />
+
+          {/* Player list */}
+          <p className="lp-section-label">{t('connect.players')}</p>
+          <div className="lp-roster">
+            {Array.from({ length: totalSlots }, (_, i) => {
+              const member = room.members[i];
+              return (
+                <div className={`lp-row${member ? (member.connected ? '' : ' offline') : ' empty'}`} key={member?.sessionId ?? `empty-${i}`}>
+                  <span className="lp-row-n">{i + 1}.</span>
+                  <span className={`lp-row-dot${member?.connected ? ' on' : ''}`} />
+                  <div className="lp-row-body">
+                    {member && (
+                      <strong className="lp-row-name">
+                        {member.name}
+                        {member.sessionId === room.me.sessionId && ` ${t('connect.you')}`}
+                      </strong>
+                    )}
+                    <div className="lp-row-tags">
+                      {member?.isHost && <span className="lp-tag">{t('connect.host')}</span>}
+                      {member?.isBot && <span className="lp-tag bot">BOT</span>}
+                    </div>
+                  </div>
+                  <span className="lp-row-sep">— —</span>
+                  {member?.isBot && room.me.isHost && (
+                    <button className="lp-rm-bot" onClick={() => void onRemoveBot(member.sessionId)} type="button" title={t('connect.removeBot', 'Убрать бота')}>✕</button>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel lobby-panel">
-          <div className="panel-header">
-            <h3>{t('connect.settings')}</h3>
-            <span className="panel-kicker">
-              {room.me.isHost ? t('connect.hostControls') : t('connect.waitingForHost')}
-            </span>
+              );
+            })}
           </div>
 
-          <div className="share-box">
-            <span className="share-box-label">{t('connect.shareLinkLabel')}</span>
-            <span className="share-url">{shareUrl}</span>
-            <p className="helper-text share-box-note">{t('connect.shareHint')}</p>
-          </div>
+          <hr className="lp-divider" />
 
+          {/* Mode + bot */}
           {room.me.isHost ? (
-            <div className="stack-actions" style={{ marginTop: '14px' }}>
-              <div className={`readiness-banner ${isReady ? 'ready' : 'waiting'}`}>
-                {isReady ? t('connect.startReady') : t('connect.startNeedPlayers', { count: playersNeeded })}
+            <>
+              <div className="lp-controls-row">
+                <label className="lp-mode-wrap">
+                  <span className="lp-mode-lbl">{t('connect.gameMode')}</span>
+                  <select
+                    className="lp-mode-sel"
+                    value={gameMode}
+                    onChange={(e) => onGameModeChange(e.target.value as 'standard' | 'thing_in_deck' | 'anomaly')}
+                  >
+                    <option value="standard">{t('connect.modeStandard')}</option>
+                    <option value="thing_in_deck">{t('connect.modeThingInDeck')}</option>
+                    <option value="anomaly">{t('connect.modeAnomaly')}</option>
+                  </select>
+                </label>
+                {room.members.length < 12 && (
+                  <button className="lp-btn-bot" disabled={loading} onClick={() => void onAddBot()} type="button">
+                    {t('connect.addBot', 'Добавить бота')}
+                  </button>
+                )}
               </div>
-              <label className="field-row">
-                <span className="field-label">{t('connect.gameMode')}</span>
-                <select
-                  className="mode-select"
-                  value={gameMode}
-                  onChange={(e) => onGameModeChange(e.target.value as 'standard' | 'thing_in_deck' | 'anomaly')}
-                >
-                  <option value="standard">{t('connect.modeStandard')}</option>
-                  <option value="thing_in_deck">{t('connect.modeThingInDeck')}</option>
-                  <option value="anomaly">{t('connect.modeAnomaly')}</option>
-                </select>
-              </label>
-              <p className="helper-text mode-hint">{t(`connect.modeHint_${gameMode}`)}</p>
-              {room.members.length < 12 && (
-                <button className="btn secondary wide" disabled={loading} onClick={() => void onAddBot()} type="button">
-                  🤖 {t('connect.addBot', 'Добавить бота')}
-                </button>
-              )}
-              <button className="btn primary wide" disabled={!canStart || loading} onClick={() => void onStart()} type="button">
+
+              <button className="lp-btn-start" disabled={!canStart || loading} onClick={() => void onStart()} type="button">
                 {t('connect.startMatch')}
               </button>
-              <button className="btn ghost" disabled={loading} onClick={() => void onReset()} type="button">
-                {t('connect.resetRoom')}
-              </button>
-            </div>
+            </>
           ) : (
-            <p className="helper-text" style={{ marginTop: '14px' }}>{t('connect.onlyHostStart')}</p>
+            <p className="lp-waiting-msg">{t('connect.onlyHostStart')}</p>
           )}
 
-          {copied && <p className="success-text">{t('connect.linkCopied')}</p>}
-          {error && <p className="error-text">{error}</p>}
+          {/* Footer */}
+          <div className="lp-footer">
+            <button className="lp-btn-ghost" onClick={() => void onCopy()} type="button">
+              {t('connect.copyLink')}
+            </button>
+            {room.me.isHost && (
+              <button className="lp-btn-ghost" disabled={loading} onClick={() => void onReset()} type="button">
+                {t('connect.resetRoom')}
+              </button>
+            )}
+            <button className="lp-btn-ghost" onClick={onLeave} type="button">
+              {t('connect.leave')}
+            </button>
+          </div>
+
+          {copied && <p className="lp-feedback success">{t('connect.linkCopied')}</p>}
+          {error && <p className="lp-feedback error">{error}</p>}
         </div>
-      </section>
+      </div>
     </main>
   );
 }
