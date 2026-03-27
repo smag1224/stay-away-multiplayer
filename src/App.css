@@ -5352,6 +5352,8 @@ img {
   .lobby-screen.abyss-screen {
     padding: 20px 12px;
     align-items: flex-start;
+    max-width: none;
+    margin: 0;
     background: url('/backgrounds/connect-mobile.webp') center center / cover no-repeat;
   }
   .lp-frame {
