@@ -585,6 +585,96 @@ describe('bot evaluator tactical pending decisions', () => {
     expect(hostileRisk).toBeGreaterThan(neutralRisk);
   });
 
+  it('defends instead of accepting a lethal fourth infection from a known Thing', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState({
+      type: 'trade_defense',
+      defenderId: 0,
+      fromId: 1,
+      offeredCardUid: 'thing_offer',
+      reason: 'trade',
+    });
+
+    state.players[0].role = 'infected';
+    state.players[0].hand = [
+      card('fear', 'my_fear'),
+      card('infected', 'my_infected_1'),
+      card('infected', 'my_infected_2'),
+      card('infected', 'my_infected_3'),
+    ];
+    state.players[1].role = 'thing';
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    setKnownRole(memory, 1, 'thing');
+
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    expect(actions[0].action).toEqual({
+      type: 'PLAY_DEFENSE',
+      cardUid: 'my_fear',
+    });
+  });
+
+  it('refuses to keep another infected card when already at three infections', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState({
+      type: 'persistence_pick',
+      drawnCards: [
+        card('infected', 'drawn_infected'),
+        card('axe', 'drawn_axe'),
+      ],
+    });
+
+    state.players[0].role = 'infected';
+    state.players[0].hand = [
+      card('infected', 'my_infected_1'),
+      card('infected', 'my_infected_2'),
+      card('infected', 'my_infected_3'),
+      card('fear', 'my_fear'),
+    ];
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    expect(actions[0].action).toEqual({
+      type: 'PERSISTENCE_PICK',
+      keepUid: 'drawn_axe',
+      discardUids: ['drawn_infected'],
+    });
+  });
+
+  it('does not try to give infected to a human target just because the current trade partner is Thing', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState({
+      type: 'choose_card_to_give',
+      targetPlayerId: 2,
+    });
+
+    state.step = 'play_or_discard';
+    state.currentPlayerIndex = 0;
+    state.players[0].role = 'infected';
+    state.players[0].hand = [
+      card('infected', 'my_infected_1'),
+      card('infected', 'my_infected_2'),
+      card('infected', 'my_infected_3'),
+      card('flamethrower', 'my_flamethrower'),
+    ];
+    state.players[1].role = 'thing';
+    state.players[2].role = 'human';
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    expect(actions[0].action).toEqual({
+      type: 'TEMPTATION_SELECT',
+      targetPlayerId: 2,
+      cardUid: 'my_flamethrower',
+    });
+  });
+
   it('prefers the move card with the better full play-target-trade line', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
 

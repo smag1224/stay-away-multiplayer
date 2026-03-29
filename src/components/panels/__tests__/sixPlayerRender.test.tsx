@@ -98,6 +98,8 @@ describe('GameScreen six-player render', () => {
           loading={false}
           me={me}
           onToggleLang={() => undefined}
+          onTogglePerformanceMode={() => undefined}
+          performanceMode={false}
           room={room}
           onAction={async () => undefined}
           onCopy={async () => undefined}

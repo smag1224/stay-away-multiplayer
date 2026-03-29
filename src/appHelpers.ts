@@ -17,6 +17,7 @@ export type Lang = 'en' | 'ru';
 
 export const SESSION_STORAGE_KEY = 'stay-away-multiplayer-session';
 export const LANG_STORAGE_KEY = 'stay-away-multiplayer-lang';
+export const PERFORMANCE_MODE_STORAGE_KEY = 'stay-away-performance-mode';
 const API_TIMEOUT_MS = 8000;
 
 export function readStoredSession(): SessionInfo | null {
@@ -48,6 +49,19 @@ export function readStoredLang(): Lang {
 
 export function writeStoredLang(lang: Lang): void {
   window.localStorage.setItem(LANG_STORAGE_KEY, lang);
+}
+
+export function readStoredPerformanceMode(): boolean {
+  return window.localStorage.getItem(PERFORMANCE_MODE_STORAGE_KEY) === '1';
+}
+
+export function writeStoredPerformanceMode(enabled: boolean): void {
+  if (enabled) {
+    window.localStorage.setItem(PERFORMANCE_MODE_STORAGE_KEY, '1');
+    return;
+  }
+
+  window.localStorage.removeItem(PERFORMANCE_MODE_STORAGE_KEY);
 }
 
 export function text(lang: Lang, ru: string, en: string): string {
@@ -93,19 +107,48 @@ export async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T>
   return payload.data;
 }
 
-export function localTradeCheck(player: ViewerPlayerState, card: CardInstance, receiver?: ViewerPlayerState | null): boolean {
+export function canGiveCard(player: ViewerPlayerState, card: CardInstance): boolean {
   if (card.defId === 'the_thing') return false;
-  if (card.defId === 'infected') {
-    if (player.role === 'thing') {
-      return receiver ? receiver.canReceiveInfectedCardFromMe : true;
-    }
-    if (player.role === 'infected') {
-      const infectedCount = player.hand.filter((item) => item.defId === 'infected').length;
-      return infectedCount > 1 && Boolean(receiver?.canReceiveInfectedCardFromMe);
-    }
-    return false;
+  if (card.defId !== 'infected') return true;
+
+  if (player.role === 'thing') return true;
+  if (player.role === 'infected') {
+    return player.hand.filter((item) => item.defId === 'infected').length > 1;
   }
-  return true;
+  return false;
+}
+
+export function canGiveCardToPlayer(
+  player: ViewerPlayerState,
+  card: CardInstance,
+  receiver?: ViewerPlayerState | null,
+): boolean {
+  if (!canGiveCard(player, card)) return false;
+  if (card.defId !== 'infected') return true;
+  if (!receiver) return true;
+  return receiver.canReceiveInfectedCardFromMe;
+}
+
+export function localTradeCheck(player: ViewerPlayerState, card: CardInstance, receiver?: ViewerPlayerState | null): boolean {
+  return canGiveCardToPlayer(player, card, receiver);
+}
+
+export function getDirectionalNeighbor(
+  game: ViewerGameState,
+  playerId: number,
+  direction: 1 | -1,
+): ViewerPlayerState | null {
+  const alivePlayers = game.players
+    .filter((player) => player.isAlive)
+    .sort((left, right) => left.position - right.position);
+
+  if (alivePlayers.length <= 1) return null;
+
+  const currentIndex = alivePlayers.findIndex((player) => player.id === playerId);
+  if (currentIndex === -1) return null;
+
+  const targetIndex = (currentIndex + direction + alivePlayers.length) % alivePlayers.length;
+  return alivePlayers[targetIndex] ?? null;
 }
 
 export function getCurrentPlayer(game: ViewerGameState): ViewerPlayerState | undefined {

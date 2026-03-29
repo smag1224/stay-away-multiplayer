@@ -1,11 +1,11 @@
-import { useContext } from 'react';
+import { memo, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShowCardTextCtx } from './ShowCardTextCtx.ts';
 import { getCardDef, getCardImage } from '../../cards.ts';
 import { cardCategoryLabel, type Lang } from '../../appHelpers.ts';
 import type { CardInstance } from '../../types.ts';
 
-export function CardView({ card, faceUp }: { card: CardInstance; faceUp: boolean }) {
+function CardViewInner({ card, faceUp }: { card: CardInstance; faceUp: boolean }) {
   const { i18n } = useTranslation();
   const lang: Lang = i18n.language === 'en' ? 'en' : 'ru';
   const showText = useContext(ShowCardTextCtx);
@@ -31,3 +31,11 @@ export function CardView({ card, faceUp }: { card: CardInstance; faceUp: boolean
     </div>
   );
 }
+
+export const CardView = memo(CardViewInner, (prevProps, nextProps) =>
+  prevProps.faceUp === nextProps.faceUp &&
+  prevProps.card.uid === nextProps.card.uid &&
+  prevProps.card.defId === nextProps.card.defId,
+);
+
+CardView.displayName = 'CardView';

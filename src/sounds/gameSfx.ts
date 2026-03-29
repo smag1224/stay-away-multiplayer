@@ -8,6 +8,21 @@
 // ---------------------------------------------------------------------------
 
 let masterVolume = 0.5;
+let sfxPreloaded = false;
+
+const SFX_FILES = [
+  'Взятие карты из колоды.mp3',
+  'Сброс карты.mp3',
+  'Заколоченная дверь.mp3',
+  'карантин.mp3',
+  'Обмен картами.mp3',
+  'Вытянул панику.mp3',
+  'Использование карты защиты.mp3',
+  'Начало твоего хода.mp3',
+  'Перемешивание колоды.mp3',
+  'Игрок выбывает.mp3',
+  'виски.mp3',
+];
 
 export function setMasterVolume(vol: number): void {
   masterVolume = Math.max(0, Math.min(1, vol));
@@ -19,19 +34,42 @@ export function setMasterVolume(vol: number): void {
 
 const audioCache: Record<string, HTMLAudioElement> = {};
 
+function canUseAudio(): boolean {
+  return typeof Audio !== 'undefined';
+}
+
+function getCachedAudio(path: string): HTMLAudioElement | null {
+  if (!canUseAudio()) return null;
+
+  if (!audioCache[path]) {
+    const audio = new Audio(path);
+    audio.preload = 'auto';
+    audio.load();
+    audioCache[path] = audio;
+  }
+
+  return audioCache[path];
+}
+
+export function preloadGameSfx(): void {
+  if (sfxPreloaded || !canUseAudio()) return;
+
+  sfxPreloaded = true;
+  for (const file of SFX_FILES) {
+    const path = `/sounds/${file}`;
+    getCachedAudio(path);
+  }
+}
+
 function playSfx(file: string, volume: number): void {
   const path = `/sounds/${file}`;
   const effectiveVolume = volume * masterVolume;
+  const cached = getCachedAudio(path);
+  if (!cached) return;
 
   // Clone from cache or create new element so overlapping plays work
-  let audio: HTMLAudioElement;
-  if (audioCache[path]) {
-    audio = audioCache[path].cloneNode(true) as HTMLAudioElement;
-  } else {
-    audio = new Audio(path);
-    audioCache[path] = audio;
-    audio = audio.cloneNode(true) as HTMLAudioElement;
-  }
+  const audio = cached.cloneNode(true) as HTMLAudioElement;
+  audio.preload = 'auto';
 
   audio.volume = Math.max(0, Math.min(1, effectiveVolume));
   audio.play().catch(() => {});
@@ -107,7 +145,7 @@ export function playVictoryThing(volume = 0.5): void {
 }
 
 /** Whisky card played */
-export function playWhisky(volume = 0.7): void {
+export function playWhisky(volume = 1.4): void {
   playSfx('виски.mp3', volume);
 }
 

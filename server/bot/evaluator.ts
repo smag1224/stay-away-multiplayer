@@ -170,6 +170,8 @@ interface IncomingTradePolicySnapshot {
 // ── Game stage ──────────────────────────────────────────────────────────────
 
 type GameStage = 'early' | 'mid' | 'late';
+const INFECTION_OVERLOAD_LIMIT = 4;
+const INFECTION_OVERLOAD_WARNING = INFECTION_OVERLOAD_LIMIT - 1;
 
 function getStage(progress: number): GameStage {
   if (progress < STAGE.earlyEnd) return 'early';
@@ -197,6 +199,73 @@ function dynamicCardValue(defId: string, stage: GameStage, playerCount: number):
     countMult = aggressionMultiplier(playerCount);
   }
   return base * stageMult * countMult;
+}
+
+function applyInfectionOverloadSheddingBias(
+  vs: BotVisibleState,
+  defId: string,
+  score: number,
+): number {
+  if (defId !== 'infected') return score;
+  if (vs.myRole !== 'thing' && vs.myRole !== 'infected') return score;
+
+  if (vs.myInfectedCount >= INFECTION_OVERLOAD_WARNING) {
+    return Math.max(score, 18);
+  }
+
+  if (vs.myInfectedCount >= 2) {
+    return Math.max(score, vs.myRole === 'thing' ? 10 : 9);
+  }
+
+  return score;
+}
+
+function applyInfectionOverloadKeepPenalty(
+  vs: BotVisibleState,
+  defId: string,
+  score: number,
+): number {
+  if (defId !== 'infected') return score;
+  if (vs.myRole !== 'thing' && vs.myRole !== 'infected') return score;
+  if (vs.myInfectedCount < INFECTION_OVERLOAD_WARNING) return score;
+  return Math.min(score, 0.1);
+}
+
+function canTradeCardWithTarget(
+  vs: BotVisibleState,
+  card: BotVisibleState['myHand'][number],
+  targetId: number,
+): boolean {
+  if (card.defId === 'the_thing') return false;
+  if (card.defId !== 'infected') return true;
+
+  const target = vs.players.find(player => player.id === targetId);
+  if (!target || target.id === vs.myId) return false;
+  if (!target.canReceiveInfectedCardFromMe) return false;
+
+  if (vs.myRole === 'thing') return true;
+  if (vs.myRole === 'infected') return vs.myInfectedCount > 1;
+  return false;
+}
+
+function getTradeableCardsForTarget(vs: BotVisibleState, targetId: number | null): BotVisibleState['myHand'] {
+  if (targetId === null) return vs.tradeableCards;
+  return vs.myHand.filter(card => canTradeCardWithTarget(vs, card, targetId));
+}
+
+function getDirectionalTradeTargetId(
+  vs: BotVisibleState,
+  playerId: number,
+  direction: 1 | -1,
+): number | null {
+  const alivePlayers = [...vs.alivePlayers].sort((left, right) => left.position - right.position);
+  if (alivePlayers.length <= 1) return null;
+
+  const currentIndex = alivePlayers.findIndex(player => player.id === playerId);
+  if (currentIndex === -1) return null;
+
+  const targetIndex = (currentIndex + direction + alivePlayers.length) % alivePlayers.length;
+  return alivePlayers[targetIndex]?.id ?? null;
 }
 
 // ── Main entry ──────────────────────────────────────────────────────────────
@@ -413,6 +482,8 @@ function scoreTradeCardForPartner(
   if (vs.myRole === 'infected' && card.defId === 'infected') {
     score = 3;
   }
+
+  score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
 
   if (vs.myRole === 'infected' && partnerId !== null) {
     const partnerIsAlly = Boolean(partnerObs?.confirmedInfected);
@@ -657,7 +728,26 @@ export function getIncomingTradeRisk(
 
   if (vs.myRole === 'human') return scoreHumanIncomingTradeRisk(snapshot);
 
-  return 0;
+  if (vs.myInfectedCount < INFECTION_OVERLOAD_WARNING) return 0;
+
+  const knownRole = snapshot.observation.knownRole;
+
+  if (knownRole === 'infected' && vs.myRole === 'infected') {
+    return 0;
+  }
+
+  let risk = 4;
+
+  if (knownRole === 'thing') {
+    risk += 10;
+  } else if (knownRole === 'infected' && vs.myRole === 'thing') {
+    risk += 8;
+  } else {
+    risk += snapshot.infectedCount > 0 ? 4 * snapshot.forcedness : 0;
+    risk += snapshot.thingCount > 0 ? 8 * snapshot.forcedness : 0;
+  }
+
+  return risk;
 }
 
 function getBestTradeFollowUpForPartner(
@@ -827,6 +917,8 @@ function evaluatePlayPhase(vs: BotVisibleState, memory: BotMemory, w: Weights, a
     } else {
       if (dc.defId === 'infected') score = 11;
     }
+
+    score = applyInfectionOverloadSheddingBias(vs, dc.defId, score);
 
     if (def.category === 'defense') score *= 0.35;
 
@@ -1453,9 +1545,10 @@ function chooseRevelationsAction(vs: BotVisibleState): GameAction {
 // ── Trade phase ─────────────────────────────────────────────────────────────
 
 function evaluateTradePhase(vs: BotVisibleState, memory: BotMemory, _w: Weights, actions: ScoredAction[], stage: GameStage): void {
-  if (vs.tradeableCards.length === 0) return;
+  const tradeCards = getTradeableCardsForTarget(vs, vs.tradePartnerId);
+  if (tradeCards.length === 0) return;
 
-  for (const card of vs.tradeableCards) {
+  for (const card of tradeCards) {
     const score = scoreTradeCardForPartner(vs, memory, card, vs.tradePartnerId, stage);
 
     actions.push({
@@ -1513,7 +1606,8 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
       // Accept options
       if (['trade', 'temptation', 'panic_trade'].includes(pa.reason)) {
-        for (const card of vs.tradeableCards) {
+        const incomingTradeRisk = getIncomingTradeRisk(vs, memory, pa.fromId, stage);
+        for (const card of getTradeableCardsForTarget(vs, pa.fromId)) {
           const dv = dynamicCardValue(card.defId, stage, vs.players.length);
           let score = 10 - dv;
 
@@ -1530,6 +1624,9 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
               score *= 0.5;
             }
           }
+
+          score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
+          score -= incomingTradeRisk;
 
           const actionType = pa.reason === 'trade' ? 'RESPOND_TRADE'
             : pa.reason === 'temptation' ? 'TEMPTATION_RESPOND'
@@ -1606,6 +1703,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
           if (card.defId === 'no_barbecue') score += 4;
           if (card.defId === 'temptation') score += 3;
         }
+        score = applyInfectionOverloadKeepPenalty(vs, card.defId, score);
         const discardUids = pa.drawnCards.filter(c => c.uid !== card.uid).map(c => c.uid);
         actions.push({
           action: { type: 'PERSISTENCE_PICK', keepUid: card.uid, discardUids },
@@ -1618,10 +1716,12 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
     case 'party_pass': {
       if (!pa.pendingPlayerIds.includes(vs.myId)) break;
-      for (const card of vs.tradeableCards) {
+      const passTargetId = getDirectionalTradeTargetId(vs, vs.myId, pa.direction);
+      for (const card of getTradeableCardsForTarget(vs, passTargetId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') score = 15;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'PARTY_PASS_CARD', playerId: vs.myId, cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1637,6 +1737,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (card.defId === 'infected' && vs.myRole === 'human') score = 13;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'BLIND_DATE_PICK', cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1652,6 +1753,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (card.defId === 'infected' && vs.myRole === 'human') score = 13;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'FORGETFUL_DISCARD_PICK', cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1663,10 +1765,11 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
     case 'panic_trade': {
       if (vs.currentPlayerId !== vs.myId) break;
-      for (const card of vs.tradeableCards) {
+      for (const card of getTradeableCardsForTarget(vs, pa.targetPlayerId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') score = 15;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'PANIC_TRADE_SELECT', targetPlayerId: pa.targetPlayerId, cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1716,10 +1819,12 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
       if (pa.playerA !== vs.myId && pa.playerB !== vs.myId) break;
       if (pa.playerA === vs.myId && pa.cardUidA !== null) break;
       if (pa.playerB === vs.myId && pa.cardUidB !== null) break;
-      for (const card of vs.tradeableCards) {
+      const partnerId = pa.playerA === vs.myId ? pa.playerB : pa.playerA;
+      for (const card of getTradeableCardsForTarget(vs, partnerId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') score = 15;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'JUST_BETWEEN_US_PICK', playerId: vs.myId, cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1735,6 +1840,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (card.defId === 'infected' && vs.myRole === 'human') score = 13;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'DISCARD_CARD', cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1746,12 +1852,13 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
     case 'choose_card_to_give': {
       if (vs.currentPlayerId !== vs.myId) break;
-      for (const card of vs.tradeableCards) {
+      for (const card of getTradeableCardsForTarget(vs, pa.targetPlayerId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') {
           score = memory.globalTurnCount < THING_SAFE_TURNS ? 5 : 15;
         }
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'TEMPTATION_SELECT', targetPlayerId: pa.targetPlayerId, cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1803,9 +1910,10 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
     case 'temptation_response': {
       if (pa.toId !== vs.myId) break;
-      for (const card of vs.tradeableCards) {
+      for (const card of getTradeableCardsForTarget(vs, pa.fromId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'TEMPTATION_RESPOND', cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1817,10 +1925,11 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
     case 'panic_trade_response': {
       if (pa.toId !== vs.myId) break;
-      for (const card of vs.tradeableCards) {
+      for (const card of getTradeableCardsForTarget(vs, pa.fromId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') score = 15;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'PANIC_TRADE_RESPOND', cardUid: card.uid },
           score: Math.max(0.1, score),
@@ -1832,10 +1941,11 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
 
     case 'trade_offer': {
       if (pa.toId !== vs.myId) break;
-      for (const card of vs.tradeableCards) {
+      for (const card of getTradeableCardsForTarget(vs, pa.fromId)) {
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') score = 15;
+        score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
           action: { type: 'OFFER_TRADE', cardUid: card.uid },
           score: Math.max(0.1, score),

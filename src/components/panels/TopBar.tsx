@@ -10,9 +10,11 @@ export function TopBar({
   mobileQuickActionLabel,
   mobileQuickActionVariant = 'danger',
   onMobileQuickAction,
+  performanceMode = false,
   room,
   onCopy,
   onLeave,
+  onTogglePerformanceMode,
   onToggleLang,
   showCardText,
   onToggleText,
@@ -25,9 +27,11 @@ export function TopBar({
   mobileQuickActionLabel?: string;
   mobileQuickActionVariant?: 'danger' | 'accent';
   onMobileQuickAction?: () => void;
+  performanceMode?: boolean;
   room: RoomView;
   onCopy: () => Promise<void>;
   onLeave: () => void;
+  onTogglePerformanceMode?: () => void;
   onToggleLang?: () => void;
   showCardText?: boolean;
   onToggleText?: () => void;
@@ -59,9 +63,14 @@ export function TopBar({
         </span>
       )}
       {/* Music volume slider */}
-      <MusicVolumeSlider />
+      <MusicVolumeSlider disabled={performanceMode} />
       {/* Desktop actions */}
       <div className="top-bar-actions desktop-actions">
+        {onTogglePerformanceMode && (
+          <button className={`btn small ${performanceMode ? 'primary' : 'ghost'}`} onClick={onTogglePerformanceMode} type="button">
+            ⚡ {performanceMode ? t('topbar.performanceOn') : t('topbar.performanceOff')}
+          </button>
+        )}
         {onToggleHints && (
           <button className={`btn small ${hintsEnabled ? 'primary' : 'ghost'}`} onClick={onToggleHints} type="button">
             💡 {hintsEnabled ? t('topbar.hintsOn', 'Подсказки') : t('topbar.hintsOff', 'Подсказки')}
@@ -96,6 +105,11 @@ export function TopBar({
           {onToggleLang && (
             <button className="dropdown-item" onClick={() => { onToggleLang(); setMenuOpen(false); }} type="button">
               {t('topbar.language')} {lang === 'ru' ? 'EN' : 'RU'}
+            </button>
+          )}
+          {onTogglePerformanceMode && (
+            <button className="dropdown-item" onClick={() => { onTogglePerformanceMode(); setMenuOpen(false); }} type="button">
+              ⚡ {performanceMode ? t('topbar.performanceOn') : t('topbar.performanceOff')}
             </button>
           )}
           {onToggleHints && (

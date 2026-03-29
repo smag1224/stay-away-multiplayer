@@ -149,7 +149,7 @@ export function LobbyScreen({
   onLeave,
   onStart,
   onAddBot,
-  onRemoveBot,
+  onRemoveMember,
   onGameModeChange,
 }: {
   copied: boolean;
@@ -161,7 +161,7 @@ export function LobbyScreen({
   onLeave: () => void;
   onStart: () => Promise<void>;
   onAddBot: () => Promise<void>;
-  onRemoveBot: (botSessionId: string) => Promise<void>;
+  onRemoveMember: (memberSessionId: string) => Promise<void>;
   onGameModeChange: (value: 'standard' | 'thing_in_deck' | 'anomaly') => void;
 }) {
   const { t } = useTranslation();
@@ -211,12 +211,14 @@ export function LobbyScreen({
                         )}
                       </div>
                       <span className="lp-row-sep">— —</span>
-                      {member?.isBot && room.me.isHost ? (
+                      {member && room.me.isHost && !member.isHost ? (
                         <button
                           className="lp-rm-bot"
-                          onClick={() => void onRemoveBot(member.sessionId)}
+                          onClick={() => void onRemoveMember(member.sessionId)}
                           type="button"
-                          title={t('connect.removeBot', 'Убрать бота')}
+                          title={member.isBot
+                            ? t('connect.removeBot')
+                            : t('connect.kickPlayer')}
                         >
                           ✕
                         </button>

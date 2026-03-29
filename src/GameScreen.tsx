@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { getCardName, getCardDescription } from './cards.ts';
 import type { RoomView, ViewerGameState, ViewerPlayerState } from './multiplayer.ts';
 import type { GameAction } from './types.ts';
@@ -24,6 +24,7 @@ import { PlayerHand } from './components/panels/PlayerHand.tsx';
 import { CardPlayAnimationOverlay } from './components/panels/CardPlayAnimationOverlay.tsx';
 import type { CardAnimTrigger } from './components/panels/CardPlayAnimationOverlay.tsx';
 import type { LogEntry } from './types.ts';
+import { preloadCoreGameImages, preloadPlayerAvatars } from './assetPreload.ts';
 
 /** Classify a log entry for icon & color styling */
 function getLogMeta(entry: LogEntry): { icon: string; cls: string } {
@@ -119,6 +120,7 @@ import {
   playLockedDoor,
   playQuarantine,
   playWhisky,
+  preloadGameSfx,
 } from './sounds/gameSfx.ts';
 
 export function GameScreen({
@@ -127,6 +129,8 @@ export function GameScreen({
   loading,
   me,
   onToggleLang,
+  onTogglePerformanceMode,
+  performanceMode,
   room,
   onAction,
   onCopy,
@@ -139,6 +143,8 @@ export function GameScreen({
   loading: boolean;
   me: ViewerPlayerState;
   onToggleLang: () => void;
+  onTogglePerformanceMode: () => void;
+  performanceMode: boolean;
   room: RoomView;
   onAction: (action: GameAction) => Promise<void>;
   onCopy: () => Promise<void>;
@@ -272,8 +278,15 @@ export function GameScreen({
     return undefined;
   }, [game.reshuffleCount]);
 
+  useEffect(() => {
+    preloadCoreGameImages();
+    preloadPlayerAvatars(game.players);
+  }, [game.players]);
+
   // Global button click sound — captures all button clicks in the game screen
   useEffect(() => {
+    preloadGameSfx();
+
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('button, .btn, [role="button"]')) {
@@ -286,14 +299,25 @@ export function GameScreen({
 
   // Start background music when game begins (requires user interaction first)
   useEffect(() => {
+    if (performanceMode) {
+      bgMusic.stop();
+      return;
+    }
+
     if (!bgMusic.playing) {
       bgMusic.start();
     }
+
     return () => {
       bgMusic.stop();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [performanceMode]);
+
+  useEffect(() => {
+    if (performanceMode && cardAnim) {
+      setCardAnim(null);
+    }
+  }, [cardAnim, performanceMode]);
 
   // Detect player death → show spectator choice prompt
   useEffect(() => {
@@ -314,7 +338,7 @@ export function GameScreen({
     prevLogLenRef.current = game.log.length;
 
 
-    if (game.log.length <= prevLen) return;
+    if (performanceMode || game.log.length <= prevLen) return;
 
     const newCount = game.log.length - prevLen;
 
@@ -355,7 +379,7 @@ export function GameScreen({
 
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.log.length]);
+  }, [game.log.length, performanceMode]);
 
   // ── Sound effects based on game state changes ──────────────────
   useEffect(() => {
@@ -566,6 +590,7 @@ export function GameScreen({
 
   return (
     <ShowCardTextCtx.Provider value={showCardText}>
+      <MotionConfig reducedMotion={performanceMode ? 'always' : 'never'}>
       <main className={`game-screen ${screenStateClass}`}>
         <TopBar
           lang={lang}
@@ -574,6 +599,7 @@ export function GameScreen({
           onLeave={onLeave}
           mobileQuickActionLabel={undefined}
           onMobileQuickAction={undefined}
+          onTogglePerformanceMode={onTogglePerformanceMode}
           onToggleLang={onToggleLang}
           onToggleText={() => setShowCardText(v => !v)}
           hintsEnabled={hintsEnabled}
@@ -584,6 +610,7 @@ export function GameScreen({
               return next;
             });
           }}
+          performanceMode={performanceMode}
           room={room}
           showCardText={showCardText}
           noticeContent={
@@ -843,11 +870,15 @@ export function GameScreen({
                 onShout={onShout}
                 isSpectator={isSpectator}
                 animOverlay={
-                  <CardPlayAnimationOverlay
-                    trigger={cardAnim}
-                    game={game}
-                    onDone={() => setCardAnim(null)}
-                  />
+                  performanceMode
+                    ? null
+                    : (
+                        <CardPlayAnimationOverlay
+                          trigger={cardAnim}
+                          game={game}
+                          onDone={() => setCardAnim(null)}
+                        />
+                      )
                 }
               />
             </div>
@@ -978,6 +1009,7 @@ export function GameScreen({
           </AnimatePresence>
         </div>
       </main>
+      </MotionConfig>
     </ShowCardTextCtx.Provider>
   );
 }

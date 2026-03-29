@@ -11,12 +11,16 @@ import {
   api,
   copyToClipboard,
   getViewerPlayer,
+  readStoredPerformanceMode,
   readStoredSession,
   writeStoredLang,
+  writeStoredPerformanceMode,
   writeStoredSession,
 } from './appHelpers.ts';
 import type { Lang } from './appHelpers.ts';
 import './App.css';
+
+const KICKED_BY_HOST_ERROR = 'KICKED_BY_HOST';
 
 function App() {
   const { i18n } = useTranslation();
@@ -29,6 +33,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [gameMode, setGameMode] = useState<'standard' | 'thing_in_deck' | 'anomaly'>('standard');
+  const [performanceMode, setPerformanceMode] = useState(() => readStoredPerformanceMode());
   // Track latest known state timestamp to prevent stale poll responses from overwriting fresh action responses
   const lastKnownUpdatedAt = useRef(0);
 
@@ -36,6 +41,25 @@ function App() {
     const next: Lang = lang === 'ru' ? 'en' : 'ru';
     void i18n.changeLanguage(next);
     writeStoredLang(next);
+  };
+
+  const handleRoomError = (message: string) => {
+    if (message === KICKED_BY_HOST_ERROR) {
+      writeStoredSession(null);
+      setSession(null);
+      setRoom(null);
+      lastKnownUpdatedAt.current = 0;
+      setError(i18n.t('connect.kickedByHost'));
+      return;
+    }
+
+    setError(message);
+    if (message.includes('Room not found') || message.includes('Session not found')) {
+      writeStoredSession(null);
+      setSession(null);
+      setRoom(null);
+      lastKnownUpdatedAt.current = 0;
+    }
   };
 
   useEffect(() => {
@@ -59,12 +83,7 @@ function App() {
 
     const handleError = (message: string) => {
       if (cancelled) return;
-      setError(message);
-      if (message.includes('Room not found') || message.includes('Session not found')) {
-        writeStoredSession(null);
-        setSession(null);
-        setRoom(null);
-      }
+      handleRoomError(message);
     };
 
     let pollInterval: number | null = null;
@@ -86,7 +105,7 @@ function App() {
         }
       };
       void refresh();
-      pollInterval = window.setInterval(refresh, 1200);
+      pollInterval = window.setInterval(refresh, performanceMode ? 3000 : 1200);
     }
 
     // We intentionally use polling instead of SSE here.
@@ -99,7 +118,15 @@ function App() {
       cancelled = true;
       if (pollInterval) window.clearInterval(pollInterval);
     };
-  }, [session]);
+  }, [performanceMode, session]);
+
+  const togglePerformanceMode = () => {
+    setPerformanceMode((value) => {
+      const next = !value;
+      writeStoredPerformanceMode(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!room) return;
@@ -136,7 +163,7 @@ function App() {
       setRoom(nextRoom);
       setError(null);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : String(requestError));
+      handleRoomError(requestError instanceof Error ? requestError.message : String(requestError));
     } finally {
       setLoading(false);
     }
@@ -151,7 +178,7 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${performanceMode ? ' perf-mode' : ''}`}>
       {showFloatingLangToggle && (
         <button className="lang-toggle" onClick={toggleLang} type="button">
           {lang === 'ru' ? 'EN' : 'RU'}
@@ -215,7 +242,7 @@ function App() {
             chaosMode: gameMode === 'anomaly',
           })}
           onAddBot={() => callRoomEndpoint(`/api/rooms/${room.code}/add-bot`, { sessionId: room.me.sessionId })}
-          onRemoveBot={(botSessionId: string) => callRoomEndpoint(`/api/rooms/${room.code}/remove-bot`, { sessionId: room.me.sessionId, botSessionId })}
+          onRemoveMember={(memberSessionId: string) => callRoomEndpoint(`/api/rooms/${room.code}/remove-member`, { sessionId: room.me.sessionId, memberSessionId })}
         />
       )}
 
@@ -227,6 +254,8 @@ function App() {
             loading={loading}
             me={me}
             onToggleLang={toggleLang}
+            onTogglePerformanceMode={togglePerformanceMode}
+            performanceMode={performanceMode}
             room={room}
             onAction={(action) => callRoomEndpoint(`/api/rooms/${room.code}/action`, { sessionId: room.me.sessionId, action })}
             onCopy={updateCopied}

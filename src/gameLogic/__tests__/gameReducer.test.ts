@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { createInitialState, gameReducer } from '../index.ts';
 import type { GameState, CardInstance } from '../../types.ts';
 
@@ -34,6 +34,20 @@ function giveCard(state: GameState, playerIndex: number, defId: string): string 
   state.players[playerIndex].hand.push(c);
   return c.uid;
 }
+
+const ANOMALY_STRONG_CARD_IDS = new Set([
+  'flamethrower',
+  'analysis',
+  'no_barbecue',
+  'persistence',
+  'anti_analysis',
+  'fear',
+  'quarantine',
+]);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // ===========================================================================
 // Tests
@@ -103,6 +117,35 @@ describe('gameReducer', () => {
       });
       expect(state.seats).toEqual([0, 1, 2, 3]);
     });
+
+    it.each([
+      { playerCount: 5, strongOverflow: 2 },
+      { playerCount: 6, strongOverflow: 1 },
+      { playerCount: 8, strongOverflow: 1 },
+      { playerCount: 10, strongOverflow: 1 },
+    ])(
+      'in anomaly mode still deals 4 cards to each player at $playerCount players when The Thing stays in deck',
+      ({ playerCount, strongOverflow }) => {
+        vi.spyOn(Math, 'random').mockReturnValue(0.9);
+        const names = Array.from({ length: playerCount }, (_, i) => `P${i + 1}`);
+
+        const state = gameReducer(createInitialState(), {
+          type: 'START_GAME',
+          playerNames: names,
+          chaosMode: true,
+        });
+
+        expect(state.players.map((player) => player.hand.length)).toEqual(Array(playerCount).fill(4));
+
+        const strongCardsInHands = state.players
+          .flatMap((player) => player.hand)
+          .filter((handCard) => ANOMALY_STRONG_CARD_IDS.has(handCard.defId));
+        expect(strongCardsInHands).toHaveLength(strongOverflow);
+
+        expect(state.players.some((player) => player.hand.some((handCard) => handCard.defId === 'the_thing'))).toBe(false);
+        expect(state.deck.some((deckCard) => deckCard.defId === 'the_thing')).toBe(true);
+      },
+    );
   });
 
   // ── DRAW_CARD ───────────────────────────────────────────────────────────
@@ -285,6 +328,53 @@ describe('gameReducer', () => {
         expect(next.pendingAction!.reason).toBe('flamethrower');
       }
     });
+
+    it('rejects a quarantined target even if client sends targetPlayerId directly', () => {
+      const state = startGame(4);
+      state.step = 'play_or_discard';
+
+      const targetIdx = 1;
+      state.players[targetIdx].inQuarantine = true;
+      state.players[targetIdx].quarantineTurnsLeft = 2;
+
+      const flameUid = giveCard(state, state.currentPlayerIndex, 'flamethrower');
+      const handBefore = state.players[state.currentPlayerIndex].hand.length;
+
+      const next = gameReducer(state, {
+        type: 'PLAY_CARD',
+        cardUid: flameUid,
+        targetPlayerId: state.players[targetIdx].id,
+      });
+
+      expect(next.players[targetIdx].isAlive).toBe(true);
+      expect(next.players[next.currentPlayerIndex].hand.length).toBe(handBefore);
+      expect(next.players[next.currentPlayerIndex].hand.some((handCard) => handCard.uid === flameUid)).toBe(true);
+      expect(next.discard.some((discardCard) => discardCard.uid === flameUid)).toBe(false);
+    });
+
+    it('revalidates stale choose_target state and rejects flamethrower on a quarantined target', () => {
+      const state = startGame(4);
+      state.step = 'play_or_discard';
+
+      const flameUid = giveCard(state, state.currentPlayerIndex, 'flamethrower');
+      const targetId = state.players[1].id;
+      state.pendingAction = {
+        type: 'choose_target',
+        cardUid: flameUid,
+        cardDefId: 'flamethrower',
+        targets: [targetId],
+      };
+      state.players[1].inQuarantine = true;
+      state.players[1].quarantineTurnsLeft = 2;
+
+      const next = gameReducer(state, { type: 'SELECT_TARGET', targetPlayerId: targetId });
+
+      expect(next.players[1].isAlive).toBe(true);
+      expect(next.pendingAction).toBeNull();
+      expect(next.players[next.currentPlayerIndex].hand.some((handCard) => handCard.uid === flameUid)).toBe(true);
+      expect(next.discard.some((discardCard) => discardCard.uid === flameUid)).toBe(false);
+      expect(next.step).toBe('play_or_discard');
+    });
   });
 
   describe('PLAY_CARD (suspicion)', () => {
@@ -446,6 +536,75 @@ describe('gameReducer', () => {
   // ── PLAY_DEFENSE ────────────────────────────────────────────────────────
 
   describe('PLAY_DEFENSE', () => {
+    it('miss cancels temptation and ends the turn without a neighbor trade', () => {
+      const state = startGame(4);
+      state.step = 'trade_response';
+      state.currentPlayerIndex = 0;
+      state.direction = 1;
+      state.doors = [];
+
+      state.players[0].hand = [card('the_thing', 'keep_thing'), card('suspicion', 'tempt_offer')];
+      state.players[0].role = 'thing';
+      state.players[1].hand = [card('miss', 'miss_1'), card('whisky', 'defender_keep')];
+      state.players[2].hand = [card('watch_your_back', 'neighbor_trade')];
+      stackDeck(state, card('suspicion', 'draw_after_miss'));
+
+      state.pendingAction = {
+        type: 'trade_defense',
+        defenderId: 1,
+        fromId: 0,
+        offeredCardUid: 'tempt_offer',
+        reason: 'temptation',
+      };
+
+      const next = gameReducer(state, { type: 'PLAY_DEFENSE', cardUid: 'miss_1' });
+
+      expect(next.step).toBe('draw');
+      expect(next.currentPlayerIndex).toBe(1);
+      expect(next.pendingAction).toBeNull();
+      expect(next.players[0].hand.some(c => c.uid === 'tempt_offer')).toBe(true);
+      expect(next.players[1].hand.some(c => c.uid === 'tempt_offer')).toBe(false);
+      expect(next.players[2].hand.some(c => c.uid === 'neighbor_trade')).toBe(true);
+    });
+
+    it('fear against temptation reveals the offered card and still ends the turn without a neighbor trade', () => {
+      const state = startGame(4);
+      state.step = 'trade_response';
+      state.currentPlayerIndex = 0;
+      state.direction = 1;
+      state.doors = [];
+
+      state.players[0].hand = [card('the_thing', 'keep_thing'), card('suspicion', 'tempt_offer')];
+      state.players[0].role = 'thing';
+      state.players[1].hand = [card('fear', 'fear_1'), card('whisky', 'defender_keep')];
+      state.players[2].hand = [card('watch_your_back', 'neighbor_trade')];
+      stackDeck(state, card('suspicion', 'draw_after_fear'));
+
+      state.pendingAction = {
+        type: 'trade_defense',
+        defenderId: 1,
+        fromId: 0,
+        offeredCardUid: 'tempt_offer',
+        reason: 'temptation',
+      };
+
+      const afterDefense = gameReducer(state, { type: 'PLAY_DEFENSE', cardUid: 'fear_1' });
+
+      expect(afterDefense.pendingAction?.type).toBe('view_card');
+      if (afterDefense.pendingAction?.type === 'view_card') {
+        expect(afterDefense.pendingAction.card.uid).toBe('tempt_offer');
+      }
+
+      const next = gameReducer(afterDefense, { type: 'CONFIRM_VIEW' });
+
+      expect(next.step).toBe('draw');
+      expect(next.currentPlayerIndex).toBe(1);
+      expect(next.pendingAction).toBeNull();
+      expect(next.players[0].hand.some(c => c.uid === 'tempt_offer')).toBe(true);
+      expect(next.players[1].hand.some(c => c.uid === 'tempt_offer')).toBe(false);
+      expect(next.players[2].hand.some(c => c.uid === 'neighbor_trade')).toBe(true);
+    });
+
     it('no_thanks blocks trade and advances turn', () => {
       const state = startGame(4);
       state.step = 'trade_response';
@@ -493,6 +652,96 @@ describe('gameReducer', () => {
       // Target should still be alive
       expect(next.players[defenderId].isAlive).toBe(true);
       expect(next.discard.some(c => c.uid === noBbqUid)).toBe(true);
+    });
+
+    it('anti_analysis defender dies immediately if the replacement draw creates a fourth infection', () => {
+      const state = startGame(4);
+      state.step = 'play_or_discard';
+      state.currentPlayerIndex = 0;
+      state.direction = 1;
+      state.doors = [];
+
+      state.players.forEach((player, index) => {
+        player.position = index;
+        player.isAlive = true;
+        player.inQuarantine = false;
+      });
+
+      state.players[0].role = 'human';
+      state.players[0].hand = [card('the_thing', 'keep_thing'), card('suspicion', 'post_analysis_trade')];
+      state.players[1].role = 'human';
+      state.players[1].hand = [
+        card('infected', 'inf_1'),
+        card('infected', 'inf_2'),
+        card('infected', 'inf_3'),
+        card('anti_analysis', 'anti_1'),
+      ];
+      state.players[2].role = 'human';
+      state.players[2].hand = [card('watch_your_back', 'alive_neighbor')];
+      state.players[3].role = 'thing';
+      stackDeck(state, card('infected', 'inf_drawn'));
+
+      state.pendingAction = {
+        type: 'trade_defense',
+        defenderId: 1,
+        fromId: 0,
+        offeredCardUid: 'analysis_card',
+        reason: 'analysis',
+      };
+
+      const next = gameReducer(state, { type: 'PLAY_DEFENSE', cardUid: 'anti_1' });
+
+      expect(next.players[1].isAlive).toBe(false);
+      expect(next.players[1].hand).toHaveLength(0);
+      expect(next.pendingAction).toBeNull();
+      expect(next.step).toBe('trade');
+      expect(next.currentPlayerIndex).toBe(0);
+    });
+
+    it('im_fine_here defender dies immediately if the replacement draw creates a fourth infection', () => {
+      const state = startGame(4);
+      state.step = 'play_or_discard';
+      state.currentPlayerIndex = 0;
+      state.direction = 1;
+      state.doors = [];
+
+      state.players.forEach((player, index) => {
+        player.position = index;
+        player.isAlive = true;
+        player.inQuarantine = false;
+      });
+
+      state.players[0].role = 'human';
+      state.players[0].hand = [card('the_thing', 'keep_thing'), card('suspicion', 'post_swap_trade')];
+      state.players[1].role = 'human';
+      state.players[1].hand = [
+        card('infected', 'inf_1'),
+        card('infected', 'inf_2'),
+        card('infected', 'inf_3'),
+        card('im_fine_here', 'fine_here_1'),
+      ];
+      state.players[2].role = 'human';
+      state.players[2].hand = [card('watch_your_back', 'alive_neighbor')];
+      state.players[3].role = 'thing';
+      stackDeck(state, card('infected', 'inf_drawn'));
+
+      state.pendingAction = {
+        type: 'trade_defense',
+        defenderId: 1,
+        fromId: 0,
+        offeredCardUid: 'swap_card',
+        reason: 'swap',
+      };
+
+      const next = gameReducer(state, { type: 'PLAY_DEFENSE', cardUid: 'fine_here_1' });
+
+      expect(next.players[1].isAlive).toBe(false);
+      expect(next.players[1].hand).toHaveLength(0);
+      expect(next.pendingAction).toBeNull();
+      expect(next.step).toBe('trade');
+      expect(next.currentPlayerIndex).toBe(0);
+      expect(next.players[0].position).toBe(0);
+      expect(next.players[2].position).toBe(2);
     });
 
     it('rejects defense card with wrong category', () => {

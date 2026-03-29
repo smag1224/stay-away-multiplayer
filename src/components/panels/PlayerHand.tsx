@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { canDiscardCard, canPlayCard } from '../../gameLogic.ts';
-import { getCurrentPlayer, localTradeCheck } from '../../appHelpers.ts';
+import { canGiveCard, canGiveCardToPlayer, getCurrentPlayer, getDirectionalNeighbor, localTradeCheck } from '../../appHelpers.ts';
 import type { ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
-import type { CardInstance, GameAction } from '../../types.ts';
+import type { CardInstance, GameAction, PendingAction } from '../../types.ts';
 import { CardView } from './CardView.tsx';
 
 /** Compute fan rotation & vertical offset for card at index i out of total */
@@ -43,7 +43,40 @@ type PlayerHandEntry = {
   card: CardInstance;
 };
 
-export function PlayerHand({
+function getCardListSignature(cards: CardInstance[]): string {
+  return cards.map((card) => `${card.uid}:${card.defId}`).join('|');
+}
+
+function getPendingHandSignature(pending: PendingAction | null): string {
+  if (!pending) return 'none';
+
+  switch (pending.type) {
+    case 'choose_card_to_discard':
+      return pending.type;
+    case 'choose_card_to_give':
+      return `${pending.type}:${pending.targetPlayerId}`;
+    case 'trade_defense':
+      return `${pending.type}:${pending.reason}:${pending.defenderId}:${pending.fromId}`;
+    case 'just_between_us_pick':
+      return `${pending.type}:${pending.playerA}:${pending.playerB}`;
+    case 'party_pass':
+      return `${pending.type}:${pending.direction}:${pending.pendingPlayerIds.join(',')}:${pending.chosen.map((choice) => `${choice.playerId}:${choice.cardUid}`).join(',')}`;
+    case 'temptation_response':
+    case 'panic_trade_response':
+      return `${pending.type}:${pending.fromId}:${pending.toId}`;
+    case 'blind_date_swap':
+    case 'forgetful_discard':
+      return pending.type;
+    case 'panic_trade':
+      return `${pending.type}:${pending.targetPlayerId}`;
+    case 'suspicion_pick':
+      return `${pending.type}:${pending.targetPlayerId}:${pending.viewerPlayerId}:${pending.previewCardUid ?? 'none'}:${pending.selectableCardUids.join(',')}`;
+    default:
+      return pending.type;
+  }
+}
+
+function PlayerHandInner({
   game,
   loading,
   me,
@@ -82,16 +115,6 @@ export function PlayerHand({
     pending?.type === 'suspicion_pick' && pending.targetPlayerId === me.id
       ? pending.previewCardUid
       : null;
-
-  const canGive = (card: CardInstance) => {
-    if (card.defId === 'the_thing') return false;
-    if (card.defId === 'infected') {
-      if (me.role === 'thing') return true;
-      if (me.role === 'infected') return me.hand.filter((c) => c.defId === 'infected').length > 1;
-      return false;
-    }
-    return true;
-  };
 
   const extraCards: ExtraHandEntry[] = [];
 
@@ -202,7 +225,7 @@ export function PlayerHand({
             buttons.push({ label: t('action.discardBtn'), css: 'secondary', disabled: !allowed, fn: () => { void onAction({ type: 'DISCARD_CARD', cardUid: card.uid }); } });
           } else if (pending.type === 'choose_card_to_give') {
             const receiver = game.players.find((player) => player.id === pending.targetPlayerId) ?? null;
-            const allowed = canGive(card) && localTradeCheck(me, card, receiver);
+            const allowed = canGiveCardToPlayer(me, card, receiver);
             buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !allowed, fn: () => { void onAction({ type: 'TEMPTATION_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid }); } });
           } else if (pending.type === 'trade_defense') {
             const receiver = game.players.find((player) => player.id === pending.fromId) ?? null;
@@ -239,26 +262,29 @@ export function PlayerHand({
               });
             }
           } else if (pending.type === 'just_between_us_pick') {
-            buttons.push({ label: t('action.pick'), css: 'accent', disabled: !canGive(card), fn: () => { void onAction({ type: 'JUST_BETWEEN_US_PICK', cardUid: card.uid, playerId: me.id }); } });
+            const receiver = game.players.find((player) => player.id === (me.id === pending.playerA ? pending.playerB : pending.playerA)) ?? null;
+            buttons.push({ label: t('action.pick'), css: 'accent', disabled: !canGiveCardToPlayer(me, card, receiver), fn: () => { void onAction({ type: 'JUST_BETWEEN_US_PICK', cardUid: card.uid, playerId: me.id }); } });
           } else if (pending.type === 'party_pass') {
             const iMyTurnPass = pending.pendingPlayerIds.includes(me.id);
             const alreadyChosen = pending.chosen.find((c) => c.playerId === me.id);
+            const receiver = getDirectionalNeighbor(game, me.id, pending.direction);
             if (iMyTurnPass && !alreadyChosen) {
-              buttons.push({ label: t('action.pass'), css: 'accent', disabled: !canGive(card), fn: () => { void onAction({ type: 'PARTY_PASS_CARD', cardUid: card.uid, playerId: me.id }); } });
+              buttons.push({ label: t('action.pass'), css: 'accent', disabled: !canGiveCardToPlayer(me, card, receiver), fn: () => { void onAction({ type: 'PARTY_PASS_CARD', cardUid: card.uid, playerId: me.id }); } });
             }
           } else if (pending.type === 'temptation_response' && me.id === pending.toId) {
-            buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !canGive(card), fn: () => { void onAction({ type: 'TEMPTATION_RESPOND', cardUid: card.uid }); } });
+            const receiver = game.players.find((player) => player.id === pending.fromId) ?? null;
+            buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !canGiveCardToPlayer(me, card, receiver), fn: () => { void onAction({ type: 'TEMPTATION_RESPOND', cardUid: card.uid }); } });
           } else if (pending.type === 'blind_date_swap') {
-            buttons.push({ label: t('action.swap'), css: 'accent', disabled: !canGive(card), fn: () => { void onAction({ type: 'BLIND_DATE_PICK', cardUid: card.uid }); } });
+            buttons.push({ label: t('action.swap'), css: 'accent', disabled: !canGiveCard(me, card), fn: () => { void onAction({ type: 'BLIND_DATE_PICK', cardUid: card.uid }); } });
           } else if (pending.type === 'forgetful_discard') {
             const allowed = card.defId !== 'the_thing' && !(me.role === 'infected' && card.defId === 'infected' && me.hand.filter((c) => c.defId === 'infected').length <= 1);
             buttons.push({ label: t('action.discardBtn'), css: 'secondary', disabled: !allowed, fn: () => { void onAction({ type: 'FORGETFUL_DISCARD_PICK', cardUid: card.uid }); } });
           } else if (pending.type === 'panic_trade') {
             const receiver = game.players.find((player) => player.id === pending.targetPlayerId) ?? null;
-            buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !(canGive(card) && localTradeCheck(me, card, receiver)), fn: () => { void onAction({ type: 'PANIC_TRADE_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid }); } });
+            buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !canGiveCardToPlayer(me, card, receiver), fn: () => { void onAction({ type: 'PANIC_TRADE_SELECT', targetPlayerId: pending.targetPlayerId, cardUid: card.uid }); } });
           } else if (pending.type === 'panic_trade_response' && me.id === pending.toId) {
             const receiver = game.players.find((player) => player.id === pending.fromId) ?? null;
-             buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !(canGive(card) && localTradeCheck(me, card, receiver)), fn: () => { void onAction({ type: 'PANIC_TRADE_RESPOND', cardUid: card.uid }); } });
+             buttons.push({ label: t('action.giveAlt'), css: 'accent', disabled: !canGiveCardToPlayer(me, card, receiver), fn: () => { void onAction({ type: 'PANIC_TRADE_RESPOND', cardUid: card.uid }); } });
           }
         }
 
@@ -300,3 +326,23 @@ export function PlayerHand({
     </div>
   );
 }
+
+export const PlayerHand = memo(PlayerHandInner, (prevProps, nextProps) => {
+  if (prevProps.loading !== nextProps.loading) return false;
+  if (prevProps.onAction !== nextProps.onAction) return false;
+
+  if (prevProps.me.id !== nextProps.me.id) return false;
+  if (prevProps.me.role !== nextProps.me.role) return false;
+  if (prevProps.me.position !== nextProps.me.position) return false;
+  if (prevProps.me.handCount !== nextProps.me.handCount) return false;
+  if (prevProps.me.canReceiveInfectedCardFromMe !== nextProps.me.canReceiveInfectedCardFromMe) return false;
+  if (getCardListSignature(prevProps.me.hand) !== getCardListSignature(nextProps.me.hand)) return false;
+
+  if (prevProps.game.step !== nextProps.game.step) return false;
+  if (prevProps.game.direction !== nextProps.game.direction) return false;
+  if (prevProps.game.currentPlayerIndex !== nextProps.game.currentPlayerIndex) return false;
+
+  return getPendingHandSignature(prevProps.game.pendingAction) === getPendingHandSignature(nextProps.game.pendingAction);
+});
+
+PlayerHand.displayName = 'PlayerHand';

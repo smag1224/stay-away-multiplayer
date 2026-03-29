@@ -1,4 +1,5 @@
-import React, { useSyncExternalStore, useCallback } from 'react';
+import React, { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useTranslation } from 'react-i18next';
 import { bgMusic } from '../../sounds/backgroundMusic.ts';
 
 const MAX_VOLUME = 0.1;
@@ -18,27 +19,44 @@ function useBgMusic() {
   return { playing, volume };
 }
 
-export function MusicVolumeSlider() {
+export function MusicVolumeSlider({ disabled = false }: { disabled?: boolean }) {
+  const { t } = useTranslation();
   const { playing, volume } = useBgMusic();
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const vol = parseFloat(e.target.value);
     bgMusic.setVolume(vol);
     if (!bgMusic.playing && vol > 0) bgMusic.start();
-  }, []);
+  }, [disabled]);
 
   const togglePlay = useCallback(() => {
+    if (disabled) return;
     if (bgMusic.playing) bgMusic.stop();
     else bgMusic.start();
-  }, []);
+  }, [disabled]);
+
+  useEffect(() => {
+    if (disabled) {
+      bgMusic.stop();
+    }
+  }, [disabled]);
+
+  const title = disabled
+    ? t('topbar.musicDisabledByPerformance')
+    : playing
+      ? t('topbar.musicOff')
+      : t('topbar.musicOn');
 
   return (
-    <div className="music-volume-slider">
+    <div className={`music-volume-slider${disabled ? ' is-disabled' : ''}`}>
       <button
         className="music-toggle-btn"
         onClick={togglePlay}
-        title={playing ? 'Выключить музыку' : 'Включить музыку'}
-        aria-label={playing ? 'Выключить музыку' : 'Включить музыку'}
+        title={title}
+        aria-label={title}
+        disabled={disabled}
+        type="button"
       >
         {playing ? '🎵' : '🔇'}
       </button>
@@ -50,8 +68,9 @@ export function MusicVolumeSlider() {
         value={volume}
         onChange={handleChange}
         className="music-slider"
-        title="Громкость музыки"
-        aria-label="Громкость музыки"
+        title={disabled ? t('topbar.musicDisabledByPerformance') : t('topbar.musicVolume')}
+        aria-label={disabled ? t('topbar.musicDisabledByPerformance') : t('topbar.musicVolume')}
+        disabled={disabled}
       />
     </div>
   );

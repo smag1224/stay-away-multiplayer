@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { canGiveCardToPlayer, getDirectionalNeighbor } from '../../appHelpers.ts';
 import type { ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
 import type { GameAction, PendingAction } from '../../types.ts';
 import { CardView } from './CardView.tsx';
@@ -19,14 +20,7 @@ export function PartyPassPanel({
   const { t } = useTranslation();
   const iMyTurn = pending.pendingPlayerIds.includes(me.id);
   const alreadyChosen = pending.chosen.find((c) => c.playerId === me.id);
-
-  const canGive = (card: { defId: string }) => {
-    if (card.defId === 'the_thing') return false;
-    if (card.defId === 'infected' && me.role === 'infected') {
-      return me.hand.filter((c) => c.defId === 'infected').length > 1;
-    }
-    return true;
-  };
+  const passTarget = getDirectionalNeighbor(game, me.id, pending.direction);
 
   return (
     <div className="panel">
@@ -38,7 +32,7 @@ export function PartyPassPanel({
           <p className="helper-text">{t('party.passCard')}</p>
           <div className="hand-grid compact">
             {me.hand.map((card) => {
-              const allowed = canGive(card);
+              const allowed = canGiveCardToPlayer(me, card, passTarget);
               return (
                 <div className="hand-card" key={card.uid}>
                   <CardView card={card} faceUp />

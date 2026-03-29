@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { TableAnimEvent, ViewerGameState } from '../../multiplayer.ts';
@@ -300,7 +300,11 @@ function FaceUpCard({ scene }: { scene: CardScene }) {
   );
 }
 
-export function TableAnimation({ game }: { game: ViewerGameState }) {
+function getAnimationPlayersSignature(game: ViewerGameState): string {
+  return game.players.map((player) => `${player.id}:${player.name}:${player.position}`).join('|');
+}
+
+function TableAnimationInner({ game }: { game: ViewerGameState }) {
   const [visualState, setVisualState] = useState<TableVisualState>(null);
   const prevSceneRef = useRef<TableAnimEvent | null>(null);
   const prevLogIdRef = useRef<number | null>(game.log[0]?.id ?? null);
@@ -499,3 +503,24 @@ export function TableAnimation({ game }: { game: ViewerGameState }) {
     </AnimatePresence>
   );
 }
+
+export const TableAnimation = memo(TableAnimationInner, (prevProps, nextProps) => {
+  const prevLatestLog = prevProps.game.log[0];
+  const nextLatestLog = nextProps.game.log[0];
+  const prevSceneId = prevProps.game.tableAnim && 'sceneId' in prevProps.game.tableAnim ? prevProps.game.tableAnim.sceneId : null;
+  const nextSceneId = nextProps.game.tableAnim && 'sceneId' in nextProps.game.tableAnim ? nextProps.game.tableAnim.sceneId : null;
+
+  return (
+    prevProps.game.step === nextProps.game.step &&
+    prevProps.game.currentPlayerIndex === nextProps.game.currentPlayerIndex &&
+    prevSceneId === nextSceneId &&
+    prevLatestLog?.id === nextLatestLog?.id &&
+    prevLatestLog?.text === nextLatestLog?.text &&
+    prevLatestLog?.textRu === nextLatestLog?.textRu &&
+    prevLatestLog?.cardDefId === nextLatestLog?.cardDefId &&
+    prevLatestLog?.fromPlayerId === nextLatestLog?.fromPlayerId &&
+    getAnimationPlayersSignature(prevProps.game) === getAnimationPlayersSignature(nextProps.game)
+  );
+});
+
+TableAnimation.displayName = 'TableAnimation';

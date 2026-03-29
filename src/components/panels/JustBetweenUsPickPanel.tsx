@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { canGiveCardToPlayer } from '../../appHelpers.ts';
 import type { ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
 import type { GameAction, PendingAction } from '../../types.ts';
 import { CardView } from './CardView.tsx';
@@ -23,15 +24,8 @@ export function JustBetweenUsPickPanel({
   const isInvolved = isA || isB;
   const myChoice = isA ? pending.cardUidA : pending.cardUidB;
   const alreadyChose = myChoice !== null;
-  const partnerName = game.players.find((p) => p.id === (isA ? pending.playerB : pending.playerA))?.name ?? '?';
-
-  const canGive = (card: { defId: string }) => {
-    if (card.defId === 'the_thing') return false;
-    if (card.defId === 'infected' && me.role === 'infected') {
-      return me.hand.filter((c) => c.defId === 'infected').length > 1;
-    }
-    return true;
-  };
+  const partner = game.players.find((p) => p.id === (isA ? pending.playerB : pending.playerA)) ?? null;
+  const partnerName = partner?.name ?? '?';
 
   if (!isInvolved) {
     const aName = game.players.find((p) => p.id === pending.playerA)?.name ?? '?';
@@ -54,7 +48,7 @@ export function JustBetweenUsPickPanel({
           <p className="helper-text">{t('justBetweenUs.tradeWith', { name: partnerName })}</p>
           <div className="hand-grid compact">
             {me.hand.map((card) => {
-              const allowed = canGive(card);
+              const allowed = canGiveCardToPlayer(me, card, partner);
               return (
                 <div className="hand-card" key={card.uid}>
                   <CardView card={card} faceUp />

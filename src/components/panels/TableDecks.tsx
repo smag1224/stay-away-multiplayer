@@ -6,6 +6,7 @@
  * - Animates cards: deck→player on draw, player→discard on play/discard.
  */
 import { useRef, useEffect, useState, useSyncExternalStore } from 'react';
+import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getCardDef, getCardImage } from '../../cards.ts';
 import type { ViewerGameState } from '../../multiplayer.ts';
@@ -76,7 +77,7 @@ function getDeckPositions(totalPlayers: number, mobile: boolean) {
 
 /* ── Responsive hook ──────────────────────────────────────────────────────── */
 const mqlMobile = typeof window !== 'undefined'
-  ? window.matchMedia('(max-width: 768px)')
+  ? window.matchMedia('(max-width: 767px)')
   : null;
 function subscribeMql(cb: () => void) {
   mqlMobile?.addEventListener('change', cb);
@@ -85,7 +86,11 @@ function subscribeMql(cb: () => void) {
 function getIsMobile() { return mqlMobile?.matches ?? false; }
 
 /* ── Component ────────────────────────────────────────────────────────────── */
-export function TableDecks({
+function getPlayerLayoutSignature(game: ViewerGameState): string {
+  return game.players.map((player) => `${player.id}:${player.position}`).join('|');
+}
+
+function TableDecksInner({
   game,
 }: {
   game: ViewerGameState;
@@ -282,3 +287,23 @@ export function TableDecks({
     </>
   );
 }
+
+export const TableDecks = memo(TableDecksInner, (prevProps, nextProps) => {
+  const prevLatestLog = prevProps.game.log[0];
+  const nextLatestLog = nextProps.game.log[0];
+
+  return (
+    prevProps.game.players.length === nextProps.game.players.length &&
+    prevProps.game.currentPlayerIndex === nextProps.game.currentPlayerIndex &&
+    prevProps.game.deck.length === nextProps.game.deck.length &&
+    prevProps.game.discard.length === nextProps.game.discard.length &&
+    prevProps.game.deck[prevProps.game.deck.length - 1]?.defId === nextProps.game.deck[nextProps.game.deck.length - 1]?.defId &&
+    prevProps.game.discard[prevProps.game.discard.length - 1]?.defId === nextProps.game.discard[nextProps.game.discard.length - 1]?.defId &&
+    prevLatestLog?.id === nextLatestLog?.id &&
+    prevLatestLog?.cardDefId === nextLatestLog?.cardDefId &&
+    prevLatestLog?.fromPlayerId === nextLatestLog?.fromPlayerId &&
+    getPlayerLayoutSignature(prevProps.game) === getPlayerLayoutSignature(nextProps.game)
+  );
+});
+
+TableDecks.displayName = 'TableDecks';

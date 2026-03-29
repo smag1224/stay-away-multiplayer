@@ -28,6 +28,7 @@ import type {
   ViewerPlayerState,
 } from '../src/multiplayer.ts';
 import { decideBotAction, clearRoomMemory } from './bot/index.ts';
+import { createRandomSeating } from './seatAssignment.ts';
 
 type RoomMember = {
   sessionId: string;
@@ -51,6 +52,11 @@ type Room = {
   shouts: ShoutEntry[];
 };
 
+type KickedSession = {
+  roomCode: string;
+  expiresAt: number;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
@@ -58,6 +64,9 @@ const distDir = path.join(rootDir, 'dist');
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? '0.0.0.0';
 const rooms = new Map<string, Room>();
+const kickedSessions = new Map<string, KickedSession>();
+const KICKED_BY_HOST_ERROR = 'KICKED_BY_HOST';
+const KICKED_SESSION_TTL_MS = 1000 * 60 * 5;
 
 // SSE subscribers: roomCode → Set of { res, sessionId }
 type SseClient = { res: ServerResponse<IncomingMessage>; sessionId: string };
@@ -121,6 +130,46 @@ function getRoom(code: string): Room | null {
 
 function getMember(room: Room, sessionId: string): RoomMember | null {
   return room.members.find((member) => member.sessionId === sessionId) ?? null;
+}
+
+function markSessionKicked(roomCode: string, sessionId: string): void {
+  kickedSessions.set(sessionId, {
+    roomCode,
+    expiresAt: now() + KICKED_SESSION_TTL_MS,
+  });
+}
+
+function isSessionKicked(roomCode: string, sessionId: string): boolean {
+  const kicked = kickedSessions.get(sessionId);
+  if (!kicked) return false;
+  if (kicked.expiresAt <= now()) {
+    kickedSessions.delete(sessionId);
+    return false;
+  }
+  return kicked.roomCode === roomCode;
+}
+
+function sendSessionError<T>(res: HttpResponse, roomCode: string, sessionId: string, fallback = 'Session not found.'): void {
+  if (isSessionKicked(roomCode, sessionId)) {
+    sendJson<T>(res, 403, { ok: false, error: KICKED_BY_HOST_ERROR });
+    return;
+  }
+  badRequest<T>(res, fallback);
+}
+
+function closeSseSession(roomCode: string, sessionId: string): void {
+  const clients = sseClients.get(roomCode);
+  if (!clients) return;
+
+  for (const client of [...clients]) {
+    if (client.sessionId !== sessionId) continue;
+    clients.delete(client);
+    client.res.end();
+  }
+
+  if (clients.size === 0) {
+    sseClients.delete(roomCode);
+  }
 }
 
 function trimName(name: string | undefined): string {
@@ -401,13 +450,19 @@ function cleanupRooms(): void {
       }
     }
   }
+
+  for (const [sessionId, kicked] of kickedSessions.entries()) {
+    if (kicked.expiresAt <= now() || !rooms.has(kicked.roomCode)) {
+      kickedSessions.delete(sessionId);
+    }
+  }
 }
 
 function startRoomGame(room: Room, thingInDeck?: boolean, chaosMode?: boolean): void {
-  const playerNames = room.members.map((member) => member.name);
+  const seating = createRandomSeating(room.members);
   const game = gameReducer(createInitialState(), {
     type: 'START_GAME',
-    playerNames,
+    playerNames: seating.playerNames,
     thingInDeck,
     chaosMode,
   });
@@ -417,8 +472,8 @@ function startRoomGame(room: Room, thingInDeck?: boolean, chaosMode?: boolean): 
     game.revealingPlayer = game.players.length - 1;
   }
 
-  room.members.forEach((member, index) => {
-    member.playerId = index;
+  room.members.forEach((member) => {
+    member.playerId = seating.playerIdBySessionId.get(member.sessionId) ?? null;
   });
   room.game = game;
   touchRoom(room);
@@ -904,7 +959,7 @@ const server = createServer(async (req, res) => {
       if (!streamRoom) { notFound(res, 'Room not found.'); return; }
       const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
       const member = getMember(streamRoom, sessionId);
-      if (!member) { badRequest(res, 'Session not found.'); return; }
+      if (!member) { sendSessionError(res, streamRoom.code, sessionId); return; }
 
       member.connected = true;
       member.lastSeenAt = now();
@@ -937,7 +992,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|shout|add-bot|remove-bot))?$/i);
+    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|shout|add-bot|remove-bot|remove-member))?$/i);
     if (!roomMatch) {
       notFound(res);
       return;
@@ -954,11 +1009,7 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && !actionSegment) {
       const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
       const member = getMember(room, sessionId);
-
-      if (!member) {
-        badRequest(res, 'Session not found for this room.');
-        return;
-      }
+      if (!member) { sendSessionError(res, room.code, sessionId, 'Session not found for this room.'); return; }
 
       member.connected = true;
       member.lastSeenAt = now();
@@ -1013,10 +1064,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody<RoomSessionPayload & { thingInDeck?: boolean; chaosMode?: boolean }>(req);
       const member = getMember(room, body.sessionId);
 
-      if (!member) {
-        badRequest(res, 'Session not found.');
-        return;
-      }
+      if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
 
       if (!member.isHost) {
         badRequest(res, 'Only the host can start the game.');
@@ -1045,10 +1093,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody<RoomSessionPayload>(req);
       const member = getMember(room, body.sessionId);
 
-      if (!member) {
-        badRequest(res, 'Session not found.');
-        return;
-      }
+      if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
 
       if (!member.isHost) {
         badRequest(res, 'Only the host can reset the room.');
@@ -1065,10 +1110,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody<RoomActionPayload>(req);
       const member = getMember(room, body.sessionId);
 
-      if (!member) {
-        badRequest(res, 'Session not found.');
-        return;
-      }
+      if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
 
       const error = applyRoomAction(room, member, body.action);
       if (error) {
@@ -1086,7 +1128,7 @@ const server = createServer(async (req, res) => {
     if (actionSegment === 'add-bot') {
       const body = await readBody<RoomSessionPayload>(req);
       const member = getMember(room, body.sessionId);
-      if (!member) { badRequest(res, 'Session not found.'); return; }
+      if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
       if (!member.isHost) { badRequest(res, 'Only the host can add bots.'); return; }
       if (room.game) { badRequest(res, 'Cannot add bots during a game.'); return; }
       if (room.members.length >= 12) { badRequest(res, 'Room is full.'); return; }
@@ -1111,16 +1153,23 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (actionSegment === 'remove-bot') {
-      const body = await readBody<RoomSessionPayload & { botSessionId: string }>(req);
+    if (actionSegment === 'remove-member' || actionSegment === 'remove-bot') {
+      const body = await readBody<RoomSessionPayload & { memberSessionId?: string; botSessionId?: string }>(req);
       const member = getMember(room, body.sessionId);
-      if (!member) { badRequest(res, 'Session not found.'); return; }
-      if (!member.isHost) { badRequest(res, 'Only the host can remove bots.'); return; }
-      if (room.game) { badRequest(res, 'Cannot remove bots during a game.'); return; }
+      if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
+      if (!member.isHost) { badRequest(res, 'Only the host can remove members.'); return; }
+      if (room.game) { badRequest(res, 'Cannot remove members during a game.'); return; }
 
-      const idx = room.members.findIndex(m => m.sessionId === body.botSessionId && m.isBot);
-      if (idx === -1) { badRequest(res, 'Bot not found.'); return; }
+      const targetSessionId = body.memberSessionId ?? body.botSessionId ?? '';
+      const idx = room.members.findIndex(m => m.sessionId === targetSessionId);
+      if (idx === -1) { badRequest(res, 'Member not found.'); return; }
+
+      const target = room.members[idx];
+      if (target.isHost) { badRequest(res, 'The host cannot be removed.'); return; }
+
       room.members.splice(idx, 1);
+      markSessionKicked(room.code, target.sessionId);
+      closeSseSession(room.code, target.sessionId);
       touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
       broadcastRoom(room, req);
@@ -1130,10 +1179,7 @@ const server = createServer(async (req, res) => {
     if (actionSegment === 'shout') {
       const body = await readBody<ShoutPayload>(req);
       const member = getMember(room, body.sessionId);
-      if (!member || member.playerId === null) {
-        badRequest(res, 'Session not found.');
-        return;
-      }
+      if (!member || member.playerId === null) { sendSessionError(res, room.code, body.sessionId); return; }
       room.shouts = (room.shouts ?? []).filter(s => s.playerId !== member.playerId);
       room.shouts.push({ playerId: member.playerId, phrase: body.phrase, phraseEn: body.phraseEn, expiresAt: now() + 5000 });
       touchRoom(room);

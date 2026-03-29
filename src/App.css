@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:wght@500;600;600italic;700&display=swap');
-
 @font-face {
   font-family: 'Creepster';
   src: url('./assets/fonts/creepster.otf') format('opentype');
@@ -13,6 +11,30 @@
   src: url('./assets/fonts/Neucha-Regular.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  src: url('./assets/fonts/Cinzel-wght.ttf') format('truetype');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('./assets/fonts/CormorantGaramond-wght.ttf') format('truetype');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('./assets/fonts/CormorantGaramond-Italic-wght.ttf') format('truetype');
+  font-weight: 500 700;
+  font-style: italic;
   font-display: swap;
 }
 
@@ -47,6 +69,8 @@
   --z-overlay: 34;
   --z-modal: 38;
   --touch: 44px;
+  --viewport-height-stable: 100vh;
+  --viewport-height-dynamic: 100vh;
 
   --ev-bg: #121a16;
   --ev-bd: rgba(80, 130, 105, .4);
@@ -68,6 +92,18 @@
   --ob-bd: rgba(170, 140, 55, .4);
   --ob-acc: #e3c46b;
   --ob-tag: rgba(65, 55, 15, .9);
+}
+
+@supports (height: 100svh) {
+  :root {
+    --viewport-height-stable: 100svh;
+  }
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --viewport-height-dynamic: 100dvh;
+  }
 }
 
 /* ═══ RESET ═══ */
@@ -250,7 +286,8 @@ img {
   --table-panel-muted: rgba(239, 216, 193, 0.62);
   --table-panel-accent: #e2b06a;
   --table-panel-shadow: var(--shadow-md);
-  height: 100vh;
+  min-height: var(--viewport-height-stable);
+  height: var(--viewport-height-dynamic);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -373,8 +410,9 @@ img {
   border-bottom: 1px solid rgba(216, 151, 102, 0.14);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(8px);
-  z-index: var(--z-ui);
+  z-index: calc(var(--z-floating) + 2);
   position: relative;
+  isolation: isolate;
 }
 
 .top-bar-brand {
@@ -436,6 +474,7 @@ img {
   align-items: center;
   gap: 6px;
   margin-left: auto;
+  min-width: 0;
 }
 
 .music-toggle-btn {
@@ -443,12 +482,28 @@ img {
   border: none;
   cursor: pointer;
   font-size: 1.1rem;
+  color: #e7bf7a;
   padding: 2px 4px;
   line-height: 1;
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family:
+    "Segoe UI Emoji",
+    "Apple Color Emoji",
+    "Noto Color Emoji",
+    system-ui,
+    sans-serif;
   opacity: 0.85;
   transition: opacity 0.15s;
 }
 .music-toggle-btn:hover { opacity: 1; }
+.music-toggle-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
 
 .music-slider {
   -webkit-appearance: none;
@@ -479,15 +534,44 @@ img {
   border: none;
   cursor: pointer;
 }
+.music-volume-slider.is-disabled {
+  opacity: 0.55;
+}
+
+.music-volume-slider.is-disabled .music-slider {
+  cursor: not-allowed;
+}
 
 /* Hamburger button — hidden on desktop */
 .top-bar-hamburger {
   display: none;
 }
 
+.music-volume-slider,
+.top-bar-hamburger {
+  position: relative;
+  z-index: calc(var(--z-floating) + 3);
+}
+
+.hamburger-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 20px;
+}
+
+.hamburger-icon > span {
+  display: block;
+  height: 2px;
+  background: #f0ddc4;
+  border-radius: 999px;
+  transition: transform .2s, opacity .2s, background .2s;
+}
+
 /* Dropdown menu — hidden on desktop */
 .top-bar-dropdown {
   display: none;
+  z-index: calc(var(--z-modal) + 1);
 }
 
 .game-notice-stack {
@@ -832,9 +916,9 @@ img {
 .status-card {
   padding: 13px 14px;
   border-radius: var(--radius-md);
-  background: linear-gradient(180deg, rgba(17, 10, 8, 0.22), rgba(11, 7, 6, 0.12));
-  border: 1px solid rgba(220, 154, 104, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, rgba(14, 8, 7, 0.42), rgba(8, 5, 4, 0.3));
+  border: 1px solid rgba(220, 154, 104, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(0, 0, 0, 0.16);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1016,7 +1100,7 @@ img {
 .player-circle {
   position: relative;
   aspect-ratio: 1;
-  width: min(95%, calc(100vh - 400px), 540px);
+  width: min(95%, calc(var(--viewport-height-dynamic) - 400px), 540px);
   max-width: 540px;
   margin: 12px auto 18px;
   overflow: visible;
@@ -1286,7 +1370,7 @@ img {
 }
 
 /* On mobile: anchor bubble to the avatar edge so it never overflows the screen */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
 
   /* Right-side players: extend bubble leftward */
   .player-node.is-right-seat .shout-bubble {
@@ -1302,7 +1386,7 @@ img {
   }
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .shout-bubble {
     font-size: 1.1rem;
     padding: 6px 14px;
@@ -1358,7 +1442,7 @@ img {
   line-height: 1.3;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .shout-menu {
     gap: 5px;
     padding: 7px;
@@ -1622,10 +1706,10 @@ img {
 .deck-stack {
   padding: 12px 8px;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(238, 183, 120, 0.18);
-  background: linear-gradient(180deg, rgba(42, 24, 16, 0.56), rgba(16, 10, 8, 0.68));
+  border: 1px solid rgba(238, 183, 120, 0.24);
+  background: linear-gradient(180deg, rgba(30, 17, 12, 0.74), rgba(12, 8, 6, 0.82));
   text-align: center;
-  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.22), var(--shadow-sm);
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3), 0 8px 18px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(6px);
 }
 
@@ -1837,7 +1921,7 @@ img {
   background: rgba(200, 220, 245, 0.12);
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .hint-bar {
     max-width: 340px;
     top: 52px;
@@ -2760,7 +2844,7 @@ img {
 }
 
 /* Responsive: smaller screens */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .table-deck__stack {
     width: 40px;
     height: 56px;
@@ -2804,7 +2888,7 @@ img {
   filter: drop-shadow(0 8px 28px rgba(0, 0, 0, 0.92));
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .tbl-faceup-wrap {
     top: 55%;
     width: 84px;
@@ -2955,6 +3039,20 @@ img {
 .lobby-screen {
   position: relative;
   isolation: isolate;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.connect-screen input,
+.connect-screen textarea,
+.connect-screen select,
+.lobby-screen input,
+.lobby-screen textarea,
+.lobby-screen select {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .connect-screen::before,
@@ -3680,7 +3778,7 @@ img {
 .lobby-screen.abyss-screen {
   position: relative;
   flex: 1;
-  min-height: 100vh;
+  min-height: var(--viewport-height-dynamic);
   max-width: none;
   margin: 0;
   overflow-y: auto;
@@ -4306,11 +4404,538 @@ img {
 }
 
 /* ═══════════════════════════════════════
-   RESPONSIVE — MOBILE (max-width: 768px)
+   RESPONSIVE — TABLET (768px–1180px)
+   Compact desktop layout for iPad/tablets
+═══════════════════════════════════════ */
+@media (min-width: 768px) and (max-width: 1180px) {
+  .top-bar {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .top-bar-brand {
+    font-size: 1.25rem;
+  }
+
+  .top-bar-room-label,
+  .top-bar-notice-area,
+  .top-bar-sep,
+  .top-bar-actions.desktop-actions {
+    display: none;
+  }
+
+  .top-bar-room {
+    font-size: .82rem;
+    letter-spacing: .16em;
+    margin-right: 8px;
+  }
+
+  .top-bar-deck {
+    display: block;
+    font-size: .72rem;
+    letter-spacing: .14em;
+    color: var(--gold-bright);
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  .music-volume-slider {
+    margin-left: auto;
+    gap: 5px;
+  }
+
+  .music-slider {
+    width: 70px;
+  }
+
+  .top-bar-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin-left: 6px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .top-bar-dropdown {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    left: auto;
+    width: min(320px, calc(100vw - 24px));
+    background: rgba(10, 14, 12, 0.98);
+    border: 1px solid rgba(216, 151, 102, 0.16);
+    border-radius: 14px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    z-index: calc(var(--z-modal) + 1);
+  }
+
+  .dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 13px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    font-size: .8rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .dropdown-item.danger {
+    color: var(--danger-strong);
+  }
+
+  .dropdown-divider {
+    height: 1px;
+    margin: 4px 12px;
+    background: linear-gradient(90deg, transparent, rgba(194, 59, 59, 0.32), transparent);
+  }
+
+  .game-top-row {
+    grid-template-columns: minmax(168px, 24vw) minmax(0, 1fr) minmax(176px, 24vw);
+    gap: 12px;
+    padding: 18px 16px 0;
+  }
+
+  .game-sidebar-left {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .game-sidebar-right {
+    gap: 10px;
+  }
+
+  .sidebar-eyebrow {
+    font-size: .62rem;
+  }
+
+  .status-strip {
+    gap: 9px;
+  }
+
+  .status-card {
+    padding: 11px 12px;
+  }
+
+  .status-card.role-card > strong {
+    font-size: 1.08rem;
+  }
+
+  .status-card > strong {
+    font-size: 1rem;
+  }
+
+  .status-card > small {
+    font-size: .7rem;
+  }
+
+  .game-table-center {
+    padding: 8px 0 28px;
+  }
+
+  .table-pill {
+    padding: 8px 12px;
+    gap: 2px;
+  }
+
+  .table-pill span {
+    font-size: .58rem;
+  }
+
+  .table-pill strong {
+    font-size: .82rem;
+  }
+
+  .deck-phase-alert {
+    top: 70px;
+    padding: 9px 12px;
+  }
+
+  .deck-phase-alert strong {
+    font-size: .62rem;
+  }
+
+  .deck-phase-alert span {
+    font-size: .72rem;
+  }
+
+  .player-circle {
+    width: min(100%, calc(var(--viewport-height-dynamic) - 360px), 480px);
+    max-width: 480px;
+    margin: 8px auto 14px;
+  }
+
+  .desktop-draw-btn {
+    min-height: 40px;
+    padding: 8px 16px;
+    font-size: .76rem;
+  }
+
+  .game-hand-strip {
+    padding:
+      12px
+      max(16px, calc(env(safe-area-inset-right) + 12px))
+      max(16px, calc(env(safe-area-inset-bottom) + 12px))
+      max(16px, calc(env(safe-area-inset-left) + 12px));
+  }
+
+  .fan-card {
+    flex: 0 0 120px;
+    width: 120px;
+  }
+
+  .floating-log {
+    display: none;
+  }
+
+  .connect-screen.abyss-screen {
+    padding: max(28px, calc(env(safe-area-inset-top) + 12px)) 20px max(24px, env(safe-area-inset-bottom));
+  }
+
+  .menu-wrap {
+    width: min(100%, 620px);
+  }
+
+  .logo-wrap {
+    width: min(100%, 560px);
+    margin-bottom: 8px;
+  }
+
+  .lobby-form {
+    width: min(100%, 500px);
+    gap: 12px;
+  }
+
+  .ui-label {
+    font-size: 20px;
+  }
+
+  .ui-input {
+    height: 60px;
+    padding: 0 18px;
+  }
+
+  .ui-button {
+    height: 78px;
+    font-size: 26px;
+  }
+
+  .lobby-screen.abyss-screen {
+    padding: max(84px, calc(env(safe-area-inset-top) + 68px)) 18px 18px;
+  }
+
+  .lp-code-floating {
+    top: max(62px, calc(env(safe-area-inset-top) + 50px));
+    font-size: clamp(2.05rem, 4vw, 3.2rem);
+  }
+
+  .lp-frame {
+    width: min(100%, 860px);
+    margin-top: 84px;
+    padding: 22px 20px 20px;
+    border-radius: 28px;
+  }
+
+  .lp-frame::before {
+    inset: 8px;
+    border-radius: 20px;
+  }
+
+  .lp-frame::after {
+    width: min(180px, 36%);
+  }
+
+  .lp-body {
+    gap: 14px;
+    margin-top: 14px;
+    padding-top: 18px;
+  }
+
+  .lp-roster-shell {
+    min-height: 220px;
+    max-height: min(38vh, 320px);
+    padding: 10px 10px 10px 12px;
+    border-radius: 18px;
+  }
+
+  .lp-controls-row {
+    gap: 10px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 900px) and (orientation: portrait) {
+  .game-top-row {
+    grid-template-columns: minmax(124px, 17vw) minmax(0, 1fr) minmax(146px, 19vw);
+    gap: 7px;
+    padding: 14px 10px 0;
+  }
+
+  .game-sidebar-left {
+    gap: 6px;
+    padding: 9px;
+    align-self: start;
+    overflow: visible;
+    background: none;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .game-sidebar-right {
+    gap: 8px;
+    min-height: auto;
+    align-self: start;
+  }
+
+  .sidebar-eyebrow {
+    font-size: .54rem;
+    letter-spacing: .14em;
+    opacity: .84;
+  }
+
+  .status-strip {
+    gap: 6px;
+  }
+
+  .status-card {
+    padding: 8px 9px;
+    background: linear-gradient(180deg, rgba(17, 10, 8, 0.16), rgba(11, 7, 6, 0.08));
+    border-color: rgba(220, 154, 104, 0.05);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  }
+
+  .status-card.active {
+    background: linear-gradient(180deg, rgba(58, 32, 21, 0.6), rgba(29, 16, 11, 0.48));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 1px rgba(236, 181, 115, 0.06), 0 8px 18px rgba(0, 0, 0, 0.18);
+  }
+
+  .status-card > span {
+    font-size: .54rem;
+    letter-spacing: .12em;
+  }
+
+  .status-card.role-card > strong {
+    font-size: .92rem;
+  }
+
+  .status-card > strong {
+    font-size: .84rem;
+    line-height: 1.05;
+  }
+
+  .status-card > small {
+    font-size: .6rem;
+    line-height: 1.2;
+  }
+
+  .status-card.step-card small {
+    display: none;
+  }
+
+  .deck-row {
+    gap: 5px;
+    margin-top: 5px;
+  }
+
+  .deck-stack {
+    padding: 9px 6px;
+    background: linear-gradient(180deg, rgba(42, 24, 16, 0.44), rgba(16, 10, 8, 0.56));
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.16), 0 6px 14px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(4px);
+  }
+
+  .deck-stack span {
+    font-size: .56rem;
+    letter-spacing: .11em;
+  }
+
+  .deck-stack strong {
+    font-size: 1.45rem;
+  }
+
+  .intel-panel.log-panel {
+    padding: 10px 12px;
+    max-height: min(29vh, 248px);
+  }
+
+  .intel-log-list {
+    flex: 0 1 auto;
+    gap: 6px;
+    max-height: min(22vh, 176px);
+  }
+
+  .table-pill {
+    min-width: 132px;
+    max-width: 190px;
+    padding: 6px 8px;
+  }
+
+  .table-pill span {
+    font-size: .54rem;
+  }
+
+  .table-pill strong {
+    font-size: .76rem;
+  }
+
+  .player-circle {
+    width: min(100%, calc(var(--viewport-height-dynamic) - 338px), 500px);
+    max-width: 500px;
+  }
+
+  .fan-card {
+    flex-basis: 112px;
+    width: 112px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) and (orientation: landscape) {
+  .game-top-row {
+    grid-template-columns: minmax(172px, 18vw) minmax(0, 1fr) minmax(188px, 19vw);
+    gap: 10px;
+    padding: 14px 12px 0;
+  }
+
+  .game-sidebar-left {
+    gap: 7px;
+    padding: 10px;
+    align-self: start;
+    overflow: visible;
+    background: none;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .game-sidebar-right {
+    gap: 8px;
+    min-height: auto;
+    align-self: start;
+  }
+
+  .sidebar-eyebrow {
+    font-size: .58rem;
+    letter-spacing: .15em;
+    opacity: .86;
+  }
+
+  .status-strip {
+    gap: 7px;
+  }
+
+  .status-card {
+    padding: 9px 10px;
+  }
+
+  .status-card > span {
+    font-size: .58rem;
+    letter-spacing: .12em;
+  }
+
+  .status-card.role-card > strong {
+    font-size: .98rem;
+  }
+
+  .status-card > strong {
+    font-size: .88rem;
+  }
+
+  .status-card > small {
+    font-size: .62rem;
+    line-height: 1.2;
+  }
+
+  .deck-row {
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .deck-stack {
+    padding: 9px 6px;
+  }
+
+  .deck-stack span {
+    font-size: .58rem;
+    letter-spacing: .12em;
+  }
+
+  .deck-stack strong {
+    font-size: 1.5rem;
+  }
+
+  .table-pill {
+    min-width: 144px;
+    max-width: 210px;
+    padding: 6px 10px;
+  }
+
+  .table-pill span {
+    font-size: .56rem;
+  }
+
+  .table-pill strong {
+    font-size: .78rem;
+  }
+
+  .player-circle {
+    width: min(100%, calc(var(--viewport-height-dynamic) - 258px), 448px);
+    max-width: 448px;
+    margin: 0 auto 12px;
+  }
+
+  .intel-panel.log-panel {
+    padding: 10px 12px;
+    max-height: min(34vh, 228px);
+  }
+
+  .intel-log-list {
+    flex: 0 1 auto;
+    gap: 6px;
+    max-height: min(25vh, 164px);
+  }
+}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — MOBILE (max-width: 767px)
    Matches mockup: full-screen table,
    compact status bar, horizontal hand scroll
 ═══════════════════════════════════════ */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  #root,
+  .app-shell {
+    min-height: calc(var(--viewport-height-dynamic) + 2px);
+    height: auto;
+  }
+
   .hand-grid .hand-card {
     width: 96px;
   }
@@ -4335,17 +4960,9 @@ img {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.24);
   }
 
-  body {
-    overflow: hidden;
-  }
-
-  .app-shell {
-    overflow: hidden;
-  }
-
   .game-screen {
-    height: 100vh;
-    height: 100dvh;
+    min-height: var(--viewport-height-stable);
+    height: var(--viewport-height-dynamic);
     overflow: hidden;
     background-image: url('./assets/game_table_mobile.webp');
     background-size: 112% auto;
@@ -4354,14 +4971,16 @@ img {
 
   /* ── Top bar: brand left, room center, hamburger right ── */
   .top-bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
     padding: 8px 12px;
     gap: 6px;
-    flex-wrap: nowrap;
-    justify-content: space-between;
     padding-top: max(8px, env(safe-area-inset-top));
   }
 
   .top-bar-brand {
+    grid-column: 1;
     font-size: 1.1rem;
     flex-shrink: 0;
   }
@@ -4403,13 +5022,43 @@ img {
 
   .top-bar-deck {
     display: block;
-    flex: 1;
-    text-align: center;
+    grid-column: 2;
+    min-width: 0;
+    justify-self: start;
+    text-align: left;
+    padding-left: 8px;
     font-size: .76rem;
     letter-spacing: .16em;
     color: var(--gold-bright);
     text-transform: uppercase;
     font-weight: 700;
+  }
+
+  .music-volume-slider {
+    grid-column: 3;
+    margin-left: 0;
+    justify-self: end;
+    flex-shrink: 0;
+    gap: 4px;
+    padding: 0 8px;
+    min-height: 34px;
+    border-radius: 10px;
+    border: 1px solid rgba(224, 190, 97, 0.16);
+    background: rgba(22, 14, 10, 0.52);
+  }
+
+  .music-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    font-size: .92rem;
+  }
+
+  .music-slider {
+    width: 54px;
   }
 
   .top-bar-sep {
@@ -4422,13 +5071,14 @@ img {
   }
 
   .top-bar-hamburger {
+    grid-column: 4;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 40px;
     height: 40px;
     padding: 0;
-    margin-left: auto;
+    margin-left: 0;
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-sm);
@@ -4446,7 +5096,7 @@ img {
   .hamburger-icon>span {
     display: block;
     height: 2px;
-    background: var(--text);
+    background: #f0ddc4;
     border-radius: 1px;
     transition: transform .2s, opacity .2s;
   }
@@ -4608,7 +5258,7 @@ img {
   }
 
   .player-circle {
-    width: min(calc(100vw - 18px), calc(100vh - 310px), 390px);
+    width: min(calc(100vw - 18px), calc(var(--viewport-height-dynamic) - 310px), 390px);
     max-width: 390px;
     max-height: 390px;
   }
@@ -5038,8 +5688,8 @@ img {
   .floating-log {
     display: flex;
     position: fixed;
-    top: max(8px, calc(env(safe-area-inset-top) - 4px));
-    right: 60px;
+    top: max(9px, calc(env(safe-area-inset-top) + 1px));
+    right: 178px;
     left: auto;
     bottom: auto;
     align-items: flex-end;
@@ -5056,12 +5706,25 @@ img {
     padding: 0;
     border-radius: 12px;
     position: relative;
+    gap: 4px;
+    border: none;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .floating-log-toggle:hover {
+    background: transparent;
   }
 
   .floating-log-body {
+    position: fixed;
+    top: max(56px, calc(env(safe-area-inset-top) + 50px));
+    right: 12px;
     width: min(280px, calc(100vw - 24px));
     max-height: min(36vh, 260px);
-    margin-top: 8px;
+    margin-top: 0;
     border-radius: 16px;
     border-color: rgba(117, 138, 128, 0.18);
     background: linear-gradient(180deg, rgba(11, 16, 16, 0.96), rgba(7, 10, 10, 0.96));
@@ -5284,7 +5947,7 @@ img {
 
 @media (max-width: 430px) {
   .player-circle {
-    width: min(calc(100vw - 30px), calc(100vh - 310px), 376px);
+    width: min(calc(100vw - 30px), calc(var(--viewport-height-dynamic) - 310px), 376px);
     max-width: 376px;
     max-height: 376px;
   }
@@ -5337,6 +6000,16 @@ img {
 
   .top-bar-deck {
     font-size: .68rem;
+    padding-left: 4px;
+  }
+
+  .music-volume-slider {
+    padding: 0 6px;
+    gap: 3px;
+  }
+
+  .music-slider {
+    width: 44px;
   }
 
   .player-circle {
@@ -5457,8 +6130,13 @@ img {
   }
 
   .floating-log {
-    top: max(7px, calc(env(safe-area-inset-top) - 5px));
-    right: 56px;
+    top: max(7px, calc(env(safe-area-inset-top) + 1px));
+    right: 156px;
+  }
+
+  .floating-log-body {
+    top: max(52px, calc(env(safe-area-inset-top) + 46px));
+    right: 8px;
   }
 
   .table-pill {
@@ -5711,7 +6389,7 @@ img {
 .connect-screen.abyss-screen {
   position: relative;
   flex: 1;
-  min-height: 100vh;
+  min-height: var(--viewport-height-dynamic);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -6146,4 +6824,66 @@ img {
     font-size: 18px;
     line-height: 1.15;
   }
+}
+
+.perf-mode .lang-toggle,
+.perf-mode .top-bar,
+.perf-mode .top-bar-dropdown,
+.perf-mode .hint-bar,
+.perf-mode .panic-banner,
+.perf-mode .infected-alert,
+.perf-mode .floating-log-body,
+.perf-mode .panel,
+.perf-mode .spectator-prompt-card,
+.perf-mode .intel-log-list,
+.perf-mode .deck-stack,
+.perf-mode .status-card,
+.perf-mode .notice-box,
+.perf-mode .game-prompt-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.perf-mode .top-bar-notice-area .panic-banner.top-bar-notice,
+.perf-mode .panic-banner,
+.perf-mode .infected-alert,
+.perf-mode .deck-phase-alert {
+  animation: none !important;
+}
+
+.perf-mode .game-screen::before,
+.perf-mode .game-screen::after,
+.perf-mode .game-screen.screen-turn::before,
+.perf-mode .game-screen.screen-turn::after,
+.perf-mode .game-screen.screen-alert::before,
+.perf-mode .game-screen.screen-alert::after,
+.perf-mode .game-screen.screen-second-deck::before,
+.perf-mode .game-screen.screen-second-deck::after {
+  content: none !important;
+  animation: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.perf-mode .table-spotlight,
+.perf-mode .table-spotlight.turn,
+.perf-mode .table-spotlight.alert,
+.perf-mode .table-spotlight.second-deck {
+  filter: none !important;
+  opacity: 0.3 !important;
+  transform: none !important;
+}
+
+.perf-mode .fan-card,
+.perf-mode .hand-card,
+.perf-mode .player-avatar-image,
+.perf-mode .player-avatar-thing-overlay,
+.perf-mode .player-avatar-infected-overlay,
+.perf-mode .table-deck__fly-card img,
+.perf-mode .tbl-scene-card .card,
+.perf-mode .door-marker-card .card {
+  filter: none !important;
 }

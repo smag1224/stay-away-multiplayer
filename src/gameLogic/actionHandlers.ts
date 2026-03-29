@@ -31,6 +31,32 @@ import { canDiscardCard, canTradeCard, getValidTargets } from './validation.ts';
 // Type for the recursive reducer callback needed by PLAY_CARD and SELECT_TARGET
 export type GameReducerFn = (state: GameState, action: GameAction) => GameState;
 
+type TradeDefenseReason = 'trade' | 'temptation' | 'flamethrower' | 'swap' | 'analysis' | 'panic_trade';
+
+function resolveDefenseSelfElimination(s: GameState, reason: TradeDefenseReason): GameState {
+  s.pendingAction = null;
+
+  if (s.phase === 'game_over') return s;
+
+  if (reason === 'panic_trade') {
+    s.step = 'draw';
+    return s;
+  }
+
+  if (reason === 'trade' || reason === 'temptation') {
+    s.step = 'end_turn';
+    advanceTurn(s);
+    return s;
+  }
+
+  if (s.step === 'play_or_discard') {
+    s.step = 'trade';
+    handleTradeStep(s);
+  }
+
+  return s;
+}
+
 // ── Handler functions ───────────────────────────────────────────────────────
 
 export function handleSetLang(s: GameState, _originalState: GameState, action: GameAction): GameState {
@@ -67,15 +93,20 @@ export function handleStartGame(s: GameState, _originalState: GameState, action:
     position: i,
   }));
 
-  // Strong cards reserved for deck in Anomaly mode
+  // In Anomaly mode we keep strong cards in the deck as much as possible.
+  // Some player counts do not have enough non-strong event cards for a full
+  // opening deal, so we spill only the minimum required number into hands.
   const STRONG_CARD_IDS = ['flamethrower', 'analysis', 'no_barbecue', 'persistence', 'anti_analysis', 'fear', 'quarantine'];
 
   if (action.chaosMode) {
     // Anomaly: The Thing's position is random (50/50 in deck or hand).
-    // Strong cards always start in the deck regardless.
-    const strongCards = eventCards.filter(c => STRONG_CARD_IDS.includes(c.defId));
+    const strongCards = shuffle(eventCards.filter(c => STRONG_CARD_IDS.includes(c.defId)));
     const normalCards = shuffle(eventCards.filter(c => !STRONG_CARD_IDS.includes(c.defId)));
     const thingOnHand = Math.random() < 0.5;
+    const requiredDealCards = count * 4 - (thingOnHand ? 1 : 0);
+    const strongOverflowCount = Math.max(0, requiredDealCards - normalCards.length);
+    const overflowStrongCards = strongCards.splice(0, strongOverflowCount);
+    const dealPool = shuffle([...normalCards, ...overflowStrongCards]);
 
     if (thingOnHand) {
       const thingPlayerIdx = Math.floor(Math.random() * count);
@@ -83,18 +114,18 @@ export function handleStartGame(s: GameState, _originalState: GameState, action:
       for (let i = 0; i < count; i++) {
         if (i === thingPlayerIdx) {
           players[i].hand.push(thingCard);
-          for (let j = 0; j < 3; j++) { const c = normalCards.pop(); if (c) players[i].hand.push(c); }
+          for (let j = 0; j < 3; j++) { const c = dealPool.pop(); if (c) players[i].hand.push(c); }
         } else {
-          for (let j = 0; j < 4; j++) { const c = normalCards.pop(); if (c) players[i].hand.push(c); }
+          for (let j = 0; j < 4; j++) { const c = dealPool.pop(); if (c) players[i].hand.push(c); }
         }
       }
     } else {
       for (let i = 0; i < count; i++) {
-        for (let j = 0; j < 4; j++) { const c = normalCards.pop(); if (c) players[i].hand.push(c); }
+        for (let j = 0; j < 4; j++) { const c = dealPool.pop(); if (c) players[i].hand.push(c); }
       }
     }
 
-    const mainDeck = [...normalCards, ...strongCards, ...(thingOnHand ? [] : [thingCard]), ...infectedCards, ...panicCards];
+    const mainDeck = [...dealPool, ...strongCards, ...(thingOnHand ? [] : [thingCard]), ...infectedCards, ...panicCards];
     shuffle(mainDeck);
     s.deck = mainDeck;
   } else if (action.thingInDeck) {
@@ -243,6 +274,11 @@ export function handlePlayCard(
     }
     s.pendingAction = { type: 'choose_target', cardUid: card.uid, cardDefId: card.defId, targets };
     return s;
+  }
+
+  if (needsTarget(card.defId) && action.targetPlayerId !== undefined) {
+    const targets = getValidTargets(s, card.defId);
+    if (!targets.includes(action.targetPlayerId)) return s;
   }
 
   cur.hand.splice(cardIdx, 1);
@@ -413,9 +449,16 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
 
   const replacement = drawEventCard(s);
   if (replacement) defender.hand.push(replacement);
+  checkInfectionOverload(s, defender);
+  if (!defender.isAlive) {
+    return resolveDefenseSelfElimination(s, reason);
+  }
 
   switch (card.defId) {
     case 'no_thanks': {
+      if (reason === 'temptation') {
+        s.tradeSkipped = true;
+      }
       log(s, `${defender.name} played No Thanks! Trade refused.`,
           `${defender.name} сыграл(а) «Нет уж, спасибо!» Обмен отклонён.`);
       s.log[0].cardDefId = card.defId;
@@ -431,6 +474,9 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
     case 'fear': {
       const from = getPlayer(s, fromId);
       const offeredCard = from.hand.find(c => c.uid === offeredCardUid);
+      if (reason === 'temptation') {
+        s.tradeSkipped = true;
+      }
       if (offeredCard) {
         s.pendingAction = {
           type: 'view_card',
@@ -446,6 +492,7 @@ export function handlePlayDefense(s: GameState, _originalState: GameState, actio
     }
     case 'miss': {
       if (reason === 'temptation') {
+        s.tradeSkipped = true;
         log(s, `${defender.name} played Miss! Temptation cancelled.`,
             `${defender.name} сыграл(а) «Мимо!» «Соблазн» отменён.`);
         s.log[0].cardDefId = card.defId;
@@ -670,6 +717,7 @@ export function handleTemptationSelect(s: GameState, _originalState: GameState, 
 
   if (!targetHasDefense && !targetHasTradeableCard) {
     s.pendingAction = null;
+    s.tradeSkipped = true;
     log(s,
       `${target.name} has no valid response to Temptation. The action is cancelled.`,
       `${target.name} не может ответить на «Соблазн». Действие отменяется.`
