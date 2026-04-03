@@ -488,16 +488,17 @@ function scoreTradeCardForPartner(
     const partnerIsAlly = partnerIsTheThing || Boolean(partnerObs?.confirmedInfected);
 
     if (partnerIsAlly) {
-      // Use early returns to bypass the bottom defense/action multipliers.
-      // Priority 1 (highest): no_barbecue — shields ally from flamethrower
-      if (card.defId === 'no_barbecue') return 16;
-      // Priority 2 (equal): anti_analysis AND infected reload (only if we have a spare copy)
-      if (card.defId === 'anti_analysis') return 13;
-      if (card.defId === 'infected') {
-        const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
-        return myInfectedCards >= 2 ? 13 : 1; // Give copy back if spare; keep the only one
+      // Protection cards go specifically to the Thing — it's the only one who can infect more humans
+      // and the most critical piece to protect. Other infected don't need these.
+      if (partnerIsTheThing) {
+        if (card.defId === 'no_barbecue') return 16;   // Priority 1: shield Thing from flamethrower
+        if (card.defId === 'anti_analysis') return 13; // Priority 2: shield Thing from analysis
+        if (card.defId === 'infected') {               // Priority 2 (equal): reload if we have a spare
+          const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
+          return myInfectedCards >= 2 ? 13 : 1;
+        }
       }
-      // Priority 3 (lower): movement and door-clearing cards
+      // Movement and door-clearing cards: useful for any ally (Thing or other infected)
       if (card.defId === 'axe') {
         const allyHasDoorProblem = vs.doors.length > 0 && vs.aliveCount <= 5;
         return allyHasDoorProblem ? 10 : 7;
@@ -505,7 +506,7 @@ function scoreTradeCardForPartner(
       if (['swap_places', 'you_better_run'].includes(card.defId)) {
         return vs.aliveCount <= 4 ? 9 : 6;
       }
-      // Situational endgame: flamethrower to ally adjacent to a human
+      // Situational endgame: flamethrower to any ally adjacent to a human
       if (card.defId === 'flamethrower' && vs.aliveCount <= 4) {
         const partnerAdjacentHuman = vs.alivePlayers.some(player => {
           if (player.id === partnerId || player.id === vs.myId) return false;
