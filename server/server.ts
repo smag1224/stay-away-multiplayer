@@ -437,22 +437,33 @@ function broadcastRoom(room: Room, req: HttpRequest): void {
 }
 
 function cleanupRooms(): void {
-  const cutoff = now() - 1000 * 60 * 60 * 12;
+  const nowMs = now();
+  const STALE_CUTOFF = nowMs - 1000 * 60 * 60 * 12;      // 12h — any inactive room
+  const EMPTY_CUTOFF = nowMs - 1000 * 60 * 60;            // 1h  — room with no connected members
+  const NO_MEMBERS_CUTOFF = nowMs - 1000 * 60 * 5;        // 5m  — room with zero members at all
 
   for (const [code, room] of rooms.entries()) {
-    if (room.updatedAt < cutoff) {
+    const connectedCount = room.members.filter(m => m.connected).length;
+    const memberCount = room.members.length;
+
+    const isStale = room.updatedAt < STALE_CUTOFF;
+    const isAbandoned = connectedCount === 0 && room.updatedAt < EMPTY_CUTOFF;
+    const isEmpty = memberCount === 0 && room.updatedAt < NO_MEMBERS_CUTOFF;
+
+    if (isStale || isAbandoned || isEmpty) {
       rooms.delete(code);
-      // Close SSE connections for deleted rooms
+      clearRoomMemory(code);
       const clients = sseClients.get(code);
       if (clients) {
         for (const client of clients) client.res.end();
         sseClients.delete(code);
       }
+      console.log(`[cleanup] Room ${code} removed (stale=${isStale}, abandoned=${isAbandoned}, empty=${isEmpty})`);
     }
   }
 
   for (const [sessionId, kicked] of kickedSessions.entries()) {
-    if (kicked.expiresAt <= now() || !rooms.has(kicked.roomCode)) {
+    if (kicked.expiresAt <= nowMs || !rooms.has(kicked.roomCode)) {
       kickedSessions.delete(sessionId);
     }
   }
