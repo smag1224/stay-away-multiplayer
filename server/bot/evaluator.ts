@@ -475,47 +475,49 @@ function scoreTradeCardForPartner(
   }
 
   if (vs.myRole === 'infected' && card.defId === 'infected') {
-    // Check if trading to the Thing — high priority reload
-    const partnerIsTheThing = partnerObs?.knownRole === 'thing';
+    // Identify the Thing via explicit knowledge or via game mechanic (canReceiveInfectedCardFromMe)
+    const partnerIsTheThing = partnerObs?.knownRole === 'thing' || Boolean(partnerInfo?.canReceiveInfectedCardFromMe);
     score = partnerIsTheThing ? 12 : 3;
   }
 
   score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
 
   if (vs.myRole === 'infected' && partnerId !== null) {
-    const partnerIsAlly = Boolean(partnerObs?.confirmedInfected);
+    // canReceiveInfectedCardFromMe is true only for the Thing — reliable ally identification
+    const partnerIsTheThing = partnerObs?.knownRole === 'thing' || Boolean(partnerInfo?.canReceiveInfectedCardFromMe);
+    const partnerIsAlly = partnerIsTheThing || Boolean(partnerObs?.confirmedInfected);
 
     if (partnerIsAlly) {
+      // Use early returns to bypass the bottom defense/action multipliers.
+      // Without early returns, no_barbecue=16 → ×0.3=4.8 and flamethrower=15 → ×0.25=3.75.
+      if (card.defId === 'no_barbecue') return 16;   // Protect ally from flamethrower
+      if (card.defId === 'anti_analysis') return 10;  // Protect ally from analysis
       if (card.defId === 'axe') {
         const allyHasDoorProblem = vs.doors.length > 0 && vs.aliveCount <= 5;
-        score = allyHasDoorProblem ? 14 : 8;
+        return allyHasDoorProblem ? 14 : 8;
       }
       if (['swap_places', 'you_better_run'].includes(card.defId)) {
-        score = vs.aliveCount <= 4 ? 12 : 7;
+        return vs.aliveCount <= 4 ? 12 : 7;
       }
-      if (card.defId === 'no_barbecue') {
-        score = 16; // Protecting Thing from flamethrower > most offensive plays
-      }
-      if (card.defId === 'anti_analysis') {
-        score = 10;
-      }
-      if (card.defId === 'flamethrower' && vs.aliveCount <= 3) {
-        const partnerAdjacentHuman = partnerInfo && vs.alivePlayers.some(player => {
+      if (card.defId === 'flamethrower' && vs.aliveCount <= 4) {
+        const partnerAdjacentHuman = vs.alivePlayers.some(player => {
           if (player.id === partnerId || player.id === vs.myId) return false;
           const playerObs = memory.observations.get(player.id);
           return !playerObs?.confirmedInfected;
         });
-        if (partnerAdjacentHuman) score = 15;
+        if (partnerAdjacentHuman) return 15;
       }
       if (card.defId === 'infected') {
+        // Always reload the Thing even with 1 card — Thing needs ammo to infect more humans
+        if (partnerIsTheThing) return 12;
+        // Give excess infected cards to other infected allies
         const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
-        // Reload the Thing — give infected cards back so Thing can infect more humans
-        score = myInfectedCards >= 2 ? 16 : 1;
+        return myInfectedCards >= 2 ? 16 : 1;
       }
     }
 
-    if (!partnerIsAlly && vs.aliveCount <= 3 && card.defId === 'flamethrower') {
-      score = 0.5;
+    if (!partnerIsAlly && vs.aliveCount <= 4 && card.defId === 'flamethrower') {
+      return 0.5; // Don't give flamethrower to humans in endgame
     }
   }
 
@@ -543,6 +545,14 @@ function scoreTradeCardForPartner(
     if (playerLikelyHasCard(memory, partnerId, 'flamethrower')) {
       score *= 0.4; // They might burn us if we infect them
     }
+  }
+
+  // Thing: pass utility cards to known infected allies to strengthen them.
+  // Early returns bypass the bottom ×0.3 and ×0.25 multipliers.
+  if (vs.myRole === 'thing' && partnerObs?.confirmedInfected) {
+    if (card.defId === 'no_barbecue') return 14;   // Protect infected ally from flamethrower
+    if (card.defId === 'anti_analysis') return 9;  // Protect against analysis
+    if (['axe', 'swap_places'].includes(card.defId) && vs.aliveCount <= 5) return 10;
   }
 
   if (def.category === 'defense') score *= 0.3;
@@ -952,8 +962,8 @@ function scorePlayCard(
       const hasConfirmed = targets.some(t => memory.observations.get(t)?.confirmedInfected);
       const hasStrong = targets.some(t => getSuspicion(memory, t) > suspicionThreshold(vs.aliveCount));
 
-      // Infected endgame: burn the last human!
-      if (vs.myRole === 'infected' && vs.aliveCount <= 3) {
+      // Infected endgame: burn humans — aliveCount<=4 covers 1T+2I+1H which is already a win
+      if (vs.myRole === 'infected' && vs.aliveCount <= 4) {
         const lastHuman = targets.find(t => {
           const obs = memory.observations.get(t);
           return !obs?.confirmedInfected;
@@ -961,8 +971,8 @@ function scorePlayCard(
         if (lastHuman !== undefined) return 18; // Win condition
       }
 
-      // Thing endgame: if all remaining are infected, use flamethrower on human
-      if (vs.myRole === 'thing' && vs.aliveCount <= 3) {
+      // Thing endgame: flamethrower the remaining human(s)
+      if (vs.myRole === 'thing' && vs.aliveCount <= 4) {
         const lastHuman = targets.find(t => {
           const obs = memory.observations.get(t);
           return !obs?.confirmedInfected;
