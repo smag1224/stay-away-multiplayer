@@ -412,6 +412,8 @@ function scoreTradePartnerUtility(
     score += clamp((0.15 - susp) * 4, -2, 2);
     if (partnerInfo.inQuarantine) score -= 4;
     if (blocked) score -= 6;
+    // Slight preference for ending up next to a known flamethrower holder to infect/disarm them
+    if (!obs?.confirmedInfected && playerLikelyHasCard(memory, partnerId, 'flamethrower')) score += 2;
     return score;
   }
 
@@ -1226,6 +1228,12 @@ function scorePlayCard(
 
     case 'temptation': {
       if (vs.myRole === 'thing') {
+        // High priority when a known flamethrower holder is reachable — infect or disarm them
+        const hasFlameTarget = targets.some(t =>
+          !memory.observations.get(t)?.confirmedInfected &&
+          playerLikelyHasCard(memory, t, 'flamethrower'),
+        );
+        if (hasFlameTarget) return (w as any).playTemptation * 2.5;
         return (w as any).playTemptation * 1.5;
       }
       return (w as any).playTemptation;
@@ -1377,6 +1385,8 @@ function scoreTarget(
       if (tp && !tp.inQuarantine) score += 2;
       // Prefer targets with fewer cards (less likely to have defense)
       if (tp && tp.handCount <= 3) score += 1;
+      // Strong bonus for targeting a known flamethrower holder — infect to disarm them
+      if (!obs?.confirmedInfected && playerLikelyHasCard(memory, targetId, 'flamethrower')) score += 8;
     }
 
     // Flamethrower/necronomicon: consider bluffing by targeting exposed infected
