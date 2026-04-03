@@ -1,9 +1,9 @@
 # Bot Balance Report
 
-- Generated: 2026-04-03T23:33:22.898Z
+- Generated: 2026-04-03T23:39:05.707Z
 - Games: 120
 - Player counts: 6, 7, 9
-- Avg. actions per game: 342.1
+- Avg. actions per game: 325.2
 
 ## Winner Distribution
 
@@ -17,9 +17,9 @@
 
 | Final role | Wins | Total seats | Rate |
 | --- | ---: | ---: | ---: |
-| Human | 444 | 497 | 89.3% |
+| Human | 439 | 493 | 89.0% |
 | Thing | 23 | 120 | 19.2% |
-| Infected | 85 | 263 | 32.3% |
+| Infected | 84 | 267 | 31.5% |
 
 ## By Player Count
 
@@ -33,13 +33,13 @@
 
 | # | Players | Winner | Steps |
 | --- | ---: | --- | ---: |
-| 111 | 9 | humans | 456 |
-| 112 | 6 | thing | 227 |
-| 113 | 7 | humans | 228 |
-| 114 | 9 | thing | 546 |
-| 115 | 6 | thing | 197 |
-| 116 | 7 | humans | 557 |
-| 117 | 9 | thing | 898 |
-| 118 | 6 | humans | 115 |
-| 119 | 7 | thing | 489 |
-| 120 | 9 | humans | 499 |
+| 111 | 9 | humans | 87 |
+| 112 | 6 | thing | 235 |
+| 113 | 7 | humans | 194 |
+| 114 | 9 | humans | 688 |
+| 115 | 6 | humans | 268 |
+| 116 | 7 | humans | 336 |
+| 117 | 9 | humans | 220 |
+| 118 | 6 | humans | 80 |
+| 119 | 7 | humans | 644 |
+| 120 | 9 | humans | 310 |

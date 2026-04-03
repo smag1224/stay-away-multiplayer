@@ -489,16 +489,23 @@ function scoreTradeCardForPartner(
 
     if (partnerIsAlly) {
       // Use early returns to bypass the bottom defense/action multipliers.
-      // Without early returns, no_barbecue=16 → ×0.3=4.8 and flamethrower=15 → ×0.25=3.75.
-      if (card.defId === 'no_barbecue') return 16;   // Protect ally from flamethrower
-      if (card.defId === 'anti_analysis') return 10;  // Protect ally from analysis
+      // Priority 1 (highest): no_barbecue — shields ally from flamethrower
+      if (card.defId === 'no_barbecue') return 16;
+      // Priority 2 (equal): anti_analysis AND infected reload (only if we have a spare copy)
+      if (card.defId === 'anti_analysis') return 13;
+      if (card.defId === 'infected') {
+        const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
+        return myInfectedCards >= 2 ? 13 : 1; // Give copy back if spare; keep the only one
+      }
+      // Priority 3 (lower): movement and door-clearing cards
       if (card.defId === 'axe') {
         const allyHasDoorProblem = vs.doors.length > 0 && vs.aliveCount <= 5;
-        return allyHasDoorProblem ? 14 : 8;
+        return allyHasDoorProblem ? 10 : 7;
       }
       if (['swap_places', 'you_better_run'].includes(card.defId)) {
-        return vs.aliveCount <= 4 ? 12 : 7;
+        return vs.aliveCount <= 4 ? 9 : 6;
       }
+      // Situational endgame: flamethrower to ally adjacent to a human
       if (card.defId === 'flamethrower' && vs.aliveCount <= 4) {
         const partnerAdjacentHuman = vs.alivePlayers.some(player => {
           if (player.id === partnerId || player.id === vs.myId) return false;
@@ -506,13 +513,6 @@ function scoreTradeCardForPartner(
           return !playerObs?.confirmedInfected;
         });
         if (partnerAdjacentHuman) return 15;
-      }
-      if (card.defId === 'infected') {
-        // Always reload the Thing even with 1 card — Thing needs ammo to infect more humans
-        if (partnerIsTheThing) return 12;
-        // Give excess infected cards to other infected allies
-        const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
-        return myInfectedCards >= 2 ? 16 : 1;
       }
     }
 
