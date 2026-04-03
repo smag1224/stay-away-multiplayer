@@ -32,23 +32,22 @@ Intended to be readable by any AI assistant (Claude, Codex, etc.) picking up thi
 
 ## Phase 2 — Database & Accounts
 
-### 4. Database (PostgreSQL or SQLite)
-- [ ] Choose and set up DB (SQLite for simplicity, Postgres for production)
-- [ ] Schema: rooms, players, sessions, games, game_events
-- [ ] Migrate in-memory room state to DB-backed storage
-- [ ] Connection pool + graceful shutdown
+### 4. Database (SQLite) ✅
+- [x] SQLite via better-sqlite3, WAL mode
+- [x] Tables: rooms, users, game_results
 
-### 5. Player Accounts
-- [ ] Registration / login (username + password, bcrypt)
-- [ ] JWT or session-cookie auth
-- [ ] Guest mode (no account, no stats tracked)
-- [ ] Profile page (avatar, display name)
+### 5. Player Accounts ✅
+- [x] Register/login with scrypt password hashing + HMAC token (no deps)
+- [x] 30-day token stored in localStorage
+- [x] Guest mode fully preserved
+- [x] /api/auth/register, /api/auth/login, /api/auth/me endpoints
 
-### 6. Player Statistics
-- [ ] Track per-account: games played, wins, losses, by role (human / thing / infected)
-- [ ] Track: cards played, eliminations, times eliminated
-- [ ] Stats API endpoint
-- [ ] Stats display in UI (profile screen)
+### 6. Player Statistics ✅
+- [x] Win/loss recorded per game per role
+- [x] ELO updated after each game (team-based calc)
+- [x] /api/users/:username/stats endpoint
+- [x] Profile page: ELO, win rate, by-role bars, recent 10 games
+- [x] Compact stats (ELO, winrate, games) shown in lobby next to player name
 
 ---
 
