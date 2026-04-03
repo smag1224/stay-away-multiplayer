@@ -59,9 +59,7 @@ export const STAGE = {
 
 // ── Thing: Infection Timing ─────────────────────────────────────────────────
 
-/** Minimum global turns before Thing should try to infect (stay hidden early) */
-export const THING_SAFE_TURNS = 3;
-/** After this many turns, Thing becomes more aggressive */
+/** After this many turns, Thing becomes fully aggressive with infection */
 export const THING_AGGRESSIVE_TURNS = 9;
 /** How many humans left before Thing should consider declaring victory */
 export const THING_DECLARE_THRESHOLD = 1;

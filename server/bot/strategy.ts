@@ -3,7 +3,6 @@ import type { ScoredAction } from './evaluator.ts';
 import type { BotMemory, PlayerObservation } from './memory.ts';
 import { getAllianceScore, getSuspicion } from './memory.ts';
 import type { BotVisibleState } from './visibleState.ts';
-import { THING_SAFE_TURNS } from './config.ts';
 
 type GameStage = 'early' | 'mid' | 'late';
 
@@ -316,7 +315,6 @@ function strategicTargetBonus(
   currentCardDefId: string | null,
   pendingAction: PendingAction | null,
   vs: BotVisibleState,
-  memory: BotMemory,
 ): number {
   if (targetId === null) return 0;
 
@@ -338,10 +336,7 @@ function strategicTargetBonus(
   }
 
   if (vs.myRole === 'thing') {
-    // During safe period, suppress infection target bonuses to respect stealth mode
-    const inSafePeriod = memory.globalTurnCount < THING_SAFE_TURNS;
     if (currentCardDefId === 'infected') {
-      if (inSafePeriod) return -8; // Actively discourage infection during safe period
       if (targetId === strategy.infectTargetId) return 16;
       return 10;
     }
@@ -363,7 +358,6 @@ function strategicCardBonus(
   defId: string | null,
   targetId: number | null,
   stage: GameStage,
-  memory: BotMemory,
 ): number {
   if (!defId) return 0;
 
@@ -409,24 +403,18 @@ function strategicCardBonus(
   }
 
   if (vs.myRole === 'thing') {
-    // During safe period, suppress all infection-related strategic bonuses
-    // so the evaluator's low score (4) actually keeps the Thing in stealth mode
-    const inSafePeriod = memory.globalTurnCount < THING_SAFE_TURNS;
-
     if (defId === 'infected') {
-      if (inSafePeriod) return -6; // Actively discourage infecting during safe period
       return targetId === strategy.infectTargetId ? 18 : 12;
     }
 
     if (action.type === 'PLAY_CARD') {
-      if (defId === 'temptation' && strategy.infectTargetId !== null && !inSafePeriod) return 9;
-      if (['swap_places', 'watch_your_back', 'you_better_run'].includes(defId) && strategy.infectTargetId !== null && !inSafePeriod) return 7;
+      if (defId === 'temptation' && strategy.infectTargetId !== null) return 9;
+      if (['swap_places', 'watch_your_back', 'you_better_run'].includes(defId) && strategy.infectTargetId !== null) return 7;
       if (ATTACK_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 6;
       if (INSPECT_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 4;
     }
 
     if ((action.type === 'DISCARD_CARD' || action.type === 'FORGETFUL_DISCARD_PICK' || action.type === 'BLIND_DATE_PICK') && defId === 'infected') {
-      if (inSafePeriod) return 0; // During safe period, it's okay to discard infected (avoid suspicion)
       return -18;
     }
 
@@ -478,7 +466,7 @@ export function applyStrategicBias(
       (pendingAction?.type === 'choose_target' ? pendingAction.cardDefId : null) ??
       (pendingAction?.type === 'panic_choose_target' ? pendingAction.panicDefId : null);
 
-    entry.score += strategicCardBonus(vs, strategy, entry.action, cardOrPendingDefId, targetId, stage, memory);
-    entry.score += strategicTargetBonus(targetId, strategy, cardOrPendingDefId, pendingAction, vs, memory);
+    entry.score += strategicCardBonus(vs, strategy, entry.action, cardOrPendingDefId, targetId, stage);
+    entry.score += strategicTargetBonus(targetId, strategy, cardOrPendingDefId, pendingAction, vs);
   }
 }

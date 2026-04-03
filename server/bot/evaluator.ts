@@ -18,7 +18,6 @@ import {
   CARD_VALUES,
   SUSPICION_THRESHOLD_TRUSTED,
   STAGE,
-  THING_SAFE_TURNS,
   THING_AGGRESSIVE_TURNS,
   STAGE_VALUE_MULTS,
   infoCardMultiplier,
@@ -472,13 +471,7 @@ function scoreTradeCardForPartner(
   const partnerInfo = partnerId !== null ? vs.alivePlayers.find(player => player.id === partnerId) : undefined;
 
   if (vs.myRole === 'thing' && card.defId === 'infected') {
-    if (memory.globalTurnCount < THING_SAFE_TURNS) {
-      score = 0.5; // Extremely low — strategic bias will push it further negative
-    } else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) {
-      score = 18; // Highly aggressive after delay
-    } else {
-      score = 12; // Moderate infection drive
-    }
+    score = memory.globalTurnCount >= THING_AGGRESSIVE_TURNS ? 18 : 12;
   }
 
   if (vs.myRole === 'infected' && card.defId === 'infected') {
@@ -1049,7 +1042,7 @@ function scorePlayCard(
       }
       let score = (w as any).playQuarantine;
       // Bluff: quarantine own ally to deflect suspicion (look human)
-      if (vs.myRole === 'thing' && memory.globalTurnCount < THING_SAFE_TURNS + 2 && Math.random() < 0.25) {
+      if (vs.myRole === 'thing' && Math.random() < 0.2) {
         score = Math.max(score, (w as any).bluffQuarantineAlly ?? score * 0.5);
       }
       return score;
@@ -1218,8 +1211,6 @@ function scorePlayCard(
 
     case 'temptation': {
       if (vs.myRole === 'thing') {
-        // Don't use temptation too early (suspicious)
-        if (memory.globalTurnCount < THING_SAFE_TURNS) return 1;
         return (w as any).playTemptation * 1.5;
       }
       return (w as any).playTemptation;
@@ -1638,8 +1629,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
           let score = 10 - dv;
 
           if (vs.myRole === 'thing' && card.defId === 'infected') {
-            if (memory.globalTurnCount < THING_SAFE_TURNS) score = 0.5; // Safe period — don't infect
-            else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) score = 18;
+            if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) score = 18;
             else score = 14;
           }
 
@@ -1883,8 +1873,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') {
-          if (memory.globalTurnCount < THING_SAFE_TURNS) score = 0.5;
-          else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) score = 18;
+          if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) score = 18;
           else score = 13;
         }
         score = applyInfectionOverloadSheddingBias(vs, card.defId, score);

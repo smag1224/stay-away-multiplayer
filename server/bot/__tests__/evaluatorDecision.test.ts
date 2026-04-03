@@ -728,7 +728,7 @@ describe('bot evaluator tactical pending decisions', () => {
     });
   });
 
-  it('makes Thing push infection once safe period has passed', () => {
+  it('makes Thing push infection immediately when a legal trade target exists', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
 
     const state = makeState(null);
@@ -742,8 +742,6 @@ describe('bot evaluator tactical pending decisions', () => {
 
     const memory = createBotMemory(0, [0, 1, 2, 3]);
     adjustSuspicion(memory, 1, -0.25);
-    // Advance past the safe period (THING_SAFE_TURNS = 3) so the Thing actively infects
-    memory.globalTurnCount = 10;
 
     const actions = evaluateActions(buildVisibleState(state, 0), memory);
 
