@@ -7,22 +7,26 @@ Intended to be readable by any AI assistant (Claude, Codex, etc.) picking up thi
 
 ## Phase 1 — Stability
 
-### 1. Room Cleanup (TTL for empty rooms)
-- [ ] Add idle/empty room expiration (e.g. 1 hour after all players leave)
-- [ ] Periodic cleanup loop on the server (every 10–15 minutes)
-- [ ] Log when a room is cleaned up
+### 1. Room Cleanup (TTL for empty rooms) ✅
+- [x] Add idle/empty room expiration (e.g. 1 hour after all players leave)
+- [x] Periodic cleanup loop on the server (every 5 minutes)
+- [x] Log when a room is cleaned up
+- [x] Tiered TTL: 5m (0 members), 1h (0 connected), 12h (stale)
 
-### 2. Restart Without Losing State
-- [ ] Persist room state to disk (JSON file or SQLite) on every state change
-- [ ] Load persisted state on server startup
-- [ ] Handle schema version mismatches gracefully (ignore stale/incompatible saves)
+### 2. Restart Without Losing State ✅
+- [x] Persist room state to SQLite (better-sqlite3, WAL mode) on every state change
+- [x] Load persisted state on server startup
+- [x] Errors are caught and logged — stale/corrupt rows are skipped silently
+- [x] data/ excluded from git
 
-### 3. Spectator Mode
-- [ ] Add `spectator` role to RoomMember (cannot act, sees full table)
-- [ ] Separate spectator join endpoint or flag on `/join`
-- [ ] RoomView for spectators: show all hands face-down (or face-up post-game)
-- [ ] UI: spectator badge, separate list from active players
-- [ ] Spectators do not count toward player count or win conditions
+### 3. Spectator Mode ✅
+- [x] isSpectator flag on RoomMember (server) and RoomMemberView (client)
+- [x] /join accepts spectator:true — bypasses game-running check
+- [x] sanitizeGame reveals all cards + roles to watchers
+- [x] /action blocked for spectators
+- [x] 'Watch the game' button shown in ConnectScreen when join fails with 'already started'
+- [x] Watcher uses sentinel me (id=-999), sees full GameScreen in read-only mode
+- [x] Spectator banner shown (reuses existing UI)
 
 ---
 
