@@ -24,6 +24,7 @@ import {
   infoCardMultiplier,
   aggressionMultiplier,
 } from './config.ts';
+import { applyStrategicBias } from './strategy.ts';
 
 // ── Dynamic suspicion threshold ─────────────────────────────────────────────
 // Lower threshold late-game: fewer suspects = more certainty needed to act
@@ -298,6 +299,7 @@ export function evaluateActions(vs: BotVisibleState, memory: BotMemory): ScoredA
       break;
   }
 
+  applyStrategicBias(actions, vs, memory, stage);
   for (const a of actions) {
     a.score += (Math.random() - 0.5) * NOISE_AMPLITUDE;
   }
@@ -471,16 +473,18 @@ function scoreTradeCardForPartner(
 
   if (vs.myRole === 'thing' && card.defId === 'infected') {
     if (memory.globalTurnCount < THING_SAFE_TURNS) {
-      score = 4;
+      score = 0.5; // Extremely low — strategic bias will push it further negative
     } else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) {
-      score = 15;
+      score = 18; // Highly aggressive after delay
     } else {
-      score = 10;
+      score = 12; // Moderate infection drive
     }
   }
 
   if (vs.myRole === 'infected' && card.defId === 'infected') {
-    score = 3;
+    // Check if trading to the Thing — high priority reload
+    const partnerIsTheThing = partnerObs?.knownRole === 'thing';
+    score = partnerIsTheThing ? 12 : 3;
   }
 
   score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
@@ -512,7 +516,8 @@ function scoreTradeCardForPartner(
       }
       if (card.defId === 'infected') {
         const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
-        score = myInfectedCards >= 2 ? 9 : 1;
+        // Reload the Thing — give infected cards back so Thing can infect more humans
+        score = myInfectedCards >= 2 ? 16 : 1;
       }
     }
 
@@ -738,8 +743,12 @@ export function getIncomingTradeRisk(
 
   let risk = 4;
 
+  if (vs.myInfectedCount >= INFECTION_OVERLOAD_WARNING) {
+    risk += 6;
+  }
+
   if (knownRole === 'thing') {
-    risk += 10;
+    risk += vs.myInfectedCount >= INFECTION_OVERLOAD_WARNING ? 16 : 10;
   } else if (knownRole === 'infected' && vs.myRole === 'thing') {
     risk += 8;
   } else {
@@ -1000,11 +1009,14 @@ function scorePlayCard(
         return !obs?.confirmedClean && !obs?.confirmedInfected;
       });
       const suspicious = targets.filter(t => getSuspicion(memory, t) > 0.15);
+      const verySuspicious = targets.filter(t => getSuspicion(memory, t) > 0.35);
       let score = unknowns.length > 0 ? (w as any).playAnalysis : 1;
       if (suspicious.length > 0 && unknowns.some(t => suspicious.includes(t))) score += 2;
+      // Bigger bonus for targeting highly suspicious unknowns — humans should investigate aggressively
+      if (verySuspicious.length > 0 && unknowns.some(t => verySuspicious.includes(t))) score += 3;
 
       // Thing bluff: analyze own infected ally to look like proactive human
-      if (vs.myRole === 'thing' && isEarly) {
+      if (vs.myRole === 'thing' && (isEarly || stage === 'mid')) {
         const infectedAlly = targets.find(t => memory.observations.get(t)?.confirmedInfected);
         if (infectedAlly !== undefined) {
           score = Math.max(score, (w as any).bluffAnalyzeInfected ?? 3);
@@ -1025,11 +1037,20 @@ function scorePlayCard(
         if (susTargs.length > 0) return (w as any).playQuarantine * 1.8;
         return (w as any).playQuarantine * 0.4;
       }
-      // Thing: quarantine dangerous humans who have flamethrower
+      // Thing/Infected: prioritize quarantining humans who likely have flamethrower or analysis
+      const dangerousHuman = targets.find(t => {
+        const obs = memory.observations.get(t);
+        if (obs?.confirmedInfected) return false; // Don't quarantine allies
+        return playerLikelyHasCard(memory, t, 'flamethrower') ||
+               playerLikelyHasCard(memory, t, 'analysis');
+      });
+      if (dangerousHuman !== undefined) {
+        return (w as any).playQuarantine * 1.6; // Neutralize threats
+      }
       let score = (w as any).playQuarantine;
-      // Bluff: quarantine own ally to deflect suspicion
-      if (vs.myRole === 'thing' && Math.random() < 0.15) {
-        score = (w as any).bluffQuarantineAlly ?? score * 0.5;
+      // Bluff: quarantine own ally to deflect suspicion (look human)
+      if (vs.myRole === 'thing' && memory.globalTurnCount < THING_SAFE_TURNS + 2 && Math.random() < 0.25) {
+        score = Math.max(score, (w as any).bluffQuarantineAlly ?? score * 0.5);
       }
       return score;
     }
@@ -1281,6 +1302,9 @@ function scoreTarget(
   if (vs.myRole === 'human' && cardDefId === 'flamethrower') {
     const threat = playerThreatFromHand(memory, targetId);
     if (threat >= 3 && susp > 0.15) score += 3; // Dangerous suspected enemy
+    // Strongly reward burning highly suspicious players in late game
+    const flameTargetObs = memory.observations.get(targetId);
+    if (susp > 0.5 && !flameTargetObs?.confirmedClean) score += 4;
   }
 
   // swap_places / you_better_run: Thing — swap toward uninfected human
@@ -1309,8 +1333,10 @@ function scoreTarget(
     // Info cards: prefer unknown targets
     if (['analysis', 'suspicion', 'lovecraft'].includes(cardDefId)) {
       if (!obs?.confirmedClean && !obs?.confirmedInfected) score += 4;
-      // Prefer targets with high suspicion for analysis
+      // Prefer targets with high suspicion for analysis — scale with suspicion level
       if (cardDefId === 'analysis' && susp > 0.15) score += 3;
+      if (cardDefId === 'analysis' && susp > 0.35) score += 4; // Very suspicious → investigate hard
+      if (cardDefId === 'analysis' && susp > 0.5) score += 3; // Even more suspicious → highest priority
     }
 
     // Quarantine: prefer suspicious, never self unless desperate
@@ -1612,7 +1638,8 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
           let score = 10 - dv;
 
           if (vs.myRole === 'thing' && card.defId === 'infected') {
-            if (memory.globalTurnCount < THING_SAFE_TURNS) score = 4;
+            if (memory.globalTurnCount < THING_SAFE_TURNS) score = 0.5; // Safe period — don't infect
+            else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) score = 18;
             else score = 14;
           }
 
@@ -1856,7 +1883,9 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
         const dv = dynamicCardValue(card.defId, stage, vs.players.length);
         let score = 12 - dv;
         if (vs.myRole === 'thing' && card.defId === 'infected') {
-          score = memory.globalTurnCount < THING_SAFE_TURNS ? 5 : 15;
+          if (memory.globalTurnCount < THING_SAFE_TURNS) score = 0.5;
+          else if (memory.globalTurnCount >= THING_AGGRESSIVE_TURNS) score = 18;
+          else score = 13;
         }
         score = applyInfectionOverloadSheddingBias(vs, card.defId, score);
         actions.push({
@@ -1956,6 +1985,7 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
     }
   }
 
+  applyStrategicBias(actions, vs, memory, stage);
   for (const a of actions) {
     a.score += (Math.random() - 0.5) * NOISE_AMPLITUDE * 0.5;
   }

@@ -192,6 +192,8 @@ function addInteraction(memory: BotMemory, edge: InteractionEdge): void {
 /**
  * When player B is confirmed infected, trace back through exchange history
  * to find who could have infected them. Boost suspicion on those partners.
+ * Also applies depth-2 chain inference: if A→B→C and C is confirmed infected,
+ * A gets a smaller suspicion boost (they may have started the infection chain).
  */
 function propagateInfectionChain(memory: BotMemory, infectedPlayerId: number): void {
   const chains = memory.infectionChains.get(infectedPlayerId) ?? [];
@@ -202,15 +204,28 @@ function propagateInfectionChain(memory: BotMemory, infectedPlayerId: number): v
     const recency = Math.max(0.3, 1 - (memory.globalTurnCount - turn) * 0.05);
     adjustSuspicion(memory, partner, SUSPICION_DELTAS.infectionChainPartner * recency);
 
-    // Also check if that partner exchanged with other confirmed-infected
+    // Depth-2: check who exchanged with this suspicious partner
     const partnerChains = memory.infectionChains.get(partner) ?? [];
+
     const otherInfectedPartners = partnerChains.filter(c => {
       const obs = memory.observations.get(c.partner);
-      return obs?.confirmedInfected;
+      return obs?.confirmedInfected && c.partner !== infectedPlayerId;
     });
     if (otherInfectedPartners.length >= 2) {
       // Multiple infected exchange partners → very suspicious
       adjustSuspicion(memory, partner, SUSPICION_DELTAS.multipleInfectedPartners);
+    }
+
+    // Depth-2 transitive chain: A exchanged with partner (B), and B exchanged with infected (C)
+    // → A might be the original infection source
+    for (const { partner: grandPartner, turn: grandTurn } of partnerChains) {
+      if (grandPartner === memory.botPlayerId) continue;
+      if (grandPartner === infectedPlayerId) continue;
+      const grandObs = memory.observations.get(grandPartner);
+      if (grandObs?.confirmedInfected) continue; // Already confirmed, no need
+      // Reduced weight for depth-2 inference
+      const grandRecency = Math.max(0.2, 1 - (memory.globalTurnCount - grandTurn) * 0.07);
+      adjustSuspicion(memory, grandPartner, SUSPICION_DELTAS.infectionChainPartner * grandRecency * 0.4);
     }
   }
 }

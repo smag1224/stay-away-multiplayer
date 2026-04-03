@@ -1,9 +1,16 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  test: {
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'server/**/*.{test,spec}.{ts,tsx}',
+    ],
+    exclude: ['e2e/**', 'playwright-report/**', 'test-results/**'],
+  },
   server: {
     host: true,
     port: process.env.PORT ? parseInt(process.env.PORT) : 5173,

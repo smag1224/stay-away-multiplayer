@@ -37,6 +37,8 @@ data/
 
 # Local tooling / verification artifacts
 .playwright-artifacts/
+playwright-report/
+test-results/
 .claude/settings.local.json
 *.dev.log
 *.dev.err.log

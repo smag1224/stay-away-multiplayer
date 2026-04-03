@@ -727,4 +727,49 @@ describe('bot evaluator tactical pending decisions', () => {
       targetPlayerId: 1,
     });
   });
+
+  it('makes Thing push infection once safe period has passed', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState(null);
+    state.step = 'trade';
+    state.players[0].role = 'thing';
+    state.players[0].hand = [
+      card('infected', 'thing_infected'),
+      card('flamethrower', 'thing_fire'),
+    ];
+    state.players[1].role = 'human';
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    adjustSuspicion(memory, 1, -0.25);
+    // Advance past the safe period (THING_SAFE_TURNS = 3) so the Thing actively infects
+    memory.globalTurnCount = 10;
+
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    expect(actions[0].action).toEqual({
+      type: 'OFFER_TRADE',
+      cardUid: 'thing_infected',
+    });
+  });
+
+  it('makes a human prioritize burning a confirmed enemy over pure repositioning', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState(null);
+    state.players[0].hand = [
+      card('flamethrower', 'my_flamethrower'),
+      card('watch_your_back', 'my_watch'),
+    ];
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    setKnownRole(memory, 1, 'thing');
+
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    expect(actions[0].action).toEqual({
+      type: 'PLAY_CARD',
+      cardUid: 'my_flamethrower',
+    });
+  });
 });

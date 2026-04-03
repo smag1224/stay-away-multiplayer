@@ -32,9 +32,9 @@ export const SUSPICION_DELTAS = {
   /** New: blocking analysis is highly suspicious */
   blockedAnalysis: 0.2,
   /** New: infection chain — partner of confirmed infected */
-  infectionChainPartner: 0.25,
+  infectionChainPartner: 0.30,
   /** New: multiple confirmed-infected exchange partners */
-  multipleInfectedPartners: 0.35,
+  multipleInfectedPartners: 0.40,
   /** New: consistent protection pattern */
   consistentProtection: 0.06,
   /** New: excessive trade refusals without exchanges */
@@ -62,58 +62,58 @@ export const STAGE = {
 /** Minimum global turns before Thing should try to infect (stay hidden early) */
 export const THING_SAFE_TURNS = 3;
 /** After this many turns, Thing becomes more aggressive */
-export const THING_AGGRESSIVE_TURNS = 8;
+export const THING_AGGRESSIVE_TURNS = 9;
 /** How many humans left before Thing should consider declaring victory */
 export const THING_DECLARE_THRESHOLD = 1;
 
 // ── Action Weights (Human Bot) ──────────────────────────────────────────────
 
 export const HUMAN_WEIGHTS = {
-  playAnalysis: 9,
-  playSuspicion: 6,
-  playFlamethrower: 10,
+  playAnalysis: 14,
+  playSuspicion: 9,
+  playFlamethrower: 14,
   playFlamethrowerLowEvidence: 3,
-  playQuarantine: 5,
-  playLockedDoor: 4,
-  playAxe: 3,
+  playQuarantine: 7,
+  playLockedDoor: 4.5,
+  playAxe: 3.5,
   playSwapPlaces: 3,
   playYouBetterRun: 3,
   playWatchYourBack: 2,
-  playWhisky: 1.5,
-  playPersistence: 5,
-  playTemptation: 4,
-  playLovecraft: 8,
-  playNecronomicon: 10,
+  playWhisky: 2.5,
+  playPersistence: 6.5,
+  playTemptation: 4.5,
+  playLovecraft: 9,
+  playNecronomicon: 11,
 
   discardInfection: 0.5,
   discardAction: 2,
   discardDefense: 0.3,
   discardObstacle: 1.5,
 
-  defendNoBarbecue: 10,
+  defendNoBarbecue: 11,
   defendAntiAnalysis: 2,
   defendImFineHere: 4,
   defendFear: 3,
   defendNoThanks: 2.5,
   defendMiss: 2,
 
-  tradeKeepDefense: 3,
-  tradeKeepStrong: 2,
+  tradeKeepDefense: 4.5,
+  tradeKeepStrong: 2.5,
   tradeGiveWeak: 1,
 
-  targetSuspiciousMult: 2.0,
-  targetTrustedMult: 0.3,
+  targetSuspiciousMult: 2.6,
+  targetTrustedMult: 0.2,
   targetAdjacentBonus: 1.5,
 } as const;
 
 // ── Action Weights (Thing Bot) ──────────────────────────────────────────────
 
 export const THING_WEIGHTS = {
-  playAnalysis: 3,
+  playAnalysis: 2.5,
   playSuspicion: 4,
-  playFlamethrower: 7,
+  playFlamethrower: 6,
   playFlamethrowerLowEvidence: 5,
-  playQuarantine: 6,
+  playQuarantine: 5,
   playLockedDoor: 5,
   playAxe: 4,
   playSwapPlaces: 5,
@@ -121,7 +121,7 @@ export const THING_WEIGHTS = {
   playWatchYourBack: 4,
   playWhisky: 0.5,
   playPersistence: 5,
-  playTemptation: 7,
+  playTemptation: 5,
   playLovecraft: 4,
   playNecronomicon: 8,
 
@@ -132,34 +132,34 @@ export const THING_WEIGHTS = {
 
   defendNoBarbecue: 10,
   defendAntiAnalysis: 9,
-  defendImFineHere: 5,
-  defendFear: 5,
-  defendNoThanks: 4,
-  defendMiss: 3,
+  defendImFineHere: 4,
+  defendFear: 3.5,
+  defendNoThanks: 3,
+  defendMiss: 2.5,
 
-  tradeInfect: 10,
+  tradeInfect: 6,
   tradeKeepDefense: 4,
   tradeKeepStrong: 2,
   tradeGiveWeak: 1,
 
-  targetHumanMult: 2.5,
+  targetHumanMult: 1.8,
   targetInfectedMult: 0.2,
   targetAdjacentBonus: 1.5,
 
   /** Bluff weights */
-  bluffAnalyzeInfected: 3,     // Play analysis on own infected ally to look human
-  bluffFlamethrowerInfected: 4, // Burn own burned-out infected to look innocent
-  bluffQuarantineAlly: 2,      // Quarantine own ally to deflect suspicion
+  bluffAnalyzeInfected: 5,     // Play analysis on own infected ally to look human
+  bluffFlamethrowerInfected: 6, // Burn own burned-out infected to look innocent
+  bluffQuarantineAlly: 4,      // Quarantine own ally to deflect suspicion
 } as const;
 
 // ── Action Weights (Infected Bot) ───────────────────────────────────────────
 
 export const INFECTED_WEIGHTS = {
-  playAnalysis: 4,
+  playAnalysis: 3,
   playSuspicion: 5,
-  playFlamethrower: 6,
+  playFlamethrower: 5,
   playFlamethrowerLowEvidence: 2,
-  playQuarantine: 5,
+  playQuarantine: 4.5,
   playLockedDoor: 4,
   playAxe: 4,
   playSwapPlaces: 4,
@@ -167,7 +167,7 @@ export const INFECTED_WEIGHTS = {
   playWatchYourBack: 3,
   playWhisky: 0.5,
   playPersistence: 5,
-  playTemptation: 5,
+  playTemptation: 4,
   playLovecraft: 5,
   playNecronomicon: 7,
 
@@ -178,16 +178,16 @@ export const INFECTED_WEIGHTS = {
 
   defendNoBarbecue: 10,
   defendAntiAnalysis: 8,
-  defendImFineHere: 4,
-  defendFear: 4,
-  defendNoThanks: 3,
-  defendMiss: 3,
+  defendImFineHere: 3,
+  defendFear: 3,
+  defendNoThanks: 2.5,
+  defendMiss: 2.5,
 
   tradeKeepDefense: 3,
   tradeKeepStrong: 2,
   tradeGiveWeak: 1,
 
-  targetHumanMult: 1.8,
+  targetHumanMult: 1.4,
   targetThingMult: 0.1,
   targetAdjacentBonus: 1.5,
 
@@ -246,13 +246,13 @@ export const STAGE_VALUE_MULTS: Record<string, [number, number, number]> = {
 /** Multiplier for information card value based on player count */
 export function infoCardMultiplier(playerCount: number): number {
   if (playerCount <= 5) return 1.3;  // Small game: info is critical
-  if (playerCount <= 8) return 1.0;
-  return 0.8;                         // Large game: harder to use info effectively
+  if (playerCount <= 8) return 1.2;
+  return 1.1;                         // Large game: keep info relevant to curb runaway infections
 }
 
 /** Multiplier for aggressive cards based on player count */
 export function aggressionMultiplier(playerCount: number): number {
   if (playerCount <= 5) return 0.7;  // Small game: be cautious, fewer suspects
-  if (playerCount <= 8) return 1.0;
-  return 1.2;                         // Large game: more targets, less risk per attack
+  if (playerCount <= 8) return 0.9;
+  return 0.95;                        // Large game: avoid overbuffing aggression
 }

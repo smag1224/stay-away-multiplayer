@@ -119,6 +119,13 @@ export async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T>
   return payload.data;
 }
 
+export function createRoomWebSocketUrl(roomCode: string, sessionId: string): string {
+  const url = new URL(`/api/rooms/${roomCode}/ws`, window.location.origin);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('sessionId', sessionId);
+  return url.toString();
+}
+
 export function canGiveCard(player: ViewerPlayerState, card: CardInstance): boolean {
   if (card.defId === 'the_thing') return false;
   if (card.defId !== 'infected') return true;

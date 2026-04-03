@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGzip } from 'node:zlib';
+import { WebSocketServer, WebSocket } from 'ws';
 
 import {
   createInitialState,
@@ -78,10 +79,14 @@ console.log(`[db] Loaded ${rooms.size} room(s) from disk`);
 const kickedSessions = new Map<string, KickedSession>();
 const KICKED_BY_HOST_ERROR = 'KICKED_BY_HOST';
 const KICKED_SESSION_TTL_MS = 1000 * 60 * 5;
+const botTurnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-// SSE subscribers: roomCode → Set of { res, sessionId }
-type SseClient = { res: ServerResponse<IncomingMessage>; sessionId: string };
-const sseClients = new Map<string, Set<SseClient>>();
+type RoomSocket = WebSocket & {
+  roomCode?: string;
+  sessionId?: string;
+  isAlive?: boolean;
+};
+const roomSockets = new Map<string, Set<RoomSocket>>();
 
 type HttpRequest = IncomingMessage;
 type HttpResponse = ServerResponse<IncomingMessage>;
@@ -168,18 +173,18 @@ function sendSessionError<T>(res: HttpResponse, roomCode: string, sessionId: str
   badRequest<T>(res, fallback);
 }
 
-function closeSseSession(roomCode: string, sessionId: string): void {
-  const clients = sseClients.get(roomCode);
-  if (!clients) return;
+function closeRoomSocketSession(roomCode: string, sessionId: string): void {
+  const sockets = roomSockets.get(roomCode);
+  if (!sockets) return;
 
-  for (const client of [...clients]) {
-    if (client.sessionId !== sessionId) continue;
-    clients.delete(client);
-    client.res.end();
+  for (const socket of [...sockets]) {
+    if (socket.sessionId !== sessionId) continue;
+    sockets.delete(socket);
+    socket.close(4001, 'Session closed');
   }
 
-  if (clients.size === 0) {
-    sseClients.delete(roomCode);
+  if (sockets.size === 0) {
+    roomSockets.delete(roomCode);
   }
 }
 
@@ -187,7 +192,10 @@ function trimName(name: string | undefined): string {
   return (name ?? '').trim().slice(0, 20);
 }
 
-function createHostAddress(req: HttpRequest): string {
+function createHostAddress(req?: Pick<HttpRequest, 'headers'> | null): string {
+  if (!req) {
+    return process.env.PUBLIC_ORIGIN ?? `http://localhost:${port}`;
+  }
   const protocol = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
   const forwardedHost = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? `localhost:${port}`;
   return `${protocol}://${forwardedHost}`;
@@ -404,7 +412,7 @@ function sanitizeGame(game: GameState, viewerId: number | null, room: Room, isWa
   };
 }
 
-function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
+function roomView(room: Room, member: RoomMember, req?: Pick<HttpRequest, 'headers'> | null): RoomView {
   return {
     code: room.code,
     me: {
@@ -444,17 +452,17 @@ function touchRoom(room: Room): void {
   saveRoom(room);
 }
 
-/** Push room state to all SSE subscribers for this room */
-function broadcastRoom(room: Room, req: HttpRequest): void {
-  const clients = sseClients.get(room.code);
-  if (!clients || clients.size === 0) return;
+/** Push room state to all WebSocket subscribers for this room */
+function broadcastRoom(room: Room): void {
+  const sockets = roomSockets.get(room.code);
+  if (!sockets || sockets.size === 0) return;
 
-  for (const client of clients) {
-    const member = getMember(room, client.sessionId);
+  for (const socket of [...sockets]) {
+    if (socket.readyState !== WebSocket.OPEN || !socket.sessionId) continue;
+    const member = getMember(room, socket.sessionId);
     if (!member) continue;
-    const view = roomView(room, member, req);
-    const data = JSON.stringify({ ok: true, data: view });
-    client.res.write(`data: ${data}\n\n`);
+    const view = roomView(room, member);
+    socket.send(JSON.stringify({ ok: true, data: view }));
   }
 }
 
@@ -473,13 +481,18 @@ function cleanupRooms(): void {
     const isEmpty = memberCount === 0 && room.updatedAt < NO_MEMBERS_CUTOFF;
 
     if (isStale || isAbandoned || isEmpty) {
+      const botTimer = botTurnTimers.get(code);
+      if (botTimer) {
+        clearTimeout(botTimer);
+        botTurnTimers.delete(code);
+      }
       rooms.delete(code);
       deleteRoom(code);
       clearRoomMemory(code);
-      const clients = sseClients.get(code);
-      if (clients) {
-        for (const client of clients) client.res.end();
-        sseClients.delete(code);
+      const sockets = roomSockets.get(code);
+      if (sockets) {
+        for (const socket of sockets) socket.close(4000, 'Room cleaned up');
+        roomSockets.delete(code);
       }
       console.log(`[cleanup] Room ${code} removed (stale=${isStale}, abandoned=${isAbandoned}, empty=${isEmpty})`);
     }
@@ -519,42 +532,52 @@ const BOT_NAMES = ['Алекс 🤖', 'Макс 🤖', 'Кира 🤖', 'Рик 
  * Schedule bot auto-play. Checks if any bot needs to act and dispatches actions
  * with small delays to feel natural. Chains multiple actions if needed.
  */
-function scheduleBotTurn(room: Room, req: HttpRequest): void {
+function scheduleBotTurn(room: Room): void {
   if (!room.game || room.game.phase !== 'playing') return;
+  if (botTurnTimers.has(room.code)) return;
 
   // Find which bot needs to act right now
   const botMember = findBotThatNeedsToAct(room);
   if (!botMember || botMember.playerId === null) return;
 
-  // Add a delay (2-4s) to make it feel like the bot is "thinking"
-  // Confirmations (view_hand, view_card, etc.) are faster since they don't require decision
+  // In fast mode (tests) use minimal delays; otherwise simulate "thinking" time
+  const fastMode = process.env.FAST_BOT === '1';
   const pa = room.game.pendingAction;
   const isQuickAction = pa && ['view_hand', 'view_card', 'whisky_reveal', 'show_hand_confirm'].includes(pa.type);
-  const delay = isQuickAction
-    ? 1500 + Math.floor(Math.random() * 1000)
-    : 3000 + Math.floor(Math.random() * 3000);
+  const delay = fastMode
+    ? 20
+    : isQuickAction
+      ? 1500 + Math.floor(Math.random() * 1000)
+      : 3000 + Math.floor(Math.random() * 3000);
 
-  setTimeout(() => {
+  const timer = setTimeout(() => {
+    botTurnTimers.delete(room.code);
     if (!room.game || room.game.phase !== 'playing') return;
 
-    const action = decideBotAction(room.game, botMember.playerId!, room.code);
+    // Re-evaluate whose turn it is at execution time to avoid stale timers
+    const activeBotMember = findBotThatNeedsToAct(room);
+    if (!activeBotMember || activeBotMember.playerId === null) return;
+
+    const action = decideBotAction(room.game, activeBotMember.playerId, room.code);
     if (!action) {
-      console.warn(`[Bot ${botMember.name}] No action decided, step=${room.game.step}, pa=${room.game.pendingAction?.type}`);
+      console.warn(`[Bot ${activeBotMember.name}] No action decided, step=${room.game.step}, pa=${room.game.pendingAction?.type}`);
       return;
     }
 
     // Apply the action via the same path as human players
-    const error = applyRoomAction(room, botMember, action);
+    const error = applyRoomAction(room, activeBotMember, action);
     if (error) {
-      console.warn(`[Bot ${botMember.name}] Action failed: ${error}`, action.type, JSON.stringify(action));
+      console.warn(`[Bot ${activeBotMember.name}] Action failed: ${error}`, action.type, JSON.stringify(action));
       return;
     }
 
-    broadcastRoom(room, req);
+    broadcastRoom(room);
 
     // Chain: after this action, check if a bot needs to act again
-    scheduleBotTurn(room, req);
+    scheduleBotTurn(room);
   }, delay);
+
+  botTurnTimers.set(room.code, timer);
 }
 
 /** Find the bot member who currently needs to take an action */
@@ -640,6 +663,11 @@ function findBotThatNeedsToAct(room: Room): RoomMember | null {
 }
 
 function resetRoom(room: Room): void {
+  const botTimer = botTurnTimers.get(room.code);
+  if (botTimer) {
+    clearTimeout(botTimer);
+    botTurnTimers.delete(room.code);
+  }
   room.game = null;
   room.members.forEach((member) => {
     member.playerId = null;
@@ -976,6 +1004,7 @@ async function serveStatic(
 
 // Clean up stale rooms every 5 minutes instead of on every request
 setInterval(cleanupRooms, 5 * 60 * 1000);
+const wsServer = new WebSocketServer({ noServer: true });
 
 const server = createServer(async (req, res) => {
 
@@ -1084,47 +1113,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // SSE stream endpoint: GET /api/rooms/{CODE}/stream?sessionId=...
-    const streamMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)\/stream$/i);
-    if (req.method === 'GET' && streamMatch) {
-      const streamRoom = getRoom(streamMatch[1]);
-      if (!streamRoom) { notFound(res, 'Room not found.'); return; }
-      const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
-      const member = getMember(streamRoom, sessionId);
-      if (!member) { sendSessionError(res, streamRoom.code, sessionId); return; }
-
-      member.connected = true;
-      member.lastSeenAt = now();
-
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-      });
-
-      // Send initial state
-      const initial = JSON.stringify({ ok: true, data: roomView(streamRoom, member, req) });
-      res.write(`data: ${initial}\n\n`);
-
-      // Register SSE client
-      const client: SseClient = { res, sessionId };
-      if (!sseClients.has(streamRoom.code)) sseClients.set(streamRoom.code, new Set());
-      sseClients.get(streamRoom.code)!.add(client);
-
-      // Keep-alive ping every 30s
-      const keepAlive = setInterval(() => res.write(': ping\n\n'), 30_000);
-
-      req.on('close', () => {
-        clearInterval(keepAlive);
-        sseClients.get(streamRoom.code)?.delete(client);
-        member.connected = false;
-        member.lastSeenAt = now();
-      });
-      return;
-    }
-
-    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|shout|add-bot|remove-bot|remove-member))?$/i);
+    const roomMatch = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(join|start|action|reset|leave|shout|add-bot|remove-bot|remove-member))?$/i);
     if (!roomMatch) {
       notFound(res);
       return;
@@ -1190,7 +1179,7 @@ const server = createServer(async (req, res) => {
       room.members.push(member);
       touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
       return;
     }
 
@@ -1222,9 +1211,9 @@ const server = createServer(async (req, res) => {
 
       startRoomGame(room, body.thingInDeck, body.chaosMode);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
       // Kick off bot turns if the first player is a bot
-      scheduleBotTurn(room, req);
+      scheduleBotTurn(room);
       return;
     }
 
@@ -1241,7 +1230,53 @@ const server = createServer(async (req, res) => {
 
       resetRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
+      return;
+    }
+
+    if (actionSegment === 'leave') {
+      const body = await readBody<RoomSessionPayload>(req);
+      const member = getMember(room, body.sessionId);
+
+      if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
+
+      closeRoomSocketSession(room.code, member.sessionId);
+
+      if (room.game && !member.isSpectator && member.playerId !== null) {
+        member.connected = false;
+        member.lastSeenAt = now();
+        touchRoom(room);
+        sendJson(res, 200, { ok: true, data: { left: true, roomDeleted: false } });
+        broadcastRoom(room);
+        return;
+      }
+
+      const idx = room.members.findIndex(m => m.sessionId === member.sessionId);
+      if (idx !== -1) {
+        room.members.splice(idx, 1);
+      }
+
+      if (!room.game && member.isHost && room.members.length > 0) {
+        room.members[0].isHost = true;
+      }
+
+      if (room.members.length === 0) {
+        const botTimer = botTurnTimers.get(room.code);
+        if (botTimer) {
+          clearTimeout(botTimer);
+          botTurnTimers.delete(room.code);
+        }
+        rooms.delete(room.code);
+        deleteRoom(room.code);
+        clearRoomMemory(room.code);
+        roomSockets.delete(room.code);
+        sendJson(res, 200, { ok: true, data: { left: true, roomDeleted: true } });
+        return;
+      }
+
+      touchRoom(room);
+      sendJson(res, 200, { ok: true, data: { left: true, roomDeleted: false } });
+      broadcastRoom(room);
       return;
     }
 
@@ -1259,9 +1294,9 @@ const server = createServer(async (req, res) => {
       }
 
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
       // After any human action, check if a bot needs to respond
-      scheduleBotTurn(room, req);
+      scheduleBotTurn(room);
       return;
     }
 
@@ -1291,7 +1326,7 @@ const server = createServer(async (req, res) => {
       room.members.push(bot);
       touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
       return;
     }
 
@@ -1311,10 +1346,10 @@ const server = createServer(async (req, res) => {
 
       room.members.splice(idx, 1);
       markSessionKicked(room.code, target.sessionId);
-      closeSseSession(room.code, target.sessionId);
+      closeRoomSocketSession(room.code, target.sessionId);
       touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
       return;
     }
 
@@ -1326,7 +1361,7 @@ const server = createServer(async (req, res) => {
       room.shouts.push({ playerId: member.playerId, phrase: body.phrase, phraseEn: body.phraseEn, expiresAt: now() + 5000 });
       touchRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, member, req) });
-      broadcastRoom(room, req);
+      broadcastRoom(room);
       return;
     }
 
@@ -1338,6 +1373,99 @@ const server = createServer(async (req, res) => {
       error: error instanceof Error ? error.message : 'Internal server error',
     });
   }
+});
+
+wsServer.on('connection', (socket: RoomSocket, req: IncomingMessage) => {
+  const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+  const pathname = requestUrl.pathname;
+  const match = pathname.match(/^\/api\/rooms\/([A-Z0-9]+)\/ws$/i);
+  const roomCode = match?.[1]?.toUpperCase() ?? '';
+  const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
+  const room = getRoom(roomCode);
+
+  if (!room) {
+    socket.send(JSON.stringify({ ok: false, error: 'Room not found.' }));
+    socket.close(4404, 'Room not found');
+    return;
+  }
+
+  const member = getMember(room, sessionId);
+  if (!member) {
+    socket.send(JSON.stringify({ ok: false, error: isSessionKicked(room.code, sessionId) ? KICKED_BY_HOST_ERROR : 'Session not found.' }));
+    socket.close(4403, 'Session not found');
+    return;
+  }
+
+  socket.roomCode = room.code;
+  socket.sessionId = sessionId;
+  socket.isAlive = true;
+
+  member.connected = true;
+  member.lastSeenAt = now();
+  touchRoom(room);
+
+  if (!roomSockets.has(room.code)) {
+    roomSockets.set(room.code, new Set());
+  }
+  roomSockets.get(room.code)!.add(socket);
+
+  socket.send(JSON.stringify({ ok: true, data: roomView(room, member, req) }));
+  broadcastRoom(room);
+
+  socket.on('pong', () => {
+    socket.isAlive = true;
+  });
+
+  socket.on('message', () => {
+    member.lastSeenAt = now();
+  });
+
+  socket.on('close', () => {
+    const sockets = roomSockets.get(room.code);
+    if (sockets) {
+      sockets.delete(socket);
+      if (sockets.size === 0) {
+        roomSockets.delete(room.code);
+      }
+    }
+
+    member.connected = false;
+    member.lastSeenAt = now();
+    touchRoom(room);
+    broadcastRoom(room);
+  });
+});
+
+server.on('upgrade', (req: IncomingMessage, socket, head) => {
+  const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+  const pathname = requestUrl.pathname;
+  if (!pathname.match(/^\/api\/rooms\/([A-Z0-9]+)\/ws$/i)) {
+    socket.destroy();
+    return;
+  }
+
+  wsServer.handleUpgrade(req, socket, head, (ws: WebSocket) => {
+    wsServer.emit('connection', ws, req);
+  });
+});
+
+const wsHeartbeat = setInterval(() => {
+  for (const sockets of roomSockets.values()) {
+    for (const socket of sockets) {
+      if (socket.readyState !== WebSocket.OPEN) continue;
+      if (socket.isAlive === false) {
+        socket.terminate();
+        continue;
+      }
+      socket.isAlive = false;
+      socket.ping();
+    }
+  }
+}, 30_000);
+
+server.on('close', () => {
+  clearInterval(wsHeartbeat);
+  wsServer.close();
 });
 
 server.listen(port, host, () => {

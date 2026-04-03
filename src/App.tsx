@@ -8,10 +8,11 @@ const GameScreen = lazy(() =>
 const ProfileScreen = lazy(() =>
   import('./ProfileScreen.tsx').then((m) => ({ default: m.ProfileScreen })),
 );
-import type { AuthUser, RoomView, SessionInfo } from './multiplayer.ts';
+import type { ApiResponse, AuthUser, RoomView, SessionInfo } from './multiplayer.ts';
 import {
   api,
   copyToClipboard,
+  createRoomWebSocketUrl,
   getViewerPlayer,
   readStoredAuthToken,
   readStoredPerformanceMode,
@@ -42,7 +43,7 @@ function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
-  // Track latest known state timestamp to prevent stale poll responses from overwriting fresh action responses
+  // Track latest known state timestamp to prevent stale network responses from overwriting fresh action responses
   const lastKnownUpdatedAt = useRef(0);
 
   // Verify stored auth token on mount
@@ -120,36 +121,109 @@ function App() {
     };
 
     let pollInterval: number | null = null;
-    let isPending = false;
+    let reconnectTimeout: number | null = null;
+    let isPolling = false;
+    let socket: WebSocket | null = null;
+    let reconnectAttempts = 0;
 
-    function startPolling() {
+    const stopPolling = () => {
+      if (pollInterval) {
+        window.clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
+    const refresh = async () => {
+      if (isPolling || cancelled) return;
+      isPolling = true;
+      try {
+        const nextRoom = await api<RoomView>(`/api/rooms/${activeSession.roomCode}?sessionId=${activeSession.sessionId}`);
+        handleRoomData(nextRoom);
+      } catch (e) {
+        handleError(e instanceof Error ? e.message : String(e));
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    const startPolling = () => {
       if (pollInterval || cancelled) return;
-      const refresh = async () => {
-        // Skip if a request is already in-flight — prevents pile-up on slow connections
-        if (isPending || cancelled) return;
-        isPending = true;
+      void refresh();
+      pollInterval = window.setInterval(refresh, performanceMode ? 3000 : 1500);
+    };
+
+    const cleanupSocket = () => {
+      if (!socket) return;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+      socket = null;
+    };
+
+    const scheduleReconnect = () => {
+      if (cancelled || reconnectTimeout !== null) return;
+      startPolling();
+      const delay = Math.min(1000 * 2 ** reconnectAttempts, 5000);
+      reconnectTimeout = window.setTimeout(() => {
+        reconnectTimeout = null;
+        reconnectAttempts += 1;
+        connectSocket();
+      }, delay);
+    };
+
+    const connectSocket = () => {
+      if (cancelled) return;
+      cleanupSocket();
+
+      const nextSocket = new WebSocket(createRoomWebSocketUrl(activeSession.roomCode, activeSession.sessionId));
+      socket = nextSocket;
+
+      nextSocket.onopen = () => {
+        if (cancelled || socket !== nextSocket) return;
+        reconnectAttempts = 0;
+        stopPolling();
+      };
+
+      nextSocket.onmessage = (event) => {
+        if (cancelled || socket !== nextSocket) return;
         try {
-          const nextRoom = await api<RoomView>(`/api/rooms/${activeSession.roomCode}?sessionId=${activeSession.sessionId}`);
-          handleRoomData(nextRoom);
-        } catch (e) {
-          handleError(e instanceof Error ? e.message : String(e));
-        } finally {
-          isPending = false;
+          const payload = JSON.parse(String(event.data)) as ApiResponse<RoomView>;
+          if (payload.ok) {
+            handleRoomData(payload.data);
+            stopPolling();
+            return;
+          }
+          handleError(payload.error);
+        } catch {
+          // Ignore malformed frames and let reconnect/polling recover if needed.
         }
       };
-      void refresh();
-      pollInterval = window.setInterval(refresh, performanceMode ? 3000 : 1200);
-    }
 
-    // We intentionally use polling instead of SSE here.
-    // During local multiplayer testing with many browser windows/tabs,
-    // EventSource can hit per-origin connection limits and stall actions
-    // like "start game", leaving the lobby stuck in a loading state.
+      nextSocket.onerror = () => {
+        if (nextSocket.readyState === WebSocket.CONNECTING || nextSocket.readyState === WebSocket.OPEN) {
+          nextSocket.close();
+        }
+      };
+
+      nextSocket.onclose = () => {
+        if (cancelled || socket !== nextSocket) return;
+        socket = null;
+        scheduleReconnect();
+      };
+    };
+
     startPolling();
+    connectSocket();
 
     return () => {
       cancelled = true;
-      if (pollInterval) window.clearInterval(pollInterval);
+      stopPolling();
+      if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
+      cleanupSocket();
     };
   }, [performanceMode, session]);
 
@@ -200,7 +274,7 @@ function App() {
     setLoading(true);
     try {
       const nextRoom = await api<RoomView>(path, { method: 'POST', body: JSON.stringify(body) });
-      // Update the timestamp guard so stale poll responses don't overwrite this fresh state
+      // Update the timestamp guard so stale background sync responses don't overwrite this fresh state
       lastKnownUpdatedAt.current = nextRoom.updatedAt;
       setRoom(nextRoom);
       setError(null);
@@ -217,6 +291,28 @@ function App() {
     setSession(nextSession);
     setRoom(nextRoom);
     setJoinCode(nextRoom.code);
+  };
+
+  const leaveRoom = async () => {
+    const activeRoomCode = room?.code ?? session?.roomCode;
+    const activeSessionId = room?.me.sessionId ?? session?.sessionId;
+
+    if (activeRoomCode && activeSessionId) {
+      try {
+        await api(`/api/rooms/${activeRoomCode}/leave`, {
+          method: 'POST',
+          body: JSON.stringify({ sessionId: activeSessionId }),
+        });
+      } catch {
+        // Local leave should still succeed even if the server room/session is already gone.
+      }
+    }
+
+    writeStoredSession(null);
+    setSession(null);
+    setRoom(null);
+    setError(null);
+    lastKnownUpdatedAt.current = 0;
   };
 
   return (
@@ -294,7 +390,7 @@ function App() {
           loading={loading}
           room={room}
           onCopy={updateCopied}
-          onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
+          onLeave={() => void leaveRoom()}
           gameMode={gameMode}
           onGameModeChange={setGameMode}
           onStart={() => callRoomEndpoint(`/api/rooms/${room.code}/start`, {
@@ -331,7 +427,7 @@ function App() {
             room={room}
             onAction={(action) => callRoomEndpoint(`/api/rooms/${room.code}/action`, { sessionId: room.me.sessionId, action })}
             onCopy={updateCopied}
-            onLeave={() => { writeStoredSession(null); setSession(null); setRoom(null); setError(null); }}
+            onLeave={() => void leaveRoom()}
             onReset={() => callRoomEndpoint(`/api/rooms/${room.code}/reset`, { sessionId: room.me.sessionId })}
             onShout={(phrase, phraseEn) => callRoomEndpoint(`/api/rooms/${room.code}/shout`, { sessionId: room.me.sessionId, phrase, phraseEn })}
           />
