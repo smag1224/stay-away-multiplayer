@@ -497,6 +497,9 @@ function scoreTradeCardForPartner(
           const myInfectedCards = vs.myHand.filter(handCard => handCard.defId === 'infected').length;
           return myInfectedCards >= 2 ? 13 : 1;
         }
+        // Priority 3: temptation lets Thing initiate a trade with any player at the table,
+        // bypassing position — ideal for reaching humans the Thing can't normally trade with
+        if (card.defId === 'temptation') return 11;
       }
       // Movement and door-clearing cards: useful for any ally (Thing or other infected)
       if (card.defId === 'axe') {
