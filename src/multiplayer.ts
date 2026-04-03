@@ -5,6 +5,12 @@ export interface SessionInfo {
   sessionId: string;
 }
 
+export interface CompactStats {
+  elo: number;
+  winRate: number;
+  gamesPlayed: number;
+}
+
 export interface RoomMemberView {
   sessionId: string;
   name: string;
@@ -14,6 +20,27 @@ export interface RoomMemberView {
   playerId: number | null;
   connected: boolean;
   joinedAt: number;
+  stats: CompactStats | null;
+}
+
+export interface UserStats {
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  elo: number;
+  byRole: {
+    human:    { played: number; wins: number };
+    thing:    { played: number; wins: number };
+    infected: { played: number; wins: number };
+  };
+  recentGames: Array<{ role: string; result: string; playerCount: number; eloChange: number; createdAt: number }>;
+}
+
+export interface AuthUser {
+  userId: number;
+  username: string;
+  elo: number;
 }
 
 export interface ViewerPlayerState {

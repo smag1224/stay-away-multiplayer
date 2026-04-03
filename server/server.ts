@@ -29,7 +29,8 @@ import type {
 } from '../src/multiplayer.ts';
 import { decideBotAction, clearRoomMemory } from './bot/index.ts';
 import { createRandomSeating } from './seatAssignment.ts';
-import { saveRoom, deleteRoom, loadAllRooms } from './db.ts';
+import { saveRoom, deleteRoom, loadAllRooms, createUser, getUserById, getUserByName, updateUserElo, recordGameResult, getUserStats, getCompactStats } from './db.ts';
+import { hashPassword, verifyPassword, signToken, verifyToken, calcElo } from './auth.ts';
 
 type RoomMember = {
   sessionId: string;
@@ -38,6 +39,7 @@ type RoomMember = {
   isBot: boolean;
   isSpectator: boolean;
   playerId: number | null;
+  userId: number | null;
   connected: boolean;
   joinedAt: number;
   lastSeenAt: number;
@@ -412,16 +414,24 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
       isSpectator: member.isSpectator,
       playerId: member.playerId,
     },
-    members: room.members.map((roomMember) => ({
-      sessionId: roomMember.sessionId,
-      name: roomMember.name,
-      isHost: roomMember.isHost,
-      isBot: roomMember.isBot,
-      isSpectator: roomMember.isSpectator,
-      playerId: roomMember.playerId,
-      connected: roomMember.connected,
-      joinedAt: roomMember.joinedAt,
-    })),
+    members: room.members.map((roomMember) => {
+      let stats = null;
+      if (roomMember.userId !== null) {
+        const user = getUserById(roomMember.userId);
+        if (user) stats = getCompactStats(user.id, user.elo);
+      }
+      return {
+        sessionId: roomMember.sessionId,
+        name: roomMember.name,
+        isHost: roomMember.isHost,
+        isBot: roomMember.isBot,
+        isSpectator: roomMember.isSpectator,
+        playerId: roomMember.playerId,
+        connected: roomMember.connected,
+        joinedAt: roomMember.joinedAt,
+        stats,
+      };
+    }),
     game: room.game ? sanitizeGame(room.game, member.playerId, room, member.isSpectator) : null,
     hostAddress: createHostAddress(req),
     updatedAt: room.updatedAt,
@@ -836,8 +846,58 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
     }
   }
 
+  // Record game results when the game just ended
+  if (room.game.phase === 'game_over' && room.game.winner !== null) {
+    recordRoomResults(room);
+  }
+
   touchRoom(room);
   return null;
+}
+
+function recordRoomResults(room: Room): void {
+  if (!room.game || room.game.winner === null) return;
+
+  const { winnerPlayerIds, players } = room.game;
+
+  // Collect logged-in human players (not bots, not spectators)
+  const loggedIn = room.members.filter(m => m.userId !== null && m.playerId !== null && !m.isBot);
+  if (loggedIn.length === 0) return;
+
+  // Determine winner/loser teams and their ELOs for ELO calc
+  const playerCount = players.length;
+  const winnerUsers = loggedIn.filter(m => winnerPlayerIds.includes(m.playerId!));
+  const loserUsers  = loggedIn.filter(m => !winnerPlayerIds.includes(m.playerId!));
+
+  const avgWinnerElo = winnerUsers.length
+    ? winnerUsers.reduce((sum, m) => { const u = getUserById(m.userId!); return sum + (u?.elo ?? 1000); }, 0) / winnerUsers.length
+    : 1000;
+  const avgLoserElo = loserUsers.length
+    ? loserUsers.reduce((sum, m) => { const u = getUserById(m.userId!); return sum + (u?.elo ?? 1000); }, 0) / loserUsers.length
+    : 1000;
+
+  for (const member of loggedIn) {
+    const user = getUserById(member.userId!);
+    if (!user) continue;
+
+    const gamePlayer = players.find(p => p.id === member.playerId);
+    if (!gamePlayer) continue;
+
+    const won = winnerPlayerIds.includes(member.playerId!);
+    const opponentAvgElo = won ? avgLoserElo : avgWinnerElo;
+    const newElo = calcElo(user.elo, opponentAvgElo, won);
+
+    updateUserElo(user.id, newElo);
+    recordGameResult({
+      userId: user.id,
+      roomCode: room.code,
+      role: gamePlayer.role ?? 'human',
+      result: won ? 'win' : 'loss',
+      playerCount,
+      eloBefore: user.elo,
+      eloAfter: newElo,
+    });
+  }
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -943,9 +1003,54 @@ const server = createServer(async (req, res) => {
   }
 
   try {
+    // ── Auth endpoints ────────────────────────────────────────────────────────
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const body = await readBody<{ username: string; password: string }>(req);
+      const username = (body.username ?? '').trim();
+      const password = body.password ?? '';
+      if (!username || username.length < 2 || username.length > 24) { badRequest(res, 'Username must be 2–24 characters.'); return; }
+      if (!/^[a-zA-Z0-9_\-]+$/.test(username)) { badRequest(res, 'Username can only contain letters, numbers, _ and -.'); return; }
+      if (!password || password.length < 4) { badRequest(res, 'Password must be at least 4 characters.'); return; }
+      if (getUserByName(username)) { badRequest(res, 'Username already taken.'); return; }
+      const user = createUser(username, hashPassword(password));
+      const token = signToken(user.id);
+      sendJson(res, 200, { ok: true, data: { token, userId: user.id, username: user.username, elo: user.elo } });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      const body = await readBody<{ username: string; password: string }>(req);
+      const user = getUserByName((body.username ?? '').trim());
+      if (!user || !verifyPassword(body.password ?? '', user.password_hash)) { badRequest(res, 'Invalid username or password.'); return; }
+      const token = signToken(user.id);
+      sendJson(res, 200, { ok: true, data: { token, userId: user.id, username: user.username, elo: user.elo } });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/auth/me') {
+      const token = (req.headers['authorization'] ?? '').replace('Bearer ', '');
+      const payload = verifyToken(token);
+      if (!payload) { sendJson(res, 401, { ok: false, error: 'Unauthorized' }); return; }
+      const user = getUserById(payload.userId);
+      if (!user) { sendJson(res, 401, { ok: false, error: 'User not found' }); return; }
+      sendJson(res, 200, { ok: true, data: { userId: user.id, username: user.username, elo: user.elo } });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname.startsWith('/api/users/')) {
+      const username = decodeURIComponent(pathname.slice('/api/users/'.length).replace(/\/stats$/, ''));
+      const user = getUserByName(username);
+      if (!user) { sendJson(res, 404, { ok: false, error: 'User not found' }); return; }
+      sendJson(res, 200, { ok: true, data: getUserStats(user.id, user.elo) });
+      return;
+    }
+    // ── End auth endpoints ────────────────────────────────────────────────────
+
     if (req.method === 'POST' && pathname === '/api/rooms/create') {
-      const body = await readBody<CreateRoomPayload>(req);
+      const body = await readBody<CreateRoomPayload & { token?: string }>(req);
       const name = trimName(body.name);
+      const authPayload = body.token ? verifyToken(body.token) : null;
+      const userId = authPayload ? authPayload.userId : null;
 
       if (!name) {
         badRequest(res, 'Name is required.');
@@ -961,6 +1066,7 @@ const server = createServer(async (req, res) => {
             isHost: true,
             isBot: false,
             isSpectator: false,
+            userId,
             playerId: null,
             connected: true,
             joinedAt: now(),
@@ -1045,9 +1151,11 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && actionSegment === 'join') {
-      const body = await readBody<CreateRoomPayload & { spectator?: boolean }>(req);
+      const body = await readBody<CreateRoomPayload & { spectator?: boolean; token?: string }>(req);
       const name = trimName(body.name);
       const wantsSpectator = body.spectator === true;
+      const authPayload = body.token ? verifyToken(body.token) : null;
+      const userId = authPayload ? authPayload.userId : null;
 
       if (!name) {
         badRequest(res, 'Name is required.');
@@ -1072,6 +1180,7 @@ const server = createServer(async (req, res) => {
         isHost: false,
         isBot: false,
         isSpectator: wantsSpectator,
+        userId,
         playerId: null,
         connected: true,
         joinedAt: now(),
@@ -1173,6 +1282,7 @@ const server = createServer(async (req, res) => {
         isHost: false,
         isBot: true,
         isSpectator: false,
+        userId: null,
         playerId: null,
         connected: true,
         joinedAt: now(),

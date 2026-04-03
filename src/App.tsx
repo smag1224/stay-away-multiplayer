@@ -2,17 +2,21 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ConnectScreen, LobbyScreen } from './ConnectLobby.tsx';
-// Lazy-load the heavy game screen — only downloaded when a game actually starts
 const GameScreen = lazy(() =>
   import('./GameScreen.tsx').then((m) => ({ default: m.GameScreen })),
 );
-import type { RoomView, SessionInfo } from './multiplayer.ts';
+const ProfileScreen = lazy(() =>
+  import('./ProfileScreen.tsx').then((m) => ({ default: m.ProfileScreen })),
+);
+import type { AuthUser, RoomView, SessionInfo } from './multiplayer.ts';
 import {
   api,
   copyToClipboard,
   getViewerPlayer,
+  readStoredAuthToken,
   readStoredPerformanceMode,
   readStoredSession,
+  writeStoredAuthToken,
   writeStoredLang,
   writeStoredPerformanceMode,
   writeStoredSession,
@@ -34,8 +38,37 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [gameMode, setGameMode] = useState<'standard' | 'thing_in_deck' | 'anomaly'>('standard');
   const [performanceMode, setPerformanceMode] = useState(() => readStoredPerformanceMode());
+  const [authToken, setAuthToken] = useState<string | null>(() => readStoredAuthToken());
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileTarget, setProfileTarget] = useState<string | null>(null);
   // Track latest known state timestamp to prevent stale poll responses from overwriting fresh action responses
   const lastKnownUpdatedAt = useRef(0);
+
+  // Verify stored auth token on mount
+  useEffect(() => {
+    if (!authToken) return;
+    api<AuthUser>('/api/auth/me', { headers: { Authorization: `Bearer ${authToken}` } })
+      .then(user => setAuthUser(user))
+      .catch(() => { writeStoredAuthToken(null); setAuthToken(null); });
+  }, [authToken]);
+
+  const handleAuth = (token: string, user: AuthUser) => {
+    writeStoredAuthToken(token);
+    setAuthToken(token);
+    setAuthUser(user);
+  };
+
+  const handleLogout = () => {
+    writeStoredAuthToken(null);
+    setAuthToken(null);
+    setAuthUser(null);
+  };
+
+  const openProfile = (username?: string) => {
+    setProfileTarget(username ?? authUser?.username ?? null);
+    setShowProfile(true);
+  };
 
   const toggleLang = () => {
     const next: Lang = lang === 'ru' ? 'en' : 'ru';
@@ -201,12 +234,16 @@ function App() {
           joinCode={joinCode}
           loading={loading}
           name={name}
+          authUser={authUser}
+          onAuth={handleAuth}
+          onLogout={handleLogout}
+          onOpenProfile={() => openProfile()}
           onCreateRoom={async () => {
             const trimmedName = name.trim();
             if (!trimmedName) return setError(i18n.t('connect.errorEnterName'));
             setLoading(true);
             try {
-              const nextRoom = await api<RoomView>('/api/rooms/create', { method: 'POST', body: JSON.stringify({ name: trimmedName }) });
+              const nextRoom = await api<RoomView>('/api/rooms/create', { method: 'POST', body: JSON.stringify({ name: trimmedName, token: authToken }) });
               persistRoom(nextRoom);
               setError(null);
             } catch (createError) {
@@ -221,7 +258,7 @@ function App() {
             if (!trimmedName || !roomCode) return setError(i18n.t('connect.errorEnterNameAndCode'));
             setLoading(true);
             try {
-              const nextRoom = await api<RoomView>(`/api/rooms/${roomCode}/join`, { method: 'POST', body: JSON.stringify({ name: trimmedName }) });
+              const nextRoom = await api<RoomView>(`/api/rooms/${roomCode}/join`, { method: 'POST', body: JSON.stringify({ name: trimmedName, token: authToken }) });
               persistRoom(nextRoom);
               setError(null);
             } catch (joinError) {
@@ -236,7 +273,7 @@ function App() {
             if (!trimmedName || !roomCode) return setError(i18n.t('connect.errorEnterNameAndCode'));
             setLoading(true);
             try {
-              const nextRoom = await api<RoomView>(`/api/rooms/${roomCode}/join`, { method: 'POST', body: JSON.stringify({ name: trimmedName, spectator: true }) });
+              const nextRoom = await api<RoomView>(`/api/rooms/${roomCode}/join`, { method: 'POST', body: JSON.stringify({ name: trimmedName, spectator: true, token: authToken }) });
               persistRoom(nextRoom);
               setError(null);
             } catch (watchError) {
@@ -267,7 +304,17 @@ function App() {
           })}
           onAddBot={() => callRoomEndpoint(`/api/rooms/${room.code}/add-bot`, { sessionId: room.me.sessionId })}
           onRemoveMember={(memberSessionId: string) => callRoomEndpoint(`/api/rooms/${room.code}/remove-member`, { sessionId: room.me.sessionId, memberSessionId })}
+          onOpenProfile={openProfile}
         />
+      )}
+
+      {showProfile && profileTarget && (
+        <Suspense fallback={null}>
+          <ProfileScreen
+            username={profileTarget}
+            onClose={() => setShowProfile(false)}
+          />
+        </Suspense>
       )}
 
       {session && room && game && effectiveMe && (

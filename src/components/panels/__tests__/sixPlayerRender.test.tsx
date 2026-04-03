@@ -74,6 +74,7 @@ function buildViewerGame(playerCount: number): {
       playerId: player.id,
       connected: true,
       joinedAt: 0,
+      stats: null,
     })),
     game,
     hostAddress: 'http://localhost:8787',

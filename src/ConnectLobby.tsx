@@ -1,5 +1,62 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { RoomView } from './multiplayer.ts';
+import { api } from './appHelpers.ts';
+import type { AuthUser, RoomView } from './multiplayer.ts';
+
+function AuthPanel({ onAuth, onClose, isRu }: {
+  onAuth: (token: string, user: AuthUser) => void;
+  onClose: () => void;
+  isRu: boolean;
+}) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    if (!username.trim() || !password) return;
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const data = await api<{ token: string; userId: number; username: string; elo: number }>(
+        `/api/auth/${mode}`,
+        { method: 'POST', body: JSON.stringify({ username: username.trim(), password }) },
+      );
+      onAuth(data.token, { userId: data.userId, username: data.username, elo: data.elo });
+      onClose();
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-panel">
+      <div className="auth-tabs">
+        <button className={`auth-tab${mode === 'login' ? ' active' : ''}`} onClick={() => setMode('login')} type="button">
+          {isRu ? 'Войти' : 'Login'}
+        </button>
+        <button className={`auth-tab${mode === 'register' ? ' active' : ''}`} onClick={() => setMode('register')} type="button">
+          {isRu ? 'Регистрация' : 'Register'}
+        </button>
+      </div>
+      <input className="ui-input" placeholder={isRu ? 'Логин' : 'Username'} value={username}
+        onChange={e => setUsername(e.target.value)} maxLength={24} autoComplete="username" />
+      <input className="ui-input" placeholder={isRu ? 'Пароль' : 'Password'} type="password" value={password}
+        onChange={e => setPassword(e.target.value)} maxLength={64} autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+        onKeyDown={e => { if (e.key === 'Enter') void submit(); }} />
+      {authError && <p className="error-text">{authError}</p>}
+      <button className="ui-button" disabled={loading} onClick={() => void submit()} type="button">
+        {mode === 'login' ? (isRu ? 'Войти' : 'Login') : (isRu ? 'Зарегистрироваться' : 'Register')}
+      </button>
+      <button className="ui-button ui-button-secondary" onClick={onClose} type="button">
+        {isRu ? 'Отмена' : 'Cancel'}
+      </button>
+    </div>
+  );
+}
 
 export function ConnectScreen({
   copied,
@@ -7,6 +64,10 @@ export function ConnectScreen({
   joinCode,
   loading,
   name,
+  authUser,
+  onAuth,
+  onLogout,
+  onOpenProfile,
   onCreateRoom,
   onJoinRoom,
   onWatchRoom,
@@ -18,14 +79,19 @@ export function ConnectScreen({
   joinCode: string;
   loading: boolean;
   name: string;
+  authUser: AuthUser | null;
+  onAuth: (token: string, user: AuthUser) => void;
+  onLogout: () => void;
+  onOpenProfile: () => void;
   onCreateRoom: () => void;
   onJoinRoom: () => void;
   onWatchRoom: () => void;
   onJoinCodeChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }) {
-  const { t } = useTranslation();
-
+  const { t, i18n } = useTranslation();
+  const isRu = i18n.language !== 'en';
+  const [showAuth, setShowAuth] = useState(false);
   return (
     <main className="connect-screen abyss-screen">
       <section className="menu-wrap">
@@ -131,10 +197,30 @@ export function ConnectScreen({
           {error && <p className="error-text menu-feedback">{error}</p>}
           {error?.includes('already started') && (
             <button className="ui-button ui-button-secondary" disabled={loading} onClick={onWatchRoom} type="button">
-              👁 {t('connect.watchInstead') ?? 'Watch the game'}
+              👁 {isRu ? 'Наблюдать за игрой' : 'Watch the game'}
             </button>
           )}
         </form>
+
+        {/* Auth block */}
+        <div className="auth-block">
+          {showAuth ? (
+            <AuthPanel onAuth={onAuth} onClose={() => setShowAuth(false)} isRu={isRu} />
+          ) : authUser ? (
+            <div className="auth-user-row">
+              <button className="auth-username-btn" onClick={onOpenProfile} type="button">
+                👤 {authUser.username} <span className="auth-elo">ELO {authUser.elo}</span>
+              </button>
+              <button className="auth-logout-btn" onClick={onLogout} type="button">
+                {isRu ? 'Выйти' : 'Logout'}
+              </button>
+            </div>
+          ) : (
+            <button className="auth-login-btn" onClick={() => setShowAuth(true)} type="button">
+              {isRu ? '👤 Войти / Создать аккаунт' : '👤 Login / Register'}
+            </button>
+          )}
+        </div>
 
         <p className="flavor-text">
           «Временами просыпается Оно.
@@ -158,6 +244,7 @@ export function LobbyScreen({
   onAddBot,
   onRemoveMember,
   onGameModeChange,
+  onOpenProfile,
 }: {
   copied: boolean;
   error: string | null;
@@ -170,8 +257,10 @@ export function LobbyScreen({
   onAddBot: () => Promise<void>;
   onRemoveMember: (memberSessionId: string) => Promise<void>;
   onGameModeChange: (value: 'standard' | 'thing_in_deck' | 'anomaly') => void;
+  onOpenProfile: (username: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRu = i18n.language !== 'en';
   const minPlayers = 4;
   const canStart = room.me.isHost && room.members.length >= minPlayers;
   const playersNeeded = Math.max(0, minPlayers - room.members.length);
@@ -211,6 +300,16 @@ export function LobbyScreen({
                             <div className="lp-row-tags">
                               {member.isHost && <span className="lp-tag">{t('connect.host')}</span>}
                               {member.isBot && <span className="lp-tag bot">BOT</span>}
+                              {member.stats && (
+                                <button
+                                  className="lp-tag lp-tag-stats"
+                                  title={isRu ? 'Профиль' : 'Profile'}
+                                  onClick={() => onOpenProfile(member.name)}
+                                  type="button"
+                                >
+                                  ELO {member.stats.elo} · {Math.round(member.stats.winRate * 100)}% · {member.stats.gamesPlayed}g
+                                </button>
+                              )}
                             </div>
                           </>
                         ) : (

@@ -18,6 +18,18 @@ export type Lang = 'en' | 'ru';
 export const SESSION_STORAGE_KEY = 'stay-away-multiplayer-session';
 export const LANG_STORAGE_KEY = 'stay-away-multiplayer-lang';
 export const PERFORMANCE_MODE_STORAGE_KEY = 'stay-away-performance-mode';
+export const AUTH_TOKEN_KEY = 'stay-away-auth-token';
+
+export function readStoredAuthToken(): string | null {
+  try { return window.localStorage.getItem(AUTH_TOKEN_KEY); } catch { return null; }
+}
+
+export function writeStoredAuthToken(token: string | null): void {
+  try {
+    if (token) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    else window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch { /* ignore */ }
+}
 const API_TIMEOUT_MS = 8000;
 
 export function readStoredSession(): SessionInfo | null {
