@@ -112,15 +112,21 @@ function scoreInfectTargetForThing(vs: BotVisibleState, memory: BotMemory, playe
     (obs?.knownRole === 'thing' || obs?.knownRole === 'infected' ? 1.5 : 0) +
     (vs.players.find(player => player.id === playerId)?.inQuarantine ? 0.5 : 0);
 
-  // Penalize players with flamethrower (they can burn us right after getting infected) —
-  // unless infection gives us their flamethrower which we can use ourselves
-  const hasFlamethrower = obs?.seenCards.some(c => c.defId === 'flamethrower') ?? false;
-  const flamePenalty = hasFlamethrower ? 0.3 : 0;
+  // Bonus for infecting a player known to carry flamethrower — converts the biggest threat
+  // into an armed ally. Use fresh-card check so we only act on confirmed knowledge
+  // (whisky reveal, analysis, suspicion, panic hand reveal), not stale observations.
+  const freshSeen = obs?.seenCards.filter(
+    e => obs.lastHandChangeTurn === null || e.turn > obs.lastHandChangeTurn,
+  ) ?? [];
+  const hasKnownFlamethrower = freshSeen.some(c => c.defId === 'flamethrower');
+  // Only add bonus when the flamethrower holder is already adjacent — infecting a reachable threat
+  // is high priority, but don't chase across the table for a distant flamethrower holder
+  const flameBonus = (hasKnownFlamethrower && vs.myAdjacentIds.includes(playerId)) ? 0.7 : 0;
 
   // Bonus for players adjacent to us (easier to target in trade)
   const isAdjacent = vs.myAdjacentIds.includes(playerId) ? 0.4 : 0;
 
-  return seenSafeSignals + strongHandValue - exposedPenalty - flamePenalty + isAdjacent;
+  return seenSafeSignals + strongHandValue - exposedPenalty + flameBonus + isAdjacent;
 }
 
 function scoreHumanThreatForThing(vs: BotVisibleState, memory: BotMemory, playerId: number): number {

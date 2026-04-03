@@ -544,10 +544,11 @@ function scoreTradeCardForPartner(
     }
   }
 
-  // Thing: lower infection trade score if partner likely has flamethrower (risky target)
+  // Thing: boost infection score for known flamethrower holders — infecting them
+  // converts the biggest threat into an armed ally who will burn humans instead.
   if (vs.myRole === 'thing' && card.defId === 'infected' && partnerId !== null) {
     if (playerLikelyHasCard(memory, partnerId, 'flamethrower')) {
-      score *= 0.4; // They might burn us if we infect them
+      score *= 1.25;
     }
   }
 
