@@ -32,6 +32,9 @@ extract.js
 split_components.js
 mockups/
 
+# SQLite database (runtime data, not source)
+data/
+
 # Local tooling / verification artifacts
 .playwright-artifacts/
 .claude/settings.local.json

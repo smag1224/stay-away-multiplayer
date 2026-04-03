@@ -29,6 +29,7 @@ import type {
 } from '../src/multiplayer.ts';
 import { decideBotAction, clearRoomMemory } from './bot/index.ts';
 import { createRandomSeating } from './seatAssignment.ts';
+import { saveRoom, deleteRoom, loadAllRooms } from './db.ts';
 
 type RoomMember = {
   sessionId: string;
@@ -64,6 +65,13 @@ const distDir = path.join(rootDir, 'dist');
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? '0.0.0.0';
 const rooms = new Map<string, Room>();
+
+// Restore persisted rooms from SQLite on startup
+for (const room of loadAllRooms<Room>()) {
+  rooms.set(room.code, room);
+}
+console.log(`[db] Loaded ${rooms.size} room(s) from disk`);
+
 const kickedSessions = new Map<string, KickedSession>();
 const KICKED_BY_HOST_ERROR = 'KICKED_BY_HOST';
 const KICKED_SESSION_TTL_MS = 1000 * 60 * 5;
@@ -420,6 +428,7 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
 
 function touchRoom(room: Room): void {
   room.updatedAt = now();
+  saveRoom(room);
 }
 
 /** Push room state to all SSE subscribers for this room */
@@ -452,6 +461,7 @@ function cleanupRooms(): void {
 
     if (isStale || isAbandoned || isEmpty) {
       rooms.delete(code);
+      deleteRoom(code);
       clearRoomMemory(code);
       const clients = sseClients.get(code);
       if (clients) {
@@ -959,6 +969,7 @@ const server = createServer(async (req, res) => {
       };
 
       rooms.set(room.code, room);
+      saveRoom(room);
       sendJson(res, 200, { ok: true, data: roomView(room, room.members[0], req) });
       return;
     }
