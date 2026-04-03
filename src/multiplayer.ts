@@ -10,6 +10,7 @@ export interface RoomMemberView {
   name: string;
   isHost: boolean;
   isBot: boolean;
+  isSpectator: boolean;
   playerId: number | null;
   connected: boolean;
   joinedAt: number;
@@ -81,6 +82,7 @@ export interface RoomView {
     sessionId: string;
     name: string;
     isHost: boolean;
+    isSpectator: boolean;
     playerId: number | null;
   };
   members: RoomMemberView[];

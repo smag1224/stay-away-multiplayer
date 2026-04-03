@@ -36,6 +36,7 @@ type RoomMember = {
   name: string;
   isHost: boolean;
   isBot: boolean;
+  isSpectator: boolean;
   playerId: number | null;
   connected: boolean;
   joinedAt: number;
@@ -387,10 +388,10 @@ function buildTableAnim(
   return null;
 }
 
-function sanitizeGame(game: GameState, viewerId: number | null, room: Room): import('../src/multiplayer.ts').ViewerGameState {
+function sanitizeGame(game: GameState, viewerId: number | null, room: Room, isWatcher = false): import('../src/multiplayer.ts').ViewerGameState {
   const viewer = viewerId === null ? null : game.players.find((player) => player.id === viewerId) ?? null;
-  // Reveal everything to eliminated players (spectator mode) and during game_over
-  const isSpectator = viewer != null && !viewer.isAlive && game.phase !== 'game_over';
+  // Reveal everything to: watchers (external spectators), eliminated players who accepted spectator mode, and after game_over
+  const isSpectator = isWatcher || (viewer != null && !viewer.isAlive && game.phase !== 'game_over');
   const revealRoles = game.phase === 'game_over' || isSpectator;
 
   return {
@@ -408,6 +409,7 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
       sessionId: member.sessionId,
       name: member.name,
       isHost: member.isHost,
+      isSpectator: member.isSpectator,
       playerId: member.playerId,
     },
     members: room.members.map((roomMember) => ({
@@ -415,11 +417,12 @@ function roomView(room: Room, member: RoomMember, req: HttpRequest): RoomView {
       name: roomMember.name,
       isHost: roomMember.isHost,
       isBot: roomMember.isBot,
+      isSpectator: roomMember.isSpectator,
       playerId: roomMember.playerId,
       connected: roomMember.connected,
       joinedAt: roomMember.joinedAt,
     })),
-    game: room.game ? sanitizeGame(room.game, member.playerId, room) : null,
+    game: room.game ? sanitizeGame(room.game, member.playerId, room, member.isSpectator) : null,
     hostAddress: createHostAddress(req),
     updatedAt: room.updatedAt,
     shouts: (room.shouts ?? []).filter(s => s.expiresAt > now()),
@@ -957,6 +960,7 @@ const server = createServer(async (req, res) => {
             name,
             isHost: true,
             isBot: false,
+            isSpectator: false,
             playerId: null,
             connected: true,
             joinedAt: now(),
@@ -1041,20 +1045,23 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && actionSegment === 'join') {
-      const body = await readBody<CreateRoomPayload>(req);
+      const body = await readBody<CreateRoomPayload & { spectator?: boolean }>(req);
       const name = trimName(body.name);
+      const wantsSpectator = body.spectator === true;
 
       if (!name) {
         badRequest(res, 'Name is required.');
         return;
       }
 
-      if (room.game) {
+      if (room.game && !wantsSpectator) {
         badRequest(res, 'This room already started a game.');
         return;
       }
 
-      if (room.members.length >= 12) {
+      // Spectators don't count toward the player limit (separate cap of 20 observers)
+      const nonSpectatorCount = room.members.filter(m => !m.isSpectator).length;
+      if (!wantsSpectator && nonSpectatorCount >= 12) {
         badRequest(res, 'Room is full.');
         return;
       }
@@ -1064,6 +1071,7 @@ const server = createServer(async (req, res) => {
         name,
         isHost: false,
         isBot: false,
+        isSpectator: wantsSpectator,
         playerId: null,
         connected: true,
         joinedAt: now(),
@@ -1133,6 +1141,7 @@ const server = createServer(async (req, res) => {
       const member = getMember(room, body.sessionId);
 
       if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
+      if (member.isSpectator) { badRequest(res, 'Spectators cannot perform game actions.'); return; }
 
       const error = applyRoomAction(room, member, body.action);
       if (error) {
@@ -1163,6 +1172,7 @@ const server = createServer(async (req, res) => {
         name: botName,
         isHost: false,
         isBot: true,
+        isSpectator: false,
         playerId: null,
         connected: true,
         joinedAt: now(),

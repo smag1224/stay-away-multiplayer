@@ -137,10 +137,19 @@ function App() {
 
   const game = room?.game ?? null;
   const showFloatingLangToggle = !session || !room || !game;
+  const isWatcher = !!(room?.me.isSpectator);
   const me = useMemo(
     () => (game ? getViewerPlayer(game, room?.me.playerId ?? null) : null),
     [game, room?.me.playerId],
   );
+  // Spectator sentinel — lets watchers see the GameScreen without being in game.players
+  const SPECTATOR_ME = useMemo(() => ({
+    id: -999, name: room?.me.name ?? '', role: null as null,
+    avatarId: 'avatar_1', canReceiveInfectedCardFromMe: false,
+    isKnownInfectedToMe: false, hand: [], handCount: 0,
+    isAlive: false, inQuarantine: false, quarantineTurnsLeft: 0, position: -1,
+  }), [room?.me.name]);
+  const effectiveMe = me ?? (isWatcher && game ? SPECTATOR_ME : null);
   const shareUrl = room ? `${window.location.origin}?room=${room.code}` : '';
 
   const updateCopied = async () => {
@@ -221,6 +230,21 @@ function App() {
               setLoading(false);
             }
           }}
+          onWatchRoom={async () => {
+            const trimmedName = name.trim();
+            const roomCode = joinCode.trim().toUpperCase();
+            if (!trimmedName || !roomCode) return setError(i18n.t('connect.errorEnterNameAndCode'));
+            setLoading(true);
+            try {
+              const nextRoom = await api<RoomView>(`/api/rooms/${roomCode}/join`, { method: 'POST', body: JSON.stringify({ name: trimmedName, spectator: true }) });
+              persistRoom(nextRoom);
+              setError(null);
+            } catch (watchError) {
+              setError(watchError instanceof Error ? watchError.message : String(watchError));
+            } finally {
+              setLoading(false);
+            }
+          }}
           onJoinCodeChange={setJoinCode}
           onNameChange={setName}
         />
@@ -246,13 +270,14 @@ function App() {
         />
       )}
 
-      {session && room && game && me && (
+      {session && room && game && effectiveMe && (
         <Suspense fallback={null}>
           <GameScreen
             error={error}
             game={game}
+            isWatcher={isWatcher}
             loading={loading}
-            me={me}
+            me={effectiveMe}
             onToggleLang={toggleLang}
             onTogglePerformanceMode={togglePerformanceMode}
             performanceMode={performanceMode}

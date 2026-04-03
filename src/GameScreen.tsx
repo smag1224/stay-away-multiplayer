@@ -126,6 +126,7 @@ import {
 export function GameScreen({
   error,
   game,
+  isWatcher = false,
   loading,
   me,
   onToggleLang,
@@ -140,6 +141,7 @@ export function GameScreen({
 }: {
   error: string | null;
   game: ViewerGameState;
+  isWatcher?: boolean;
   loading: boolean;
   me: ViewerPlayerState;
   onToggleLang: () => void;
@@ -327,7 +329,7 @@ export function GameScreen({
     prevAliveRef.current = me.isAlive;
   }, [me.isAlive, game.phase]);
 
-  const isSpectator = !me.isAlive && game.phase === 'playing' && spectatorChoice === 'accepted';
+  const isSpectator = isWatcher || (!me.isAlive && game.phase === 'playing' && spectatorChoice === 'accepted');
 
   // Detect newly played targeted cards and trigger animation.
   // Works two ways: (1) if server provides fromPlayerId/targetPlayerId on the log
@@ -715,7 +717,7 @@ export function GameScreen({
 
         {/* ── Spectator prompt / banner — standalone overlay ── */}
         <AnimatePresence>
-          {spectatorChoice === 'pending' && (
+          {!isWatcher && spectatorChoice === 'pending' && (
             <motion.div
               className="spectator-prompt-overlay"
               initial={{ opacity: 0 }}

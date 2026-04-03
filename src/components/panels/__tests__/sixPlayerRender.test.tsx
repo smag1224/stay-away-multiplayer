@@ -62,6 +62,7 @@ function buildViewerGame(playerCount: number): {
       sessionId: 'host-session',
       name: players[viewerId].name,
       isHost: true,
+      isSpectator: false,
       playerId: viewerId,
     },
     members: players.map((player) => ({
@@ -69,6 +70,7 @@ function buildViewerGame(playerCount: number): {
       name: player.name,
       isHost: player.id === viewerId,
       isBot: false,
+      isSpectator: false,
       playerId: player.id,
       connected: true,
       joinedAt: 0,

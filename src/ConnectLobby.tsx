@@ -9,6 +9,7 @@ export function ConnectScreen({
   name,
   onCreateRoom,
   onJoinRoom,
+  onWatchRoom,
   onJoinCodeChange,
   onNameChange,
 }: {
@@ -19,6 +20,7 @@ export function ConnectScreen({
   name: string;
   onCreateRoom: () => void;
   onJoinRoom: () => void;
+  onWatchRoom: () => void;
   onJoinCodeChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }) {
@@ -127,6 +129,11 @@ export function ConnectScreen({
           <button className="ui-button ui-button-secondary" disabled={loading} onClick={onCreateRoom} type="button">{t('connect.createRoom')}</button>
           {copied && <p className="success-text menu-feedback">{t('connect.linkCopied')}</p>}
           {error && <p className="error-text menu-feedback">{error}</p>}
+          {error?.includes('already started') && (
+            <button className="ui-button ui-button-secondary" disabled={loading} onClick={onWatchRoom} type="button">
+              👁 {t('connect.watchInstead') ?? 'Watch the game'}
+            </button>
+          )}
         </form>
 
         <p className="flavor-text">
