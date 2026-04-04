@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --host",
-    "serve": "node --env-file=.env --experimental-strip-types server/server.ts",
+    "serve": "node --experimental-strip-types server/server.ts",
     "test": "vitest run",
     "bot:simulate": "node --experimental-strip-types scripts/simulate_bot_games.ts",
     "test:e2e": "playwright test",
