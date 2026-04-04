@@ -969,8 +969,10 @@ function scorePlayCard(
       const hasConfirmed = targets.some(t => memory.observations.get(t)?.confirmedInfected);
       const hasStrong = targets.some(t => getSuspicion(memory, t) > suspicionThreshold(vs.aliveCount));
 
-      // Infected endgame: burn humans — aliveCount<=4 covers 1T+2I+1H which is already a win
-      if (vs.myRole === 'infected' && vs.aliveCount <= 4) {
+      const endgameThreshold = vs.players.length >= 8 ? 5 : 4;
+
+      // Infected endgame: burn humans — covers the last human(s) alive
+      if (vs.myRole === 'infected' && vs.aliveCount <= endgameThreshold) {
         const lastHuman = targets.find(t => {
           const obs = memory.observations.get(t);
           return !obs?.confirmedInfected;
@@ -978,8 +980,17 @@ function scorePlayCard(
         if (lastHuman !== undefined) return 18; // Win condition
       }
 
+      // Infected mid-game aggression: start burning when there are few humans left
+      if (vs.myRole === 'infected' && !isEarly && vs.aliveCount <= 6) {
+        const humanTarget = targets.find(t => {
+          const obs = memory.observations.get(t);
+          return !obs?.confirmedInfected;
+        });
+        if (humanTarget !== undefined) return (w as any).playFlamethrower * (isLate ? 1.5 : 1.1);
+      }
+
       // Thing endgame: flamethrower the remaining human(s)
-      if (vs.myRole === 'thing' && vs.aliveCount <= 4) {
+      if (vs.myRole === 'thing' && vs.aliveCount <= endgameThreshold) {
         const lastHuman = targets.find(t => {
           const obs = memory.observations.get(t);
           return !obs?.confirmedInfected;
@@ -1025,11 +1036,14 @@ function scorePlayCard(
       // Bigger bonus for targeting highly suspicious unknowns — humans should investigate aggressively
       if (verySuspicious.length > 0 && unknowns.some(t => verySuspicious.includes(t))) score += 3;
 
-      // Thing bluff: analyze own infected ally to look like proactive human
       if (vs.myRole === 'thing' && (isEarly || stage === 'mid')) {
         const infectedAlly = targets.find(t => memory.observations.get(t)?.confirmedInfected);
         if (infectedAlly !== undefined) {
+          // Bluff: analyze own infected ally to look like a proactive human investigator
           score = Math.max(score, (w as any).bluffAnalyzeInfected ?? 3);
+        } else if (unknowns.length > 0) {
+          // No allies yet — look human by actively investigating suspicious players
+          score = Math.max(score, isEarly ? 9 : 7);
         }
       }
 
@@ -1038,6 +1052,11 @@ function scorePlayCard(
 
     case 'suspicion': {
       let score = (w as any).playSuspicion * (isEarly ? 1.3 : 0.7);
+      // Thing early bluff: play suspicion to look like an active human investigator
+      if (vs.myRole === 'thing' && isEarly) {
+        const noAlliesYet = ![...memory.observations.values()].some(o => o.confirmedInfected);
+        if (noAlliesYet) score = Math.max(score, 8);
+      }
       return score * infoCardMultiplier(vs.players.length);
     }
 
@@ -1128,15 +1147,16 @@ function scorePlayCard(
         if (doorBlocked && vs.aliveCount <= 4) score *= 3; // Escape blockade!
         else score *= 1.3;
       }
-      // Infected: swap to get adjacent to last human in endgame
-      if (vs.myRole === 'infected' && vs.aliveCount <= 3) {
-        const confirmedThingId = vs.alivePlayers.find(p => {
-          const obs = memory.observations.get(p.id);
-          return obs?.confirmedInfected && p.id !== vs.myId;
-        })?.id;
-        // If I'm next to Thing, swap to get next to the human instead
-        if (confirmedThingId && vs.myAdjacentIds.includes(confirmedThingId)) {
-          score *= 2;
+      // Infected: move toward humans to force trades
+      if (vs.myRole === 'infected' && !isEarly) {
+        const humanTargets = targets.filter(id => {
+          const obs = memory.observations.get(id);
+          return !obs?.confirmedInfected;
+        });
+        if (humanTargets.length > 0) {
+          // Scale multiplier by game stage: late game is more urgent
+          const mult = vs.aliveCount <= 3 ? 3.5 : vs.aliveCount <= 5 ? 2.5 : 1.8;
+          score *= mult;
         }
       }
       // Human: move away from suspicious/confirmed enemies
@@ -1179,6 +1199,17 @@ function scorePlayCard(
         });
         if (blocked.length > 0) score *= 2.5;
         else score *= 1.3;
+      }
+      // Infected: push a human toward you (or yourself toward them) mid/late game
+      if (vs.myRole === 'infected' && !isEarly) {
+        const humanTarget = targets.find(id => {
+          const obs = memory.observations.get(id);
+          return !obs?.confirmedInfected;
+        });
+        if (humanTarget !== undefined) {
+          const mult = vs.aliveCount <= 4 ? 2.8 : vs.aliveCount <= 6 ? 1.9 : 1.4;
+          score *= mult;
+        }
       }
       score += getBestPostMovePlanValue(
         vs,

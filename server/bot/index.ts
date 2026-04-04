@@ -137,8 +137,8 @@ function handlePendingObservations(
     }
   }
 
-  // Whisky / public reveal
-  if (pa.type === 'whisky_reveal' && pa.viewerPlayerId === vs.myId) {
+  // Whisky / public reveal — pa.public === true means everyone sees the hand
+  if (pa.type === 'whisky_reveal' && pa.playerId !== vs.myId && (pa.viewerPlayerId === vs.myId || pa.public === true)) {
     recordSeenCards(memory, pa.playerId, pa.cards, memory.currentTurn, pa.revealKind === 'all');
   }
 

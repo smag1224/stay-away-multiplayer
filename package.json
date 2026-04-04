@@ -5,17 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "dev:server": "node --experimental-strip-types server/server.ts",
+    "dev:server": "node --env-file=.env --experimental-strip-types server/server.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --host",
-    "serve": "node --experimental-strip-types server/server.ts",
+    "serve": "node --env-file=.env --experimental-strip-types server/server.ts",
     "test": "vitest run",
     "bot:simulate": "node --experimental-strip-types scripts/simulate_bot_games.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
     "better-sqlite3": "^12.8.0",
     "framer-motion": "^12.38.0",
     "i18next": "^25.8.18",
@@ -42,6 +43,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.0",
+    "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.1.0"
   }
 }

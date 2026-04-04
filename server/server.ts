@@ -44,6 +44,8 @@ type RoomMember = {
   connected: boolean;
   joinedAt: number;
   lastSeenAt: number;
+  /** Cached from Supabase; refreshed on join and after game ends */
+  cachedStats: { elo: number; winRate: number; gamesPlayed: number } | null;
 };
 
 type Room = {
@@ -422,24 +424,17 @@ function roomView(room: Room, member: RoomMember, req?: Pick<HttpRequest, 'heade
       isSpectator: member.isSpectator,
       playerId: member.playerId,
     },
-    members: room.members.map((roomMember) => {
-      let stats = null;
-      if (roomMember.userId !== null) {
-        const user = getUserById(roomMember.userId);
-        if (user) stats = getCompactStats(user.id, user.elo);
-      }
-      return {
-        sessionId: roomMember.sessionId,
-        name: roomMember.name,
-        isHost: roomMember.isHost,
-        isBot: roomMember.isBot,
-        isSpectator: roomMember.isSpectator,
-        playerId: roomMember.playerId,
-        connected: roomMember.connected,
-        joinedAt: roomMember.joinedAt,
-        stats,
-      };
-    }),
+    members: room.members.map((roomMember) => ({
+      sessionId: roomMember.sessionId,
+      name: roomMember.name,
+      isHost: roomMember.isHost,
+      isBot: roomMember.isBot,
+      isSpectator: roomMember.isSpectator,
+      playerId: roomMember.playerId,
+      connected: roomMember.connected,
+      joinedAt: roomMember.joinedAt,
+      stats: roomMember.cachedStats ?? null,
+    })),
     game: room.game ? sanitizeGame(room.game, member.playerId, room, member.isSpectator) : null,
     hostAddress: createHostAddress(req),
     updatedAt: room.updatedAt,
@@ -450,6 +445,18 @@ function roomView(room: Room, member: RoomMember, req?: Pick<HttpRequest, 'heade
 function touchRoom(room: Room): void {
   room.updatedAt = now();
   saveRoom(room);
+}
+
+/** Fetch stats from Supabase and store on member (call after login or game end) */
+async function refreshMemberStats(member: RoomMember): Promise<void> {
+  if (!member.userId) return;
+  try {
+    const user = await getUserById(member.userId);
+    if (!user) return;
+    member.cachedStats = await getCompactStats(user.id, user.elo);
+  } catch (err) {
+    console.error('[stats] Failed to refresh member stats:', err);
+  }
 }
 
 /** Push room state to all WebSocket subscribers for this room */
@@ -876,14 +883,14 @@ function applyRoomAction(room: Room, member: RoomMember, action: GameAction): st
 
   // Record game results when the game just ended
   if (room.game.phase === 'game_over' && room.game.winner !== null) {
-    recordRoomResults(room);
+    void recordRoomResults(room); // fire-and-forget async
   }
 
   touchRoom(room);
   return null;
 }
 
-function recordRoomResults(room: Room): void {
+async function recordRoomResults(room: Room): Promise<void> {
   if (!room.game || room.game.winner === null) return;
 
   const { winnerPlayerIds, players } = room.game;
@@ -892,40 +899,50 @@ function recordRoomResults(room: Room): void {
   const loggedIn = room.members.filter(m => m.userId !== null && m.playerId !== null && !m.isBot);
   if (loggedIn.length === 0) return;
 
-  // Determine winner/loser teams and their ELOs for ELO calc
-  const playerCount = players.length;
+  // Fetch all users in parallel
+  const fetchedUsers = await Promise.all(loggedIn.map(m => getUserById(m.userId!)));
+  const userMap = new Map(loggedIn.map((m, i) => [m.userId!, fetchedUsers[i]]));
+
   const winnerUsers = loggedIn.filter(m => winnerPlayerIds.includes(m.playerId!));
   const loserUsers  = loggedIn.filter(m => !winnerPlayerIds.includes(m.playerId!));
 
   const avgWinnerElo = winnerUsers.length
-    ? winnerUsers.reduce((sum, m) => { const u = getUserById(m.userId!); return sum + (u?.elo ?? 1000); }, 0) / winnerUsers.length
+    ? winnerUsers.reduce((sum, m) => sum + (userMap.get(m.userId!)?.elo ?? 1000), 0) / winnerUsers.length
     : 1000;
   const avgLoserElo = loserUsers.length
-    ? loserUsers.reduce((sum, m) => { const u = getUserById(m.userId!); return sum + (u?.elo ?? 1000); }, 0) / loserUsers.length
+    ? loserUsers.reduce((sum, m) => sum + (userMap.get(m.userId!)?.elo ?? 1000), 0) / loserUsers.length
     : 1000;
 
-  for (const member of loggedIn) {
-    const user = getUserById(member.userId!);
-    if (!user) continue;
+  const playerCount = players.length;
+
+  await Promise.all(loggedIn.map(async member => {
+    const user = userMap.get(member.userId!);
+    if (!user) return;
 
     const gamePlayer = players.find(p => p.id === member.playerId);
-    if (!gamePlayer) continue;
+    if (!gamePlayer) return;
 
     const won = winnerPlayerIds.includes(member.playerId!);
     const opponentAvgElo = won ? avgLoserElo : avgWinnerElo;
     const newElo = calcElo(user.elo, opponentAvgElo, won);
 
-    updateUserElo(user.id, newElo);
-    recordGameResult({
-      userId: user.id,
-      roomCode: room.code,
-      role: gamePlayer.role ?? 'human',
-      result: won ? 'win' : 'loss',
-      playerCount,
-      eloBefore: user.elo,
-      eloAfter: newElo,
-    });
-  }
+    await Promise.all([
+      updateUserElo(user.id, newElo),
+      recordGameResult({
+        userId: user.id,
+        roomCode: room.code,
+        role: gamePlayer.role ?? 'human',
+        result: won ? 'win' : 'loss',
+        playerCount,
+        eloBefore: user.elo,
+        eloAfter: newElo,
+      }),
+    ]);
+
+    // Update cached stats so next roomView shows new ELO immediately
+    member.cachedStats = { elo: newElo, winRate: 0, gamesPlayed: 0 };
+    void refreshMemberStats(member); // refresh full stats in background
+  }));
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -1040,8 +1057,8 @@ const server = createServer(async (req, res) => {
       if (!username || username.length < 2 || username.length > 24) { badRequest(res, 'Username must be 2–24 characters.'); return; }
       if (!/^[a-zA-Z0-9_\-]+$/.test(username)) { badRequest(res, 'Username can only contain letters, numbers, _ and -.'); return; }
       if (!password || password.length < 4) { badRequest(res, 'Password must be at least 4 characters.'); return; }
-      if (getUserByName(username)) { badRequest(res, 'Username already taken.'); return; }
-      const user = createUser(username, hashPassword(password));
+      if (await getUserByName(username)) { badRequest(res, 'Username already taken.'); return; }
+      const user = await createUser(username, hashPassword(password));
       const token = signToken(user.id);
       sendJson(res, 200, { ok: true, data: { token, userId: user.id, username: user.username, elo: user.elo } });
       return;
@@ -1049,7 +1066,7 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && pathname === '/api/auth/login') {
       const body = await readBody<{ username: string; password: string }>(req);
-      const user = getUserByName((body.username ?? '').trim());
+      const user = await getUserByName((body.username ?? '').trim());
       if (!user || !verifyPassword(body.password ?? '', user.password_hash)) { badRequest(res, 'Invalid username or password.'); return; }
       const token = signToken(user.id);
       sendJson(res, 200, { ok: true, data: { token, userId: user.id, username: user.username, elo: user.elo } });
@@ -1060,7 +1077,7 @@ const server = createServer(async (req, res) => {
       const token = (req.headers['authorization'] ?? '').replace('Bearer ', '');
       const payload = verifyToken(token);
       if (!payload) { sendJson(res, 401, { ok: false, error: 'Unauthorized' }); return; }
-      const user = getUserById(payload.userId);
+      const user = await getUserById(payload.userId);
       if (!user) { sendJson(res, 401, { ok: false, error: 'User not found' }); return; }
       sendJson(res, 200, { ok: true, data: { userId: user.id, username: user.username, elo: user.elo } });
       return;
@@ -1068,9 +1085,9 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'GET' && pathname.startsWith('/api/users/')) {
       const username = decodeURIComponent(pathname.slice('/api/users/'.length).replace(/\/stats$/, ''));
-      const user = getUserByName(username);
+      const user = await getUserByName(username);
       if (!user) { sendJson(res, 404, { ok: false, error: 'User not found' }); return; }
-      sendJson(res, 200, { ok: true, data: getUserStats(user.id, user.elo) });
+      sendJson(res, 200, { ok: true, data: await getUserStats(user.id, user.elo) });
       return;
     }
     // ── End auth endpoints ────────────────────────────────────────────────────
@@ -1086,22 +1103,24 @@ const server = createServer(async (req, res) => {
         return;
       }
 
+      const hostMember: RoomMember = {
+        sessionId: randomId(8),
+        name,
+        isHost: true,
+        isBot: false,
+        isSpectator: false,
+        userId,
+        playerId: null,
+        connected: true,
+        joinedAt: now(),
+        lastSeenAt: now(),
+        cachedStats: null,
+      };
+      if (userId) void refreshMemberStats(hostMember);
+
       const room: Room = {
         code: randomRoomCode(),
-        members: [
-          {
-            sessionId: randomId(8),
-            name,
-            isHost: true,
-            isBot: false,
-            isSpectator: false,
-            userId,
-            playerId: null,
-            connected: true,
-            joinedAt: now(),
-            lastSeenAt: now(),
-          },
-        ],
+        members: [hostMember],
         game: null,
         updatedAt: now(),
         shouts: [],
@@ -1174,7 +1193,9 @@ const server = createServer(async (req, res) => {
         connected: true,
         joinedAt: now(),
         lastSeenAt: now(),
+        cachedStats: null,
       };
+      if (userId) void refreshMemberStats(member);
 
       room.members.push(member);
       touchRoom(room);
@@ -1322,6 +1343,7 @@ const server = createServer(async (req, res) => {
         connected: true,
         joinedAt: now(),
         lastSeenAt: now(),
+        cachedStats: null,
       };
       room.members.push(bot);
       touchRoom(room);

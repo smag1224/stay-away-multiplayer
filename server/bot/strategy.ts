@@ -17,6 +17,10 @@ interface StrategyProfile {
   knownThingId: number | null;
   enemyScores: Map<number, number>;
   cleanScores: Map<number, number>;
+  /** Number of confirmed infected allies visible to this bot */
+  confirmedAllyCount: number;
+  /** Number of alive humans who have attacked this bot */
+  humanAttackerCount: number;
 }
 
 const STRONG_SUPPORT_CARDS = new Set([
@@ -155,6 +159,15 @@ function buildStrategyProfile(vs: BotVisibleState, memory: BotMemory): StrategyP
   let bestInfect = -Infinity;
   let bestThingThreat = -Infinity;
 
+  // Pre-compute self-threat metrics for Thing bluffing
+  let confirmedAllyCount = 0;
+  let humanAttackerCount = 0;
+  for (const [id, obs] of memory.observations) {
+    if (id === vs.myId) continue;
+    if (obs.confirmedInfected) confirmedAllyCount++;
+    if (!obs.confirmedInfected && obs.attackedPlayers.includes(vs.myId)) humanAttackerCount++;
+  }
+
   for (const player of vs.alivePlayers) {
     if (player.id === vs.myId) continue;
     const obs = getObservation(memory, player.id);
@@ -248,6 +261,8 @@ function buildStrategyProfile(vs: BotVisibleState, memory: BotMemory): StrategyP
     knownThingId,
     enemyScores,
     cleanScores,
+    confirmedAllyCount,
+    humanAttackerCount,
   };
 }
 
@@ -347,6 +362,10 @@ function strategicTargetBonus(
       return 10;
     }
     if (targetId === strategy.attackTargetId) return 6;
+    // When bluffing with inspect cards, targeting the attack target (most suspicious human)
+    // looks natural and adds credibility
+    if (currentCardDefId && INSPECT_CARD_IDS.has(currentCardDefId) && targetId === strategy.attackTargetId) return 10;
+    if (currentCardDefId && CONTAIN_CARD_IDS.has(currentCardDefId) && targetId === strategy.containTargetId) return 8;
   }
 
   if (vs.myRole === 'infected') {
@@ -414,10 +433,21 @@ function strategicCardBonus(
     }
 
     if (action.type === 'PLAY_CARD') {
-      if (defId === 'temptation' && strategy.infectTargetId !== null) return 9;
-      if (['swap_places', 'watch_your_back', 'you_better_run'].includes(defId) && strategy.infectTargetId !== null) return 7;
+      if (defId === 'temptation' && strategy.infectTargetId !== null) return 14;
+      if (['swap_places', 'you_better_run'].includes(defId) && strategy.infectTargetId !== null) return 10;
+      if (defId === 'watch_your_back' && strategy.infectTargetId !== null) return 7;
       if (ATTACK_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 6;
-      if (INSPECT_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 4;
+
+      // Early/mid bluffing: look like a proactive human investigator
+      // When no allies are known yet (pre-infection) or we're under pressure, play inspect/contain
+      const isUnderPressure = strategy.humanAttackerCount >= 1;
+      const noAlliesYet = strategy.confirmedAllyCount === 0;
+      if (stage !== 'late' && (noAlliesYet || isUnderPressure)) {
+        if (INSPECT_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 10;
+        if (CONTAIN_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 8;
+      } else if (INSPECT_CARD_IDS.has(defId) && strategy.attackTargetId !== null) {
+        return 4;
+      }
     }
 
     if ((action.type === 'DISCARD_CARD' || action.type === 'FORGETFUL_DISCARD_PICK' || action.type === 'BLIND_DATE_PICK') && defId === 'infected') {
@@ -433,6 +463,10 @@ function strategicCardBonus(
   if (vs.myRole === 'infected') {
     if (action.type === 'PLAY_CARD') {
       if (ATTACK_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 6;
+      // Movement cards: infected closing distance to humans is the strongest win correlator
+      if (['swap_places', 'you_better_run'].includes(defId) && strategy.attackTargetId !== null) {
+        return stage === 'late' ? 10 : stage === 'mid' ? 8 : 3;
+      }
       if (CONTAIN_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return 5;
       if (strategy.supportThingTargetId !== null && ['no_barbecue', 'anti_analysis', 'fear', 'no_thanks'].includes(defId)) return 5;
     }

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
+import { supabase } from './supabase.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, '..', 'data');
@@ -9,7 +10,6 @@ mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(path.join(dataDir, 'rooms.db'));
 db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS rooms (
@@ -17,31 +17,9 @@ db.exec(`
     data       TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
-
-  CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
-    password_hash TEXT NOT NULL,
-    elo           INTEGER NOT NULL DEFAULT 1000,
-    created_at    INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS game_results (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id      INTEGER NOT NULL REFERENCES users(id),
-    room_code    TEXT NOT NULL,
-    role         TEXT NOT NULL,
-    result       TEXT NOT NULL,
-    player_count INTEGER NOT NULL,
-    elo_before   INTEGER NOT NULL,
-    elo_after    INTEGER NOT NULL,
-    created_at   INTEGER NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_game_results_user ON game_results(user_id);
 `);
 
-// ── Rooms ────────────────────────────────────────────────────────────────────
+// ── Rooms (SQLite — local, ephemeral, high-frequency writes) ─────────────────
 
 const stmtRoomUpsert = db.prepare(`
   INSERT INTO rooms (code, data, updated_at)
@@ -76,7 +54,7 @@ export function loadAllRooms<T>(): T[] {
   }
 }
 
-// ── Users ────────────────────────────────────────────────────────────────────
+// ── Users (Supabase PostgreSQL — persistent, cross-deployment) ───────────────
 
 export type DbUser = {
   id: number;
@@ -86,29 +64,44 @@ export type DbUser = {
   created_at: number;
 };
 
-const stmtUserInsert    = db.prepare(`INSERT INTO users (username, password_hash, elo, created_at) VALUES (@username, @password_hash, 1000, @created_at)`);
-const stmtUserById      = db.prepare(`SELECT * FROM users WHERE id = ?`);
-const stmtUserByName    = db.prepare(`SELECT * FROM users WHERE username = ? COLLATE NOCASE`);
-const stmtUserUpdateElo = db.prepare(`UPDATE users SET elo = ? WHERE id = ?`);
-
-export function createUser(username: string, passwordHash: string): DbUser {
-  const info = stmtUserInsert.run({ username, password_hash: passwordHash, created_at: Date.now() });
-  return stmtUserById.get(info.lastInsertRowid) as DbUser;
+export async function createUser(username: string, passwordHash: string): Promise<DbUser> {
+  const { data, error } = await supabase
+    .from('users')
+    .insert({ username, password_hash: passwordHash, elo: 1000, created_at: Date.now() })
+    .select()
+    .single();
+  if (error) throw new Error(`Failed to create user: ${error.message}`);
+  return data as DbUser;
 }
 
-export function getUserById(id: number): DbUser | null {
-  return (stmtUserById.get(id) as DbUser | undefined) ?? null;
+export async function getUserById(id: number): Promise<DbUser | null> {
+  const { data } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  return (data as DbUser | null) ?? null;
 }
 
-export function getUserByName(username: string): DbUser | null {
-  return (stmtUserByName.get(username) as DbUser | undefined) ?? null;
+export async function getUserByName(username: string): Promise<DbUser | null> {
+  // citext column handles case-insensitive comparison natively
+  const { data } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username)
+    .maybeSingle();
+  return (data as DbUser | null) ?? null;
 }
 
-export function updateUserElo(userId: number, elo: number): void {
-  stmtUserUpdateElo.run(elo, userId);
+export async function updateUserElo(userId: number, elo: number): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .update({ elo })
+    .eq('id', userId);
+  if (error) console.error('[db] Failed to update elo:', error.message);
 }
 
-// ── Game Results ─────────────────────────────────────────────────────────────
+// ── Game Results (Supabase PostgreSQL) ───────────────────────────────────────
 
 export type DbGameResult = {
   id: number;
@@ -129,23 +122,14 @@ export type UserStats = {
   winRate: number;
   elo: number;
   byRole: {
-    human:   { played: number; wins: number };
-    thing:   { played: number; wins: number };
-    infected:{ played: number; wins: number };
+    human:    { played: number; wins: number };
+    thing:    { played: number; wins: number };
+    infected: { played: number; wins: number };
   };
   recentGames: Array<{ role: string; result: string; playerCount: number; eloChange: number; createdAt: number }>;
 };
 
-const stmtResultInsert = db.prepare(`
-  INSERT INTO game_results (user_id, room_code, role, result, player_count, elo_before, elo_after, created_at)
-  VALUES (@user_id, @room_code, @role, @result, @player_count, @elo_before, @elo_after, @created_at)
-`);
-
-const stmtResultsByUser = db.prepare(`
-  SELECT * FROM game_results WHERE user_id = ? ORDER BY created_at DESC
-`);
-
-export function recordGameResult(params: {
+export async function recordGameResult(params: {
   userId: number;
   roomCode: string;
   role: string;
@@ -153,8 +137,8 @@ export function recordGameResult(params: {
   playerCount: number;
   eloBefore: number;
   eloAfter: number;
-}): void {
-  stmtResultInsert.run({
+}): Promise<void> {
+  const { error } = await supabase.from('game_results').insert({
     user_id: params.userId,
     room_code: params.roomCode,
     role: params.role,
@@ -164,10 +148,19 @@ export function recordGameResult(params: {
     elo_after: params.eloAfter,
     created_at: Date.now(),
   });
+  if (error) console.error('[db] Failed to record game result:', error.message);
 }
 
-export function getUserStats(userId: number, currentElo: number): UserStats {
-  const rows = stmtResultsByUser.all(userId) as DbGameResult[];
+export async function getUserStats(userId: number, currentElo: number): Promise<UserStats> {
+  const { data, error } = await supabase
+    .from('game_results')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Failed to fetch stats: ${error.message}`);
+  const rows = (data ?? []) as DbGameResult[];
+
   const byRole = {
     human:    { played: 0, wins: 0 },
     thing:    { played: 0, wins: 0 },
@@ -182,6 +175,7 @@ export function getUserStats(userId: number, currentElo: number): UserStats {
       if (r.result === 'win') byRole[key].wins++;
     }
   }
+
   return {
     gamesPlayed: rows.length,
     wins,
@@ -199,8 +193,12 @@ export function getUserStats(userId: number, currentElo: number): UserStats {
   };
 }
 
-export function getCompactStats(userId: number, elo: number): { elo: number; winRate: number; gamesPlayed: number } {
-  const rows = stmtResultsByUser.all(userId) as DbGameResult[];
+export async function getCompactStats(userId: number, elo: number): Promise<{ elo: number; winRate: number; gamesPlayed: number }> {
+  const { data } = await supabase
+    .from('game_results')
+    .select('result')
+    .eq('user_id', userId);
+  const rows = (data ?? []) as { result: string }[];
   const wins = rows.filter(r => r.result === 'win').length;
   return { elo, winRate: rows.length ? wins / rows.length : 0, gamesPlayed: rows.length };
 }

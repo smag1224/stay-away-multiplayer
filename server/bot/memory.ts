@@ -310,7 +310,7 @@ export function updateMemoryFromLog(memory: BotMemory, game: GameState): void {
   }
 }
 
-function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): void {
+function processLogEntry(memory: BotMemory, entry: LogEntry, game: GameState): void {
   const textEn = entry.text ?? '';
   const textRu = entry.textRu ?? '';
   const from = entry.fromPlayerId;
@@ -337,6 +337,17 @@ function processLogEntry(memory: BotMemory, entry: LogEntry, _game: GameState): 
       obs.attackedPlayers.push(target);
       addInteraction(memory, { from, to: target, type: 'attack', turn });
       adjustSuspicion(memory, from, SUSPICION_DELTAS.usedFlamethrower);
+    }
+  }
+
+  // --- Whisky (public hand reveal to all players) ---
+  // Whisky shows the player's full hand to everyone. The pending state only fires for the
+  // whisky player themselves, so other bots must record the revealed hand from the log.
+  // the_thing card is permanent (never traded away), so reading current hand is accurate.
+  if (entry.cardDefId === 'whisky' && from !== undefined && from !== memory.botPlayerId) {
+    const whiskyPlayer = game.players.find(p => p.id === from);
+    if (whiskyPlayer) {
+      recordSeenCards(memory, from, whiskyPlayer.hand, turn, true);
     }
   }
 
