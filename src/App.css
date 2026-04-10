@@ -2903,12 +2903,10 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: zoom-out;
 }
 
 .card-zoom-card {
   width: min(72vw, 260px);
-  cursor: default;
   filter: drop-shadow(0 12px 48px rgba(0, 0, 0, 0.95));
 }
 

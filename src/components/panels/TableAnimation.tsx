@@ -311,15 +311,15 @@ function CardZoomModal({ defId, onClose }: { defId: string; onClose: () => void 
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
-      onClick={onClose}
     >
       <motion.div
         className="card-zoom-card"
+        style={{ cursor: 'zoom-out' }}
         initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.6, opacity: 0 }}
         transition={SPRING}
-        onClick={(e) => e.stopPropagation()}
+        onClick={onClose}
       >
         <ShowCardTextCtx.Provider value={showText}>
           <CardView card={fakeCard} faceUp={true} />
