@@ -344,7 +344,6 @@ export function GameScreen({
       if (notifTimerRef.current) window.clearTimeout(notifTimerRef.current);
       const id = ++notifKeyRef.current;
       setNotif({ id, msg });
-      notifTimerRef.current = window.setTimeout(() => setNotif(null), 3500);
     };
 
     const prevTurn = prevNotifTurnRef.current;
@@ -363,6 +362,20 @@ export function GameScreen({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTurnSafe, urgentTradePrompt, game.panicAnnouncement, viewerNeedsResponse]);
+
+  // Dismiss attention banner on any click/tap
+  useEffect(() => {
+    if (!notif) return;
+    const dismiss = () => setNotif(null);
+    // Delay so the click that triggered state change doesn't immediately dismiss
+    const timerId = window.setTimeout(() => {
+      document.addEventListener('pointerdown', dismiss, { once: true });
+    }, 80);
+    return () => {
+      window.clearTimeout(timerId);
+      document.removeEventListener('pointerdown', dismiss);
+    };
+  }, [notif?.id]);
 
   // Detect newly played targeted cards and trigger animation.
   // Works two ways: (1) if server provides fromPlayerId/targetPlayerId on the log
@@ -1048,9 +1061,10 @@ export function GameScreen({
           <motion.div
             key={notif.id}
             className="attention-banner"
-            initial={{ opacity: 0, scale: 0.75, y: '-40%' }}
-            animate={{ opacity: 1, scale: 1, y: '-50%' }}
-            exit={{ opacity: 0, scale: 0.75, y: '-40%' }}
+            style={{ x: '-50%', y: '-50%' }}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.7 }}
             transition={{ type: 'spring', stiffness: 420, damping: 28 }}
           >
             {notif.msg}

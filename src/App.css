@@ -1059,22 +1059,22 @@ img {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
   z-index: 300;
-  background: rgba(6, 8, 10, 0.88);
-  color: #c8a96e;
+  background: rgba(4, 6, 8, 0.94);
+  color: #fff;
   font-family: var(--font-display, serif);
-  font-size: clamp(1.3rem, 5vw, 2.2rem);
+  font-size: clamp(1.4rem, 6vw, 2.4rem);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 0.9rem 2.4rem;
+  padding: clamp(0.7rem, 3vw, 1.1rem) clamp(1.4rem, 6vw, 3rem);
   border-radius: 10px;
-  border: 1px solid rgba(200, 169, 110, 0.45);
-  box-shadow: 0 0 48px rgba(0, 0, 0, 0.7), inset 0 0 18px rgba(200, 169, 110, 0.06);
+  border: 2px solid rgba(255, 155, 50, 0.7);
+  box-shadow: 0 0 50px rgba(255, 120, 20, 0.3), 0 10px 40px rgba(0, 0, 0, 0.85);
   text-align: center;
-  pointer-events: none;
   white-space: nowrap;
+  cursor: pointer;
+  max-width: 92vw;
 }
 
 .deck-phase-alert {
