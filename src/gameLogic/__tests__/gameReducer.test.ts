@@ -394,13 +394,15 @@ describe('gameReducer', () => {
         targetPlayerId: target.id,
       });
 
-      expect(next.pendingAction).toEqual({
-        type: 'suspicion_pick',
-        targetPlayerId: target.id,
-        viewerPlayerId: state.players[state.currentPlayerIndex].id,
-        selectableCardUids: ['fear_1', 'whisky_1'],
-        previewCardUid: null,
-      });
+      // selectableCardUids is shuffled — check contents not order
+      expect(next.pendingAction?.type).toBe('suspicion_pick');
+      if (next.pendingAction?.type === 'suspicion_pick') {
+        expect(next.pendingAction.targetPlayerId).toBe(target.id);
+        expect(next.pendingAction.viewerPlayerId).toBe(state.players[state.currentPlayerIndex].id);
+        expect(next.pendingAction.previewCardUid).toBeNull();
+        expect(next.pendingAction.selectableCardUids).toEqual(expect.arrayContaining(['fear_1', 'whisky_1']));
+        expect(next.pendingAction.selectableCardUids).toHaveLength(2);
+      }
     });
 
     it('updates suspicion preview uid without revealing the card', () => {

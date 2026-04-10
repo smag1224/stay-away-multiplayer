@@ -49,11 +49,17 @@ export function applyCardEffect(s: GameState, player: Player, card: CardInstance
 
     case 'suspicion': {
       if (!target || target.hand.length === 0) break;
+      // Shuffle so the viewer can't infer role from card position
+      const uids = target.hand.map((item) => item.uid);
+      for (let i = uids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [uids[i], uids[j]] = [uids[j], uids[i]];
+      }
       s.pendingAction = {
         type: 'suspicion_pick',
         targetPlayerId: target.id,
         viewerPlayerId: player.id,
-        selectableCardUids: target.hand.map((item) => item.uid),
+        selectableCardUids: uids,
         previewCardUid: null,
       };
       break;
