@@ -7,12 +7,6 @@ import type { ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
 import type { CardInstance, GameAction, PendingAction } from '../../types.ts';
 import { CardView } from './CardView.tsx';
 
-function syncLocalOrder(prev: string[], serverUids: string[]): string[] {
-  const kept = prev.filter(uid => serverUids.includes(uid));
-  const added = serverUids.filter(uid => !prev.includes(uid));
-  return [...kept, ...added];
-}
-
 /** Compute fan rotation & vertical offset for card at index i out of total */
 function fanStyle(i: number, total: number) {
   if (total <= 1) return {};
@@ -32,7 +26,6 @@ function fanStyle(i: number, total: number) {
 const cardVariants = {
   initial:   { opacity: 0, y: 40, scale: 0.8, rotate: 0 },
   animate:   { opacity: 1, y: 0, scale: 1 },
-  dragging:  { opacity: 1, y: -28, scale: 1.1, rotate: 0, zIndex: 100 },
   exit:      { opacity: 0, y: -30, scale: 0.8 },
 };
 
@@ -99,89 +92,7 @@ function PlayerHandInner({
   const isMyTurn = (getCurrentPlayer(game)?.id ?? -1) === me.id;
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
 
-  // Local card order — purely visual, resets when suspicion targets this player
   const isSuspicionTarget = pending?.type === 'suspicion_pick' && pending.targetPlayerId === me.id;
-  const [localOrder, setLocalOrder] = useState<string[]>(() => me.hand.map(c => c.uid));
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const handSig = me.hand.map(c => c.uid).join('|');
-  useEffect(() => {
-    if (isSuspicionTarget) {
-      setLocalOrder(me.hand.map(c => c.uid));
-    } else {
-      setLocalOrder(prev => syncLocalOrder(prev, me.hand.map(c => c.uid)));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handSig, isSuspicionTarget]);
-
-  const moveCard = (uid: string, dir: -1 | 1) => {
-    setLocalOrder(prev => {
-      const idx = prev.indexOf(uid);
-      const next = idx + dir;
-      if (next < 0 || next >= prev.length) return prev;
-      const arr = [...prev];
-      [arr[idx], arr[next]] = [arr[next], arr[idx]];
-      return arr;
-    });
-  };
-
-  // ── Drag-to-reorder ─────────────────────────────────────────────────────────
-  const [draggingUid, setDraggingUid] = useState<string | null>(null);
-  const drag = useRef<{
-    uid: string;
-    startX: number;
-    startY: number;
-    lastSwapX: number;
-    active: boolean;   // true once "lift" gesture confirmed
-  } | null>(null);
-
-  const LIFT_PX = 18;     // upward movement to activate drag
-  const CANCEL_PX = 10;   // horizontal movement that cancels (user is scrolling)
-  const SWAP_PX = 44;     // horizontal distance to trigger a swap
-
-  const onCardPointerDown = (uid: string, e: React.PointerEvent) => {
-    if (isSuspicionTarget || pending) return;
-    drag.current = { uid, startX: e.clientX, startY: e.clientY, lastSwapX: e.clientX, active: false };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const onCardPointerMove = (uid: string, e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d || d.uid !== uid) return;
-
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;   // negative = upward
-
-    if (!d.active) {
-      // Cancel if horizontal scroll intent detected before lift
-      if (Math.abs(dx) > CANCEL_PX) { drag.current = null; return; }
-      // Activate when card lifted upward enough
-      if (dy < -LIFT_PX) {
-        d.active = true;
-        setDraggingUid(uid);
-      }
-      return;
-    }
-
-    // Active drag: swap on threshold horizontal movement
-    e.preventDefault();
-    const swapDelta = e.clientX - d.lastSwapX;
-    if (swapDelta > SWAP_PX) {
-      moveCard(uid, 1);
-      d.lastSwapX = e.clientX;
-    } else if (swapDelta < -SWAP_PX) {
-      moveCard(uid, -1);
-      d.lastSwapX = e.clientX;
-    }
-  };
-
-  const onCardPointerUp = (uid: string): boolean => {
-    const wasDragging = drag.current?.active === true && drag.current.uid === uid;
-    drag.current = null;
-    if (wasDragging) setDraggingUid(null);
-    return wasDragging; // true → skip click handler
-  };
-  // ────────────────────────────────────────────────────────────────────────────
 
   const handScrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollHint, setScrollHint] = useState({
@@ -210,16 +121,9 @@ function PlayerHandInner({
 
   const extraCards: ExtraHandEntry[] = [];
 
-  const sortedHand = [...me.hand].sort((a, b) => {
-    const ai = localOrder.indexOf(a.uid);
-    const bi = localOrder.indexOf(b.uid);
-    // Unknown UIDs go to end
-    return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
-  });
-
   const allCards: Array<ExtraHandEntry | PlayerHandEntry> = [
     ...extraCards,
-    ...sortedHand.map((card): PlayerHandEntry => ({ card, isExtra: false })),
+    ...me.hand.map((card): PlayerHandEntry => ({ card, isExtra: false })),
   ];
   const totalCards = allCards.length;
 
@@ -387,20 +291,15 @@ function PlayerHandInner({
           }
         }
 
-        const isDragging = draggingUid === card.uid;
-
         return (
           <motion.div
-            className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''} ${card.defId === 'suspicion' ? 'is-suspicion-card' : ''} ${isDragging ? 'is-dragging' : ''}`}
+            className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''} ${card.defId === 'suspicion' ? 'is-suspicion-card' : ''}`}
             key={card.uid}
-            style={{ ...style, touchAction: isDragging ? 'none' : undefined }}
-            variants={cardVariants} initial="initial" animate={isDragging ? 'dragging' : 'animate'} exit="exit"
+            style={style}
+            variants={cardVariants} initial="initial" animate="animate" exit="exit"
             transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-            whileHover={isDragging ? undefined : { y: -20, scale: 1.08, zIndex: 50, rotate: 0 }}
-            onPointerDown={(e) => onCardPointerDown(card.uid, e)}
-            onPointerMove={(e) => onCardPointerMove(card.uid, e)}
-            onPointerUp={() => { if (!onCardPointerUp(card.uid)) handleCardClick(card.uid); }}
-            onPointerCancel={() => { onCardPointerUp(card.uid); }}
+            whileHover={{ y: -20, scale: 1.08, zIndex: 50, rotate: 0 }}
+            onClick={() => handleCardClick(card.uid)}
           >
             <CardView card={card} faceUp />
             {buttons.length > 0 && (

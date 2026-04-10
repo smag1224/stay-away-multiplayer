@@ -113,8 +113,9 @@ export function handleStartGame(s: GameState, _originalState: GameState, action:
       players[thingPlayerIdx].role = 'thing';
       for (let i = 0; i < count; i++) {
         if (i === thingPlayerIdx) {
-          players[i].hand.push(thingCard);
           for (let j = 0; j < 3; j++) { const c = dealPool.pop(); if (c) players[i].hand.push(c); }
+          const ins = Math.floor(Math.random() * (players[i].hand.length + 1));
+          players[i].hand.splice(ins, 0, thingCard);
         } else {
           for (let j = 0; j < 4; j++) { const c = dealPool.pop(); if (c) players[i].hand.push(c); }
         }
@@ -146,11 +147,12 @@ export function handleStartGame(s: GameState, _originalState: GameState, action:
 
     for (let i = 0; i < count; i++) {
       if (i === thingPlayerIdx) {
-        players[i].hand.push(thingCard);
         for (let j = 0; j < 3; j++) {
           const card = eventCards.pop();
           if (card) players[i].hand.push(card);
         }
+        const ins = Math.floor(Math.random() * (players[i].hand.length + 1));
+        players[i].hand.splice(ins, 0, thingCard);
       } else {
         for (let j = 0; j < 4; j++) {
           const card = eventCards.pop();
@@ -212,12 +214,14 @@ export function handleDrawCard(s: GameState, _originalState: GameState, _action:
     }
   } else if (card.defId === 'the_thing') {
     cur.role = 'thing';
-    cur.hand.push(card);
+    const insT = Math.floor(Math.random() * (cur.hand.length + 1));
+    cur.hand.splice(insT, 0, card);
     log(s, `${cur.name} drew a card.`, `${cur.name} взял(а) карту.`);
     s.log[0].fromPlayerId = cur.id;
     s.step = 'play_or_discard';
   } else {
-    cur.hand.push(card);
+    const ins = Math.floor(Math.random() * (cur.hand.length + 1));
+    cur.hand.splice(ins, 0, card);
     log(s,
       `${cur.name} drew a card.`,
       `${cur.name} взял(а) карту.`
