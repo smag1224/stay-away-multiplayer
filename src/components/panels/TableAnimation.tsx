@@ -282,20 +282,48 @@ function ExchangeSceneBoard({
   );
 }
 
-function FaceUpCard({ scene }: { scene: CardScene }) {
+function FaceUpCard({ scene, onZoom }: { scene: CardScene; onZoom: () => void }) {
   const fakeCard: CardInstance = { uid: `anim-${scene.cardDefId}`, defId: scene.cardDefId };
   return (
     <motion.div
       className={`tbl-faceup-wrap is-card-${scene.cardDefId}`}
-      style={{ x: '-50%', y: '-50%' }}
+      style={{ x: '-50%', y: '-50%', cursor: 'zoom-in', pointerEvents: 'auto' }}
       initial={{ scale: 0.28, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0.28, opacity: 0 }}
       transition={SPRING}
+      onClick={onZoom}
     >
       <ShowCardTextCtx.Provider value={false}>
         <CardView card={fakeCard} faceUp={true} />
       </ShowCardTextCtx.Provider>
+    </motion.div>
+  );
+}
+
+function CardZoomModal({ defId, onClose }: { defId: string; onClose: () => void }) {
+  const fakeCard: CardInstance = { uid: `zoom-${defId}`, defId };
+  return (
+    <motion.div
+      className="card-zoom-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="card-zoom-card"
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.6, opacity: 0 }}
+        transition={SPRING}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ShowCardTextCtx.Provider value={true}>
+          <CardView card={fakeCard} faceUp={true} />
+        </ShowCardTextCtx.Provider>
+      </motion.div>
     </motion.div>
   );
 }
@@ -306,6 +334,7 @@ function getAnimationPlayersSignature(game: ViewerGameState): string {
 
 function TableAnimationInner({ game }: { game: ViewerGameState }) {
   const [visualState, setVisualState] = useState<TableVisualState>(null);
+  const [zoomedCardDefId, setZoomedCardDefId] = useState<string | null>(null);
   const prevSceneRef = useRef<TableAnimEvent | null>(null);
   const prevLogIdRef = useRef<number | null>(game.log[0]?.id ?? null);
   const legacyExchangeRef = useRef<LegacyExchangeContext | null>(null);
@@ -480,27 +509,36 @@ function TableAnimationInner({ game }: { game: ViewerGameState }) {
   }, [game.log]);
 
   return (
-    <AnimatePresence initial={false}>
-      {visualState && (
-        <motion.div
-          key={visualState.key}
-          className="tbl-anim-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          {visualState.kind === 'exchange' && (
-            <ExchangeSceneBoard
-              game={game}
-              phase={visualState.phase}
-              scene={visualState.scene}
-            />
-          )}
-          {visualState.kind === 'card' && <FaceUpCard scene={visualState.scene} />}
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <>
+      <AnimatePresence initial={false}>
+        {visualState && (
+          <motion.div
+            key={visualState.key}
+            className="tbl-anim-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            {visualState.kind === 'exchange' && (
+              <ExchangeSceneBoard
+                game={game}
+                phase={visualState.phase}
+                scene={visualState.scene}
+              />
+            )}
+            {visualState.kind === 'card' && (
+              <FaceUpCard scene={visualState.scene} onZoom={() => setZoomedCardDefId(visualState.scene.cardDefId)} />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {zoomedCardDefId && (
+          <CardZoomModal defId={zoomedCardDefId} onClose={() => setZoomedCardDefId(null)} />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
