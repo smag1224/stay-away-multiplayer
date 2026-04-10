@@ -94,6 +94,39 @@ function PlayerHandInner({
 
   const isSuspicionTarget = pending?.type === 'suspicion_pick' && pending.targetPlayerId === me.id;
 
+  // Local display order — randomises position of newly received cards.
+  // Resets to server order when this player is a suspicion target.
+  const [localOrder, setLocalOrder] = useState<string[]>(() => {
+    const uids = me.hand.map(c => c.uid);
+    for (let i = uids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [uids[i], uids[j]] = [uids[j], uids[i]];
+    }
+    return uids;
+  });
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handSig = me.hand.map(c => c.uid).join('|');
+  useEffect(() => {
+    if (isSuspicionTarget) {
+      setLocalOrder(me.hand.map(c => c.uid));
+      return;
+    }
+    setLocalOrder(prev => {
+      const serverUids = me.hand.map(c => c.uid);
+      const kept = prev.filter(uid => serverUids.includes(uid));
+      const added = serverUids.filter(uid => !prev.includes(uid));
+      // Insert each new card at a random position
+      const result = [...kept];
+      for (const uid of added) {
+        const pos = Math.floor(Math.random() * (result.length + 1));
+        result.splice(pos, 0, uid);
+      }
+      return result;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handSig, isSuspicionTarget]);
+
   const handScrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollHint, setScrollHint] = useState({
     canScroll: false,
@@ -121,9 +154,15 @@ function PlayerHandInner({
 
   const extraCards: ExtraHandEntry[] = [];
 
+  const sortedHand = [...me.hand].sort((a, b) => {
+    const ai = localOrder.indexOf(a.uid);
+    const bi = localOrder.indexOf(b.uid);
+    return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+  });
+
   const allCards: Array<ExtraHandEntry | PlayerHandEntry> = [
     ...extraCards,
-    ...me.hand.map((card): PlayerHandEntry => ({ card, isExtra: false })),
+    ...sortedHand.map((card): PlayerHandEntry => ({ card, isExtra: false })),
   ];
   const totalCards = allCards.length;
 
