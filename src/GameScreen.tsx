@@ -170,6 +170,13 @@ export function GameScreen({
   });
   const lastReshuffleCountRef = useRef(game.reshuffleCount);
   const prevLogLenRef = useRef(game.log.length);
+  // Attention banner
+  const [notif, setNotif] = useState<{ id: number; msg: string } | null>(null);
+  const notifKeyRef = useRef(0);
+  const notifTimerRef = useRef<number | null>(null);
+  const prevNotifTurnRef = useRef(false);
+  const prevNotifTradeRef = useRef(false);
+  const prevNotifPanicRef = useRef<string | null>(null);
   // Refs for sound effect triggers
   const prevLogLenSfx = useRef(game.log.length);
   const prevDeckLenSfx = useRef(game.deck.length);
@@ -330,6 +337,32 @@ export function GameScreen({
   }, [me.isAlive, game.phase]);
 
   const isSpectator = isWatcher || (!me.isAlive && game.phase === 'playing' && spectatorChoice === 'accepted');
+
+  // Attention banner: fires when turn starts, trade response needed, or panic requires action
+  useEffect(() => {
+    const show = (msg: string) => {
+      if (notifTimerRef.current) window.clearTimeout(notifTimerRef.current);
+      const id = ++notifKeyRef.current;
+      setNotif({ id, msg });
+      notifTimerRef.current = window.setTimeout(() => setNotif(null), 3500);
+    };
+
+    const prevTurn = prevNotifTurnRef.current;
+    const prevTrade = prevNotifTradeRef.current;
+    const prevPanic = prevNotifPanicRef.current;
+    prevNotifTurnRef.current = myTurnSafe;
+    prevNotifTradeRef.current = urgentTradePrompt;
+    prevNotifPanicRef.current = game.panicAnnouncement ?? null;
+
+    if (!prevTurn && myTurnSafe) {
+      show(lang === 'ru' ? 'ВАШ ХОД' : 'YOUR TURN');
+    } else if (!prevTrade && urgentTradePrompt) {
+      show(lang === 'ru' ? 'ОТВЕТЬТЕ НА ОБМЕН' : 'RESPOND TO TRADE');
+    } else if (game.panicAnnouncement && game.panicAnnouncement !== prevPanic && (viewerNeedsResponse || myTurnSafe)) {
+      show(lang === 'ru' ? 'НУЖНО ВАШЕ ДЕЙСТВИЕ' : 'ACTION REQUIRED');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTurnSafe, urgentTradePrompt, game.panicAnnouncement, viewerNeedsResponse]);
 
   // Detect newly played targeted cards and trigger animation.
   // Works two ways: (1) if server provides fromPlayerId/targetPlayerId on the log
@@ -1010,6 +1043,20 @@ export function GameScreen({
             )}
           </AnimatePresence>
         </div>
+      <AnimatePresence>
+        {notif && (
+          <motion.div
+            key={notif.id}
+            className="attention-banner"
+            initial={{ opacity: 0, scale: 0.75, y: '-40%' }}
+            animate={{ opacity: 1, scale: 1, y: '-50%' }}
+            exit={{ opacity: 0, scale: 0.75, y: '-40%' }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+          >
+            {notif.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
       </main>
       </MotionConfig>
     </ShowCardTextCtx.Provider>

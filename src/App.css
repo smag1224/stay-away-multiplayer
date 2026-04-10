@@ -1055,6 +1055,28 @@ img {
   letter-spacing: 0;
 }
 
+.attention-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 300;
+  background: rgba(6, 8, 10, 0.88);
+  color: #c8a96e;
+  font-family: var(--font-display, serif);
+  font-size: clamp(1.3rem, 5vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.9rem 2.4rem;
+  border-radius: 10px;
+  border: 1px solid rgba(200, 169, 110, 0.45);
+  box-shadow: 0 0 48px rgba(0, 0, 0, 0.7), inset 0 0 18px rgba(200, 169, 110, 0.06);
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .deck-phase-alert {
   position: absolute;
   top: 86px;
