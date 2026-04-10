@@ -30,9 +30,10 @@ function fanStyle(i: number, total: number) {
 }
 
 const cardVariants = {
-  initial: { opacity: 0, y: 40, scale: 0.8, rotate: 0 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -30, scale: 0.8 },
+  initial:   { opacity: 0, y: 40, scale: 0.8, rotate: 0 },
+  animate:   { opacity: 1, y: 0, scale: 1 },
+  dragging:  { opacity: 1, y: -28, scale: 1.1, rotate: 0, zIndex: 100 },
+  exit:      { opacity: 0, y: -30, scale: 0.8 },
 };
 
 type ExtraHandEntry = {
@@ -102,12 +103,10 @@ function PlayerHandInner({
   const isSuspicionTarget = pending?.type === 'suspicion_pick' && pending.targetPlayerId === me.id;
   const [localOrder, setLocalOrder] = useState<string[]>(() => me.hand.map(c => c.uid));
 
-  // Sync when hand changes (trade, discard, receive new card)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handSig = me.hand.map(c => c.uid).join('|');
   useEffect(() => {
     if (isSuspicionTarget) {
-      // Lock to server order during suspicion so cards can't be hidden
       setLocalOrder(me.hand.map(c => c.uid));
     } else {
       setLocalOrder(prev => syncLocalOrder(prev, me.hand.map(c => c.uid)));
@@ -125,6 +124,65 @@ function PlayerHandInner({
       return arr;
     });
   };
+
+  // ── Drag-to-reorder ─────────────────────────────────────────────────────────
+  const [draggingUid, setDraggingUid] = useState<string | null>(null);
+  const drag = useRef<{
+    uid: string;
+    startX: number;
+    startY: number;
+    lastSwapX: number;
+    active: boolean;   // true once "lift" gesture confirmed
+  } | null>(null);
+
+  const LIFT_PX = 18;     // upward movement to activate drag
+  const CANCEL_PX = 10;   // horizontal movement that cancels (user is scrolling)
+  const SWAP_PX = 44;     // horizontal distance to trigger a swap
+
+  const onCardPointerDown = (uid: string, e: React.PointerEvent) => {
+    if (isSuspicionTarget || pending) return;
+    drag.current = { uid, startX: e.clientX, startY: e.clientY, lastSwapX: e.clientX, active: false };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onCardPointerMove = (uid: string, e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || d.uid !== uid) return;
+
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;   // negative = upward
+
+    if (!d.active) {
+      // Cancel if horizontal scroll intent detected before lift
+      if (Math.abs(dx) > CANCEL_PX) { drag.current = null; return; }
+      // Activate when card lifted upward enough
+      if (dy < -LIFT_PX) {
+        d.active = true;
+        setDraggingUid(uid);
+      }
+      return;
+    }
+
+    // Active drag: swap on threshold horizontal movement
+    e.preventDefault();
+    const swapDelta = e.clientX - d.lastSwapX;
+    if (swapDelta > SWAP_PX) {
+      moveCard(uid, 1);
+      d.lastSwapX = e.clientX;
+    } else if (swapDelta < -SWAP_PX) {
+      moveCard(uid, -1);
+      d.lastSwapX = e.clientX;
+    }
+  };
+
+  const onCardPointerUp = (uid: string): boolean => {
+    const wasDragging = drag.current?.active === true && drag.current.uid === uid;
+    drag.current = null;
+    if (wasDragging) setDraggingUid(null);
+    return wasDragging; // true → skip click handler
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   const handScrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollHint, setScrollHint] = useState({
     canScroll: false,
@@ -329,18 +387,21 @@ function PlayerHandInner({
           }
         }
 
-        const localIdx = localOrder.indexOf(card.uid);
-        const canMoveLeft = !isSuspicionTarget && isSelected && buttons.length === 0 && localIdx > 0;
-        const canMoveRight = !isSuspicionTarget && isSelected && buttons.length === 0 && localIdx < localOrder.length - 1;
-        const showMoveButtons = canMoveLeft || canMoveRight;
+        const isDragging = draggingUid === card.uid;
 
         return (
-          <motion.div className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''} ${card.defId === 'suspicion' ? 'is-suspicion-card' : ''}`} key={card.uid}
-            style={style}
-            variants={cardVariants} initial="initial" animate="animate" exit="exit"
+          <motion.div
+            className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''} ${card.defId === 'suspicion' ? 'is-suspicion-card' : ''} ${isDragging ? 'is-dragging' : ''}`}
+            key={card.uid}
+            style={{ ...style, touchAction: isDragging ? 'none' : undefined }}
+            variants={cardVariants} initial="initial" animate={isDragging ? 'dragging' : 'animate'} exit="exit"
             transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-            whileHover={{ y: -20, scale: 1.08, zIndex: 50, rotate: 0 }}
-            onClick={() => handleCardClick(card.uid)}>
+            whileHover={isDragging ? undefined : { y: -20, scale: 1.08, zIndex: 50, rotate: 0 }}
+            onPointerDown={(e) => onCardPointerDown(card.uid, e)}
+            onPointerMove={(e) => onCardPointerMove(card.uid, e)}
+            onPointerUp={() => { if (!onCardPointerUp(card.uid)) handleCardClick(card.uid); }}
+            onPointerCancel={() => { onCardPointerUp(card.uid); }}
+          >
             <CardView card={card} faceUp />
             {buttons.length > 0 && (
               <div className={`hand-card-actions ${buttons.length === 1 ? 'single-action' : ''}`}>
@@ -351,20 +412,6 @@ function PlayerHandInner({
                     {b.label}
                   </button>
                 ))}
-              </div>
-            )}
-            {showMoveButtons && (
-              <div className="hand-card-actions single-action" style={{ gap: '4px' }}>
-                <button className="btn small secondary" disabled={!canMoveLeft} key="left"
-                  onClick={(e) => { e.stopPropagation(); moveCard(card.uid, -1); }}
-                  type="button" style={{ flex: 1, padding: '4px 2px', fontSize: '1rem' }}>
-                  ←
-                </button>
-                <button className="btn small secondary" disabled={!canMoveRight} key="right"
-                  onClick={(e) => { e.stopPropagation(); moveCard(card.uid, 1); }}
-                  type="button" style={{ flex: 1, padding: '4px 2px', fontSize: '1rem' }}>
-                  →
-                </button>
               </div>
             )}
           </motion.div>
