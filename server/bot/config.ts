@@ -78,7 +78,7 @@ export const HUMAN_WEIGHTS = {
   playYouBetterRun: 3,
   playWatchYourBack: 2,
   playWhisky: 2.5,
-  playPersistence: 6.5,
+  playPersistence: 9,
   playTemptation: 4.5,
   playLovecraft: 9,
   playNecronomicon: 11,

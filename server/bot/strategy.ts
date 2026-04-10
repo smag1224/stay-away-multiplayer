@@ -238,7 +238,9 @@ function buildStrategyProfile(vs: BotVisibleState, memory: BotMemory): StrategyP
       knownThingId = player.id;
     }
 
-    if (enemyScore > bestAttack) {
+    // Infected must never attack the Thing — it's their ally
+    const isKnownThing = obs?.knownRole === 'thing' || player.canReceiveInfectedCardFromMe;
+    if (enemyScore > bestAttack && !isKnownThing) {
       bestAttack = enemyScore;
       attackTargetId = player.id;
       containTargetId = player.id;
@@ -412,6 +414,7 @@ function strategicCardBonus(
       if (defId === 'infected') return 24;
       if (ATTACK_CARD_IDS.has(defId) && strategy.attackTargetId !== null) return -11;
       if (INSPECT_CARD_IDS.has(defId) && strategy.inspectTargetId !== null) return -9;
+      if (defId === 'persistence') return -8; // Persistence is too valuable to discard
       if ((defId === 'no_barbecue' || defId === 'fear' || defId === 'anti_analysis') && strategy.protectTargetId !== null) return -6;
     }
 

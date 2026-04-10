@@ -972,10 +972,12 @@ function scorePlayCard(
       const endgameThreshold = vs.players.length >= 8 ? 5 : 4;
 
       // Infected endgame: burn humans — covers the last human(s) alive
+      // Must exclude the Thing (ally!) from the "human" search
       if (vs.myRole === 'infected' && vs.aliveCount <= endgameThreshold) {
         const lastHuman = targets.find(t => {
           const obs = memory.observations.get(t);
-          return !obs?.confirmedInfected;
+          const playerInfo = vs.players.find(p => p.id === t);
+          return !obs?.confirmedInfected && obs?.knownRole !== 'thing' && !playerInfo?.canReceiveInfectedCardFromMe;
         });
         if (lastHuman !== undefined) return 18; // Win condition
       }
@@ -984,7 +986,8 @@ function scorePlayCard(
       if (vs.myRole === 'infected' && !isEarly && vs.aliveCount <= 6) {
         const humanTarget = targets.find(t => {
           const obs = memory.observations.get(t);
-          return !obs?.confirmedInfected;
+          const playerInfo = vs.players.find(p => p.id === t);
+          return !obs?.confirmedInfected && obs?.knownRole !== 'thing' && !playerInfo?.canReceiveInfectedCardFromMe;
         });
         if (humanTarget !== undefined) return (w as any).playFlamethrower * (isLate ? 1.5 : 1.1);
       }
@@ -1247,13 +1250,30 @@ function scorePlayCard(
 
     case 'persistence': {
       let score = (w as any).playPersistence;
-      // Thing/Infected: use persistence to dig for axe/swap when door-blocked
+
+      if (vs.myRole === 'human') {
+        // Persistence is a card-selection engine — great for finding flamethrower/analysis.
+        // Boost when the hand has no attack/inspect cards so we're actively looking.
+        const hasAttack = vs.myHand.some(c => ['flamethrower', 'analysis', 'suspicion', 'necronomicon'].includes(c.defId));
+        if (!hasAttack) score += 5;
+        // Boost when a confirmed enemy is alive and we need a weapon
+        const confirmedEnemyAlive = vs.alivePlayers.some(p => {
+          if (p.id === vs.myId) return false;
+          return memory.observations.get(p.id)?.confirmedInfected;
+        });
+        if (confirmedEnemyAlive) score += 4;
+      }
+
+      // Thing/Infected: use persistence to dig for axe/swap when door-blocked or to find infection tools
       if (vs.myRole === 'thing' || vs.myRole === 'infected') {
-        const doorBlocked = vs.aliveCount <= 5 && vs.doors.some(d =>
+        const doorBlocked = vs.doors.some(d =>
           d.between[0] === vs.me.position || d.between[1] === vs.me.position
         );
-        if (doorBlocked) score *= 2.5; // Dig for axe/swap!
+        if (doorBlocked) score *= 2.5;
+        // Early Thing: persistence helps find temptation/movement to infect faster
+        else if (vs.myRole === 'thing' && !isLate) score += 3;
       }
+
       return score;
     }
 
