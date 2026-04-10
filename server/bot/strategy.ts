@@ -130,7 +130,25 @@ function scoreInfectTargetForThing(vs: BotVisibleState, memory: BotMemory, playe
   // Bonus for players adjacent to us (easier to target in trade)
   const isAdjacent = vs.myAdjacentIds.includes(playerId) ? 0.4 : 0;
 
-  return seenSafeSignals + strongHandValue - exposedPenalty + flameBonus + isAdjacent;
+  // Chain infection bonus: prefer targets who sit next to uninfected humans.
+  // Infecting them converts a node with high human connectivity — their neighbors
+  // become reachable to the new infected agent on subsequent turns.
+  const humanNeighborCount = vs.alivePlayers.filter(p => {
+    if (p.id === playerId || p.id === vs.myId) return false;
+    const pObs = memory.observations.get(p.id);
+    if (pObs?.confirmedInfected || pObs?.knownRole === 'thing') return false;
+    // Count players who are position-adjacent to the potential infection target
+    const alivePositions = vs.alivePlayers.map(a => a.position).sort((a, b) => a - b);
+    const targetPos = vs.alivePlayers.find(a => a.id === playerId)?.position ?? -1;
+    const targetIdx = alivePositions.indexOf(targetPos);
+    if (targetIdx === -1) return false;
+    const prevPos = alivePositions[(targetIdx - 1 + alivePositions.length) % alivePositions.length];
+    const nextPos = alivePositions[(targetIdx + 1) % alivePositions.length];
+    return p.position === prevPos || p.position === nextPos;
+  }).length;
+  const chainBonus = humanNeighborCount * 0.35;
+
+  return seenSafeSignals + strongHandValue - exposedPenalty + flameBonus + isAdjacent + chainBonus;
 }
 
 function scoreHumanThreatForThing(vs: BotVisibleState, memory: BotMemory, playerId: number): number {

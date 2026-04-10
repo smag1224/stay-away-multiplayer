@@ -554,11 +554,16 @@ function scoreTradeCardForPartner(
     }
   }
 
+  // Thing: life-critical defense cards must never leave Thing's hand.
+  // no_barbecue is the only counter to flamethrower — losing it = death.
+  if (vs.myRole === 'thing') {
+    if (card.defId === 'no_barbecue') return 0.01;
+    if (card.defId === 'anti_analysis') return 0.01;
+  }
+
   // Thing: pass utility cards to known infected allies to strengthen them.
   // Early returns bypass the bottom ×0.3 and ×0.25 multipliers.
   if (vs.myRole === 'thing' && partnerObs?.confirmedInfected) {
-    if (card.defId === 'no_barbecue') return 14;   // Protect infected ally from flamethrower
-    if (card.defId === 'anti_analysis') return 9;  // Protect against analysis
     if (['axe', 'swap_places'].includes(card.defId) && vs.aliveCount <= 5) return 10;
   }
 
@@ -1070,9 +1075,12 @@ function scorePlayCard(
         return (w as any).playQuarantine * 0.4;
       }
       // Thing/Infected: prioritize quarantining humans who likely have flamethrower or analysis
+      // Must also exclude the Thing itself (an infected bot's most important ally)
       const dangerousHuman = targets.find(t => {
         const obs = memory.observations.get(t);
-        if (obs?.confirmedInfected) return false; // Don't quarantine allies
+        const playerInfo = vs.players.find(p => p.id === t);
+        if (obs?.confirmedInfected) return false; // Don't quarantine infected allies
+        if (obs?.knownRole === 'thing' || playerInfo?.canReceiveInfectedCardFromMe) return false; // Don't quarantine the Thing
         return playerLikelyHasCard(memory, t, 'flamethrower') ||
                playerLikelyHasCard(memory, t, 'analysis');
       });
