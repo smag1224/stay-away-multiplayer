@@ -7,6 +7,12 @@ import type { ViewerGameState, ViewerPlayerState } from '../../multiplayer.ts';
 import type { CardInstance, GameAction, PendingAction } from '../../types.ts';
 import { CardView } from './CardView.tsx';
 
+function syncLocalOrder(prev: string[], serverUids: string[]): string[] {
+  const kept = prev.filter(uid => serverUids.includes(uid));
+  const added = serverUids.filter(uid => !prev.includes(uid));
+  return [...kept, ...added];
+}
+
 /** Compute fan rotation & vertical offset for card at index i out of total */
 function fanStyle(i: number, total: number) {
   if (total <= 1) return {};
@@ -91,6 +97,34 @@ function PlayerHandInner({
   const pending = game.pendingAction;
   const isMyTurn = (getCurrentPlayer(game)?.id ?? -1) === me.id;
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
+
+  // Local card order — purely visual, resets when suspicion targets this player
+  const isSuspicionTarget = pending?.type === 'suspicion_pick' && pending.targetPlayerId === me.id;
+  const [localOrder, setLocalOrder] = useState<string[]>(() => me.hand.map(c => c.uid));
+
+  // Sync when hand changes (trade, discard, receive new card)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handSig = me.hand.map(c => c.uid).join('|');
+  useEffect(() => {
+    if (isSuspicionTarget) {
+      // Lock to server order during suspicion so cards can't be hidden
+      setLocalOrder(me.hand.map(c => c.uid));
+    } else {
+      setLocalOrder(prev => syncLocalOrder(prev, me.hand.map(c => c.uid)));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handSig, isSuspicionTarget]);
+
+  const moveCard = (uid: string, dir: -1 | 1) => {
+    setLocalOrder(prev => {
+      const idx = prev.indexOf(uid);
+      const next = idx + dir;
+      if (next < 0 || next >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[next]] = [arr[next], arr[idx]];
+      return arr;
+    });
+  };
   const handScrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollHint, setScrollHint] = useState({
     canScroll: false,
@@ -118,9 +152,16 @@ function PlayerHandInner({
 
   const extraCards: ExtraHandEntry[] = [];
 
+  const sortedHand = [...me.hand].sort((a, b) => {
+    const ai = localOrder.indexOf(a.uid);
+    const bi = localOrder.indexOf(b.uid);
+    // Unknown UIDs go to end
+    return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+  });
+
   const allCards: Array<ExtraHandEntry | PlayerHandEntry> = [
     ...extraCards,
-    ...me.hand.map((card): PlayerHandEntry => ({ card, isExtra: false })),
+    ...sortedHand.map((card): PlayerHandEntry => ({ card, isExtra: false })),
   ];
   const totalCards = allCards.length;
 
@@ -288,6 +329,11 @@ function PlayerHandInner({
           }
         }
 
+        const localIdx = localOrder.indexOf(card.uid);
+        const canMoveLeft = !isSuspicionTarget && isSelected && buttons.length === 0 && localIdx > 0;
+        const canMoveRight = !isSuspicionTarget && isSelected && buttons.length === 0 && localIdx < localOrder.length - 1;
+        const showMoveButtons = canMoveLeft || canMoveRight;
+
         return (
           <motion.div className={`hand-card fan-card ${isSelected ? 'selected' : ''} ${isSuspicionPreview ? 'is-suspicion-preview' : ''} ${card.defId === 'suspicion' ? 'is-suspicion-card' : ''}`} key={card.uid}
             style={style}
@@ -305,6 +351,20 @@ function PlayerHandInner({
                     {b.label}
                   </button>
                 ))}
+              </div>
+            )}
+            {showMoveButtons && (
+              <div className="hand-card-actions single-action" style={{ gap: '4px' }}>
+                <button className="btn small secondary" disabled={!canMoveLeft} key="left"
+                  onClick={(e) => { e.stopPropagation(); moveCard(card.uid, -1); }}
+                  type="button" style={{ flex: 1, padding: '4px 2px', fontSize: '1rem' }}>
+                  ←
+                </button>
+                <button className="btn small secondary" disabled={!canMoveRight} key="right"
+                  onClick={(e) => { e.stopPropagation(); moveCard(card.uid, 1); }}
+                  type="button" style={{ flex: 1, padding: '4px 2px', fontSize: '1rem' }}>
+                  →
+                </button>
               </div>
             )}
           </motion.div>
