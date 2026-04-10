@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { TableAnimEvent, ViewerGameState } from '../../multiplayer.ts';
@@ -303,6 +303,7 @@ function FaceUpCard({ scene, onZoom }: { scene: CardScene; onZoom: () => void })
 
 function CardZoomModal({ defId, onClose }: { defId: string; onClose: () => void }) {
   const fakeCard: CardInstance = { uid: `zoom-${defId}`, defId };
+  const showText = useContext(ShowCardTextCtx);
   return (
     <motion.div
       className="card-zoom-backdrop"
@@ -320,7 +321,7 @@ function CardZoomModal({ defId, onClose }: { defId: string; onClose: () => void 
         transition={SPRING}
         onClick={(e) => e.stopPropagation()}
       >
-        <ShowCardTextCtx.Provider value={true}>
+        <ShowCardTextCtx.Provider value={showText}>
           <CardView card={fakeCard} faceUp={true} />
         </ShowCardTextCtx.Provider>
       </motion.div>
