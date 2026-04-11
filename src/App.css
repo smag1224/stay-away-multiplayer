@@ -1055,6 +1055,23 @@ img {
   letter-spacing: 0;
 }
 
+.ws-reconnect-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
+  background: rgba(20, 10, 4, 0.92);
+  color: #f0a050;
+  font-family: var(--font-display, serif);
+  font-size: clamp(0.8rem, 3vw, 1rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255, 140, 40, 0.4);
+}
+
 .attention-banner {
   position: fixed;
   top: 50%;

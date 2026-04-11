@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,9 +13,12 @@ import quarantineOverlay from '../../assets/quarantine_overlay.webp';
 import thingOverlay from '../../assets/thing_overlay.webp';
 import infectedOverlay from '../../assets/infected_overlay.webp';
 import { CardView } from './CardView.tsx';
-import { TableAnimationBoundary } from './TableAnimationBoundary.tsx';
 import { TableDecks } from './TableDecks.tsx';
 import { speakShout } from '../../sounds/shoutVoice.ts';
+
+const TableAnimationBoundary = lazy(() =>
+  import('./TableAnimationBoundary.tsx').then((m) => ({ default: m.TableAnimationBoundary })),
+);
 
 const LOCKED_DOOR_MARKER_CARD = {
   uid: 'locked-door-marker',
@@ -475,7 +478,9 @@ export function PlayerCircle({
 
       <TableDecks game={game} orbitCenterX={orbitCenterX} orbitCenterY={orbitCenterY} />
 
-      <TableAnimationBoundary game={game} />
+      <Suspense fallback={null}>
+        <TableAnimationBoundary game={game} />
+      </Suspense>
       {animOverlay}
 
       {/* Shout menu — always portal into document.body to escape all transform ancestors.

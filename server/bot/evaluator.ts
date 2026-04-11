@@ -2059,6 +2059,20 @@ function evaluatePendingActions(vs: BotVisibleState, memory: BotMemory, pa: Pend
   }
 
   applyStrategicBias(actions, vs, memory, stage);
+
+  // Post-bias override: Thing never gives away key defense cards regardless of strategic bias
+  if (vs.myRole === 'thing') {
+    const thingDefenseBlock = new Set(['no_barbecue', 'anti_analysis']);
+    for (const a of actions) {
+      const act = a.action;
+      const isTradeResponse = act.type === 'RESPOND_TRADE' || act.type === 'TEMPTATION_RESPOND' || act.type === 'PANIC_TRADE_RESPOND';
+      if (isTradeResponse && 'cardUid' in act) {
+        const defId = vs.myHand.find(c => c.uid === act.cardUid)?.defId ?? '';
+        if (thingDefenseBlock.has(defId)) a.score = 0.01;
+      }
+    }
+  }
+
   for (const a of actions) {
     a.score += (Math.random() - 0.5) * NOISE_AMPLITUDE * 0.5;
   }

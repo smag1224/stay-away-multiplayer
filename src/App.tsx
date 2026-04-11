@@ -39,6 +39,7 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [gameMode, setGameMode] = useState<'standard' | 'thing_in_deck' | 'anomaly'>('standard');
   const [performanceMode, setPerformanceMode] = useState(() => readStoredPerformanceMode());
+  const [wsConnected, setWsConnected] = useState(true);
   const [authToken, setAuthToken] = useState<string | null>(() => readStoredAuthToken());
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -99,6 +100,7 @@ function App() {
   useEffect(() => {
     if (!session) {
       setRoom(null);
+      setWsConnected(true);
       lastKnownUpdatedAt.current = 0;
       return;
     }
@@ -185,6 +187,7 @@ function App() {
       nextSocket.onopen = () => {
         if (cancelled || socket !== nextSocket) return;
         reconnectAttempts = 0;
+        setWsConnected(true);
         stopPolling();
       };
 
@@ -212,6 +215,7 @@ function App() {
       nextSocket.onclose = () => {
         if (cancelled || socket !== nextSocket) return;
         socket = null;
+        setWsConnected(false);
         scheduleReconnect();
       };
     };
@@ -317,6 +321,11 @@ function App() {
 
   return (
     <div className={`app-shell${performanceMode ? ' perf-mode' : ''}`}>
+      {session && !wsConnected && (
+        <div className="ws-reconnect-banner" role="status" aria-live="polite">
+          {lang === 'ru' ? '⟳ Переподключение...' : '⟳ Reconnecting...'}
+        </div>
+      )}
       {showFloatingLangToggle && (
         <button className="lang-toggle" onClick={toggleLang} type="button">
           {lang === 'ru' ? 'EN' : 'RU'}

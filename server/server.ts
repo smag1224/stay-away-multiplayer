@@ -83,6 +83,33 @@ const KICKED_BY_HOST_ERROR = 'KICKED_BY_HOST';
 const KICKED_SESSION_TTL_MS = 1000 * 60 * 5;
 const botTurnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// ── Rate Limiting ────────────────────────────────────────────────────────────
+/** Max game actions per player per window */
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 10_000;
+/** sessionId → { count, windowStart } */
+const actionRateMap = new Map<string, { count: number; windowStart: number }>();
+
+function checkRateLimit(sessionId: string): boolean {
+  const now = Date.now();
+  const entry = actionRateMap.get(sessionId);
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    actionRateMap.set(sessionId, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count += 1;
+  return true;
+}
+
+// Periodically prune stale rate limit entries
+setInterval(() => {
+  const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS * 2;
+  for (const [id, entry] of actionRateMap) {
+    if (entry.windowStart < cutoff) actionRateMap.delete(id);
+  }
+}, 60_000);
+
 type RoomSocket = WebSocket & {
   roomCode?: string;
   sessionId?: string;
@@ -536,6 +563,53 @@ function startRoomGame(room: Room, thingInDeck?: boolean, chaosMode?: boolean): 
 const BOT_NAMES = ['Алекс 🤖', 'Макс 🤖', 'Кира 🤖', 'Рик 🤖', 'Зои 🤖', 'Нео 🤖', 'Ева 🤖', 'Дэн 🤖', 'Сэм 🤖', 'Лия 🤖', 'Кай 🤖'];
 
 /**
+ * Build a safe fallback action when the bot AI crashes or returns null.
+ * Prevents the game from hanging indefinitely on a bot exception.
+ */
+function buildBotFallbackAction(game: GameState, playerId: number): GameAction | null {
+  const pa = game.pendingAction;
+  const player = game.players.find(p => p.id === playerId);
+  if (!player) return null;
+
+  // Respond to specific pending actions first
+  if (pa) {
+    switch (pa.type) {
+      case 'trade_offer': {
+        // Must respond with a card from hand
+        const card = player.hand.find(c => c.defId !== 'the_thing' && c.defId !== 'infected') ?? player.hand[0];
+        if (card) return { type: 'OFFER_TRADE', cardUid: card.uid };
+        break;
+      }
+      case 'trade_defense':
+        return { type: 'DECLINE_DEFENSE' };
+      case 'temptation_response': {
+        const card = player.hand.find(c => c.defId !== 'the_thing' && c.defId !== 'infected') ?? player.hand[0];
+        if (card) return { type: 'TEMPTATION_RESPOND', cardUid: card.uid };
+        break;
+      }
+      case 'panic_trade_response': {
+        const card = player.hand.find(c => c.defId !== 'the_thing' && c.defId !== 'infected') ?? player.hand[0];
+        if (card) return { type: 'PANIC_TRADE_RESPOND', cardUid: card.uid };
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  // Default: draw if it's the draw step, otherwise discard the first non-thing card
+  if (game.step === 'draw') return { type: 'DRAW_CARD' };
+
+  const discardable = player.hand.find(c => c.defId !== 'the_thing' && c.defId !== 'infected');
+  if (discardable) return { type: 'DISCARD_CARD', cardUid: discardable.uid };
+
+  const anyCard = player.hand[0];
+  if (anyCard) return { type: 'DISCARD_CARD', cardUid: anyCard.uid };
+
+  return null;
+}
+
+/**
  * Schedule bot auto-play. Checks if any bot needs to act and dispatches actions
  * with small delays to feel natural. Chains multiple actions if needed.
  */
@@ -565,10 +639,17 @@ function scheduleBotTurn(room: Room): void {
     const activeBotMember = findBotThatNeedsToAct(room);
     if (!activeBotMember || activeBotMember.playerId === null) return;
 
-    const action = decideBotAction(room.game, activeBotMember.playerId, room.code);
+    let action: GameAction | null;
+    try {
+      action = decideBotAction(room.game, activeBotMember.playerId, room.code);
+    } catch (err) {
+      console.error(`[Bot ${activeBotMember.name}] decideBotAction threw:`, err);
+      action = buildBotFallbackAction(room.game, activeBotMember.playerId);
+    }
     if (!action) {
       console.warn(`[Bot ${activeBotMember.name}] No action decided, step=${room.game.step}, pa=${room.game.pendingAction?.type}`);
-      return;
+      action = buildBotFallbackAction(room.game, activeBotMember.playerId);
+      if (!action) return;
     }
 
     // Apply the action via the same path as human players
@@ -1307,6 +1388,11 @@ const server = createServer(async (req, res) => {
 
       if (!member) { sendSessionError(res, room.code, body.sessionId); return; }
       if (member.isSpectator) { badRequest(res, 'Spectators cannot perform game actions.'); return; }
+      if (!checkRateLimit(body.sessionId)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Too many actions. Please slow down.' }));
+        return;
+      }
 
       const error = applyRoomAction(room, member, body.action);
       if (error) {

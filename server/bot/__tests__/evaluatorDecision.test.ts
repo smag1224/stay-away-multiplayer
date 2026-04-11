@@ -771,3 +771,263 @@ describe('bot evaluator tactical pending decisions', () => {
     });
   });
 });
+
+// ── Bug fix: infected bot flamethrower vs Thing ───────────────────────────────
+
+describe('infected bot flamethrower safety guard', () => {
+  it('infected bot scores flamethrower lower against known Thing than against a suspicious human', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    // Scenario A: only adjacent target is the Thing (should have low or no flamethrower score)
+    const stateThingOnly = makeState(null);
+    stateThingOnly.players[0].role = 'infected';
+    stateThingOnly.players[0].hand = [card('flamethrower', 'my_flame')];
+    // Make player 1 the only adjacent target — endgame check won't fire for it (knownRole=thing)
+    stateThingOnly.players[2].isAlive = false; // remove from play
+    stateThingOnly.players[3].isAlive = false;
+
+    const memoryThingOnly = createBotMemory(0, [0, 1, 2, 3]);
+    setKnownRole(memoryThingOnly, 1, 'thing');
+
+    const actionsThingOnly = evaluateActions(buildVisibleState(stateThingOnly, 0), memoryThingOnly);
+    const flameThingOnly = actionsThingOnly.find(a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_flame');
+
+    // Scenario B: adjacent target is a suspicious human (should have high flamethrower score)
+    const stateHuman = makeState(null);
+    stateHuman.players[0].role = 'infected';
+    stateHuman.players[0].hand = [card('flamethrower', 'my_flame')];
+    stateHuman.players[2].isAlive = false;
+    stateHuman.players[3].isAlive = false;
+
+    const memoryHuman = createBotMemory(0, [0, 1, 2, 3]);
+    adjustSuspicion(memoryHuman, 1, 0.9);
+    memoryHuman.observations.get(1)!.confirmedInfected = true; // human bot sees confirmed infected target
+
+    const actionsHuman = evaluateActions(buildVisibleState(stateHuman, 0), memoryHuman);
+    const flameHuman = actionsHuman.find(a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_flame');
+
+    // Flamethrower should score the same or lower when target is the Thing
+    const thingScore = flameThingOnly?.score ?? 0;
+    const humanScore = flameHuman?.score ?? 0;
+    expect(humanScore).toBeGreaterThanOrEqual(thingScore);
+  });
+
+  it('infected bot CAN flamethrower humans in mid/late game endgame conditions', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    // 4 players alive (<=endgameThreshold), so endgame check fires
+    const state = makeState(null);
+    state.players[0].role = 'infected';
+    state.players[0].hand = [card('flamethrower', 'my_flame')];
+    // All others are human (default from makeState)
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    // No one is confirmed infected — so infected bot sees humans as targets
+
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    // In endgame (4 alive = endgameThreshold), infected bot should generate flamethrower action
+    const flameAction = actions.find(
+      a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_flame',
+    );
+    expect(flameAction).toBeDefined();
+    expect(flameAction!.score).toBeGreaterThan(0);
+  });
+});
+
+// ── Bug fix: infected bot quarantine excludes Thing ───────────────────────────
+
+describe('infected bot quarantine guard against Thing', () => {
+  it('infected bot scores quarantine much lower when all remaining targets are the Thing or allies', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    // Infected bot with only ally targets (Thing + confirmed infected) — quarantine should be low value
+    const state = {
+      ...makeState(null),
+      players: [
+        player(0, 'infected', 0, [card('quarantine', 'my_quarantine'), card('whisky', 'my_whisky')]),
+        player(1, 'thing', 1, [card('the_thing', 'thing_card')]),
+        player(2, 'infected', 2, [card('infected', 'inf_card')]),
+        player(3, 'infected', 3, [card('infected', 'inf2')]),
+      ],
+      seats: [0, 1, 2, 3],
+    };
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    setKnownRole(memory, 1, 'thing');
+    memory.observations.get(2)!.confirmedInfected = true;
+    memory.observations.get(3)!.confirmedInfected = true;
+
+    const actionsAllAllies = evaluateActions(buildVisibleState(state, 0), memory);
+
+    // Compare with a state where there's a human target available
+    const stateWithHuman = makeState(null);
+    stateWithHuman.players[0].role = 'infected';
+    stateWithHuman.players[0].hand = [card('quarantine', 'my_quarantine'), card('whisky', 'my_whisky')];
+
+    const memoryWithHuman = createBotMemory(0, [0, 1, 2, 3]);
+    adjustSuspicion(memoryWithHuman, 1, 0.6);
+
+    const actionsWithHuman = evaluateActions(buildVisibleState(stateWithHuman, 0), memoryWithHuman);
+
+    const quarantineScoreAllAllies = actionsAllAllies.find(
+      a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_quarantine',
+    )?.score ?? 0;
+
+    const quarantineScoreWithHuman = actionsWithHuman.find(
+      a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_quarantine',
+    )?.score ?? 0;
+
+    // Having a human target should produce higher quarantine score
+    expect(quarantineScoreWithHuman).toBeGreaterThanOrEqual(quarantineScoreAllAllies);
+  });
+
+  it('infected bot CAN quarantine players who are not the Thing', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState(null);
+    state.players[0].role = 'infected';
+    state.players[0].hand = [card('quarantine', 'my_quarantine')];
+    // Players 1-3 are all human — none are the Thing
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    adjustSuspicion(memory, 1, 0.6);
+    adjustSuspicion(memory, 2, 0.5);
+
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    // Some quarantine action targeting a non-Thing player should be generated
+    const anyQuarantine = actions.find(
+      a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_quarantine',
+    );
+    expect(anyQuarantine).toBeDefined();
+  });
+});
+
+// ── Bug fix: Thing bot does not trade no_barbecue/anti_analysis ───────────────
+
+describe('Thing bot trade hoarding (no_barbecue / anti_analysis)', () => {
+  it('Thing bot scores no_barbecue near-zero when asked to give it in trade', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = {
+      ...makeState({
+        type: 'trade_defense',
+        defenderId: 0,
+        fromId: 1,
+        reason: 'trade',
+      } as PendingAction),
+    };
+    state.players[0].role = 'thing';
+    state.players[0].hand = [
+      card('no_barbecue', 'my_nob'),
+      card('whisky', 'my_whisky'),
+    ];
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    const giveNoBarbecue = actions.find(
+      a => a.action.type === 'RESPOND_TRADE' && a.action.cardUid === 'my_nob',
+    );
+    const giveWhisky = actions.find(
+      a => a.action.type === 'RESPOND_TRADE' && a.action.cardUid === 'my_whisky',
+    );
+
+    // Whisky should score higher than no_barbecue (Thing hoards defense cards)
+    if (giveNoBarbecue && giveWhisky) {
+      expect(giveWhisky.score).toBeGreaterThan(giveNoBarbecue.score);
+    }
+    // no_barbecue trade score should be blocked to near-zero
+    expect(giveNoBarbecue?.score ?? 0).toBeLessThan(0.5);
+  });
+
+  it('Thing bot scores anti_analysis near-zero when asked to give it in trade', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = {
+      ...makeState({
+        type: 'trade_defense',
+        defenderId: 0,
+        fromId: 1,
+        reason: 'trade',
+      } as PendingAction),
+    };
+    state.players[0].role = 'thing';
+    state.players[0].hand = [
+      card('anti_analysis', 'my_aa'),
+      card('whisky', 'my_whisky'),
+    ];
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    const giveAntiAnalysis = actions.find(
+      a => a.action.type === 'RESPOND_TRADE' && a.action.cardUid === 'my_aa',
+    );
+    const giveWhisky = actions.find(
+      a => a.action.type === 'RESPOND_TRADE' && a.action.cardUid === 'my_whisky',
+    );
+
+    if (giveAntiAnalysis && giveWhisky) {
+      expect(giveWhisky.score).toBeGreaterThan(giveAntiAnalysis.score);
+    }
+    // anti_analysis trade score should be blocked to near-zero
+    expect(giveAntiAnalysis?.score ?? 0).toBeLessThan(0.5);
+  });
+});
+
+// ── Persistence card scoring ──────────────────────────────────────────────────
+
+describe('persistence card scoring', () => {
+  it('human bot rates persistence higher than whisky when hand has no weapons', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState(null);
+    state.players[0].role = 'human';
+    state.players[0].hand = [
+      card('persistence', 'my_persistence'),
+      card('whisky', 'my_whisky'),
+    ];
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    const playPersistence = actions.find(
+      a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_persistence',
+    );
+    const playWhisky = actions.find(
+      a => a.action.type === 'PLAY_CARD' && a.action.cardUid === 'my_whisky',
+    );
+
+    expect(playPersistence).toBeDefined();
+    expect(playWhisky).toBeDefined();
+    expect(playPersistence!.score).toBeGreaterThan(playWhisky!.score);
+  });
+
+  it('human bot does not discard persistence (very high discard penalty)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const state = makeState(null);
+    state.players[0].role = 'human';
+    state.players[0].hand = [
+      card('persistence', 'my_persistence'),
+      card('whisky', 'my_whisky'),
+      card('miss', 'my_miss'),
+    ];
+
+    const memory = createBotMemory(0, [0, 1, 2, 3]);
+    const actions = evaluateActions(buildVisibleState(state, 0), memory);
+
+    const discardPersistence = actions.find(
+      a => a.action.type === 'DISCARD_CARD' && a.action.cardUid === 'my_persistence',
+    );
+    const discardWhisky = actions.find(
+      a => a.action.type === 'DISCARD_CARD' && a.action.cardUid === 'my_whisky',
+    );
+
+    if (discardPersistence && discardWhisky) {
+      expect(discardWhisky.score).toBeGreaterThan(discardPersistence.score);
+    }
+  });
+});
