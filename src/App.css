@@ -1202,6 +1202,29 @@ img {
   border-color: rgba(220, 80, 80, 0.7);
 }
 
+/* On mobile the hand strip occupies the bottom — move voice chat to top-right */
+@media (max-width: 767px) {
+  .voice-join-btn {
+    bottom: auto;
+    top: calc(max(52px, env(safe-area-inset-top)) + 8px);
+    right: 10px;
+    padding: 5px 10px;
+    font-size: 0.78rem;
+  }
+
+  .voice-panel {
+    bottom: auto;
+    top: calc(max(52px, env(safe-area-inset-top)) + 8px);
+    right: 10px;
+    max-width: 180px;
+    padding: 8px 10px 6px;
+  }
+
+  .voice-name {
+    font-size: 0.76rem;
+  }
+}
+
 .attention-banner {
   position: fixed;
   top: 50%;
