@@ -1483,6 +1483,61 @@ const server = createServer(async (req, res) => {
   }
 });
 
+/** Relay a voice signaling message to a specific session's socket */
+function relayVoiceTo(room: Room, targetSessionId: string, payload: unknown): void {
+  const sockets = roomSockets.get(room.code);
+  if (!sockets) return;
+  const json = JSON.stringify(payload);
+  for (const s of sockets) {
+    if (s.sessionId === targetSessionId && s.readyState === WebSocket.OPEN) {
+      s.send(json);
+      break;
+    }
+  }
+}
+
+/** Broadcast a voice signaling message to all sockets in the room except the sender */
+function broadcastVoice(room: Room, payload: unknown, excludeSessionId: string): void {
+  const sockets = roomSockets.get(room.code);
+  if (!sockets) return;
+  const json = JSON.stringify(payload);
+  for (const s of sockets) {
+    if (s.sessionId !== excludeSessionId && s.readyState === WebSocket.OPEN) {
+      s.send(json);
+    }
+  }
+}
+
+/** Handle voice WebRTC signaling messages from a client */
+function handleVoiceMessage(
+  room: Room,
+  fromSessionId: string,
+  fromName: string,
+  msg: Record<string, unknown>,
+): void {
+  const type = msg.type as string;
+  switch (type) {
+    case 'voice:join':
+      broadcastVoice(room, { type: 'voice:join', from: fromSessionId, name: fromName }, fromSessionId);
+      break;
+    case 'voice:leave':
+      broadcastVoice(room, { type: 'voice:leave', from: fromSessionId }, fromSessionId);
+      break;
+    case 'voice:offer':
+    case 'voice:answer':
+    case 'voice:ice': {
+      const to = msg.to;
+      if (typeof to !== 'string') break;
+      const relay: Record<string, unknown> = { type, from: fromSessionId };
+      if (type === 'voice:offer') relay.offer = msg.offer;
+      else if (type === 'voice:answer') relay.answer = msg.answer;
+      else relay.candidate = msg.candidate;
+      relayVoiceTo(room, to, relay);
+      break;
+    }
+  }
+}
+
 wsServer.on('connection', (socket: RoomSocket, req: IncomingMessage) => {
   const requestUrl = new URL(req.url ?? '/', 'http://localhost');
   const pathname = requestUrl.pathname;
@@ -1524,8 +1579,16 @@ wsServer.on('connection', (socket: RoomSocket, req: IncomingMessage) => {
     socket.isAlive = true;
   });
 
-  socket.on('message', () => {
+  socket.on('message', (data) => {
     member.lastSeenAt = now();
+    try {
+      const msg = JSON.parse(String(data)) as Record<string, unknown>;
+      if (typeof msg.type === 'string' && msg.type.startsWith('voice:')) {
+        handleVoiceMessage(room, sessionId, member.name, msg);
+      }
+    } catch {
+      // Ignore malformed frames
+    }
   });
 
   socket.on('close', () => {

@@ -23,6 +23,8 @@ import {
   writeStoredSession,
 } from './appHelpers.ts';
 import type { Lang } from './appHelpers.ts';
+import { useVoiceChat } from './hooks/useVoiceChat.ts';
+import { VoiceChat } from './components/VoiceChat.tsx';
 import './App.css';
 
 const KICKED_BY_HOST_ERROR = 'KICKED_BY_HOST';
@@ -46,6 +48,13 @@ function App() {
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
   // Track latest known state timestamp to prevent stale network responses from overwriting fresh action responses
   const lastKnownUpdatedAt = useRef(0);
+
+  // Voice chat: send function ref (updated on each WS connect/disconnect)
+  const wsSendRef = useRef<((data: string) => void) | null>(null);
+  // Voice chat: signal handler ref (registered by useVoiceChat hook)
+  const voiceSignalRef = useRef<((msg: unknown) => void) | null>(null);
+  // Voice chat: always-current room members for name lookup
+  const voiceMembersRef = useRef<{ sessionId: string; name: string }[]>([]);
 
   // Verify stored auth token on mount
   useEffect(() => {
@@ -101,6 +110,7 @@ function App() {
     if (!session) {
       setRoom(null);
       setWsConnected(true);
+      wsSendRef.current = null;
       lastKnownUpdatedAt.current = 0;
       return;
     }
@@ -187,6 +197,7 @@ function App() {
       nextSocket.onopen = () => {
         if (cancelled || socket !== nextSocket) return;
         reconnectAttempts = 0;
+        wsSendRef.current = (data: string) => nextSocket.send(data);
         setWsConnected(true);
         stopPolling();
       };
@@ -194,13 +205,19 @@ function App() {
       nextSocket.onmessage = (event) => {
         if (cancelled || socket !== nextSocket) return;
         try {
-          const payload = JSON.parse(String(event.data)) as ApiResponse<RoomView>;
-          if (payload.ok) {
-            handleRoomData(payload.data);
+          const payload = JSON.parse(String(event.data)) as Record<string, unknown>;
+          // Route voice signaling messages to the voice hook
+          if (typeof payload.type === 'string' && payload.type.startsWith('voice:')) {
+            voiceSignalRef.current?.(payload);
+            return;
+          }
+          const roomPayload = payload as unknown as ApiResponse<RoomView>;
+          if (roomPayload.ok) {
+            handleRoomData(roomPayload.data);
             stopPolling();
             return;
           }
-          handleError(payload.error);
+          handleError(roomPayload.error);
         } catch {
           // Ignore malformed frames and let reconnect/polling recover if needed.
         }
@@ -215,6 +232,7 @@ function App() {
       nextSocket.onclose = () => {
         if (cancelled || socket !== nextSocket) return;
         socket = null;
+        wsSendRef.current = null;
         setWsConnected(false);
         scheduleReconnect();
       };
@@ -245,6 +263,18 @@ function App() {
     nextUrl.searchParams.set('room', room.code);
     window.history.replaceState({}, '', nextUrl);
   }, [room]);
+
+  // Keep voice members ref up to date for name lookup in the hook
+  useEffect(() => {
+    voiceMembersRef.current = room?.members ?? [];
+  }, [room?.members]);
+
+  const voice = useVoiceChat({
+    sessionId: session?.sessionId ?? null,
+    wsSendRef,
+    signalRef: voiceSignalRef,
+    membersRef: voiceMembersRef,
+  });
 
   const game = room?.game ?? null;
   const showFloatingLangToggle = !session || !room || !game;
@@ -325,6 +355,19 @@ function App() {
         <div className="ws-reconnect-banner" role="status" aria-live="polite">
           {lang === 'ru' ? '⟳ Переподключение...' : '⟳ Reconnecting...'}
         </div>
+      )}
+      {session && room && (
+        <VoiceChat
+          inVoice={voice.inVoice}
+          muted={voice.muted}
+          mySpeaking={voice.mySpeaking}
+          myName={room.me.name}
+          participants={voice.participants}
+          onJoin={() => { void voice.join(); }}
+          onLeave={voice.leave}
+          onToggleMute={voice.toggleMute}
+          lang={lang}
+        />
       )}
       {showFloatingLangToggle && (
         <button className="lang-toggle" onClick={toggleLang} type="button">
