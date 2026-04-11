@@ -361,8 +361,6 @@ function App() {
           inVoice={voice.inVoice}
           muted={voice.muted}
           mySpeaking={voice.mySpeaking}
-          myName={room.me.name}
-          participants={voice.participants}
           onJoin={() => { void voice.join(); }}
           onLeave={voice.leave}
           onToggleMute={voice.toggleMute}

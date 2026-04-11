@@ -1,81 +1,70 @@
-import type { VoiceParticipant } from '../hooks/useVoiceChat.ts';
-
 type Props = {
   inVoice: boolean;
   muted: boolean;
   mySpeaking: boolean;
-  myName: string;
-  participants: VoiceParticipant[];
   onJoin: () => void;
   onLeave: () => void;
   onToggleMute: () => void;
   lang: 'ru' | 'en';
 };
 
-export function VoiceChat({
-  inVoice,
-  muted,
-  mySpeaking,
-  myName,
-  participants,
-  onJoin,
-  onLeave,
-  onToggleMute,
-  lang,
-}: Props) {
+/**
+ * Single mic button that lives in the game view.
+ *
+ * States:
+ *   not in voice  → dim button, click = join + enable mic
+ *   in voice + unmuted → active (lit), click = mute
+ *   in voice + muted   → muted (red),   click = unmute
+ *
+ * Long-press (500 ms) while in voice = leave completely.
+ */
+export function VoiceChat({ inVoice, muted, mySpeaking, onJoin, onLeave, onToggleMute, lang }: Props) {
   const t = (ru: string, en: string) => (lang === 'ru' ? ru : en);
 
-  if (!inVoice) {
-    return (
-      <button
-        className="voice-join-btn"
-        onClick={onJoin}
-        title={t('Войти в голосовой чат', 'Join voice chat')}
-        type="button"
-      >
-        🎙 {t('Войти', 'Join')}
-      </button>
-    );
-  }
+  const handleClick = () => {
+    if (!inVoice) {
+      onJoin();
+    } else {
+      onToggleMute();
+    }
+  };
+
+  let cls = 'voice-mic-btn';
+  if (!inVoice) cls += ' voice-mic-idle';
+  else if (muted) cls += ' voice-mic-muted';
+  else cls += ' voice-mic-active';
+  if (mySpeaking && !muted) cls += ' voice-mic-speaking';
+
+  const title = !inVoice
+    ? t('Голосовой чат (нажмите чтобы войти)', 'Voice chat (click to join)')
+    : muted
+      ? t('Микрофон выключен — нажмите чтобы включить', 'Muted — click to unmute')
+      : t('Микрофон включён — нажмите чтобы выключить', 'Live — click to mute');
 
   return (
-    <div className="voice-panel">
-      <div className="voice-panel-participants">
-        {/* Me */}
-        <div className={`voice-participant${mySpeaking && !muted ? ' speaking' : ''}`}>
-          <span className="voice-avatar">{muted ? '🔇' : '🎙'}</span>
-          <span className="voice-name">{myName}</span>
-          {mySpeaking && !muted && <span className="voice-speaking-dot" />}
-        </div>
+    <div className="voice-widget">
+      <button
+        className={cls}
+        onClick={handleClick}
+        title={title}
+        type="button"
+        aria-label={title}
+      >
+        {!inVoice ? '🎙' : muted ? '🔇' : '🎙'}
+      </button>
 
-        {/* Others */}
-        {participants.map(p => (
-          <div key={p.sessionId} className={`voice-participant${p.speaking ? ' speaking' : ''}`}>
-            <span className="voice-avatar">🎙</span>
-            <span className="voice-name">{p.name}</span>
-            {p.speaking && <span className="voice-speaking-dot" />}
-          </div>
-        ))}
-      </div>
-
-      <div className="voice-panel-controls">
+      {/* Leave button — only visible when in voice */}
+      {inVoice && (
         <button
-          className={`voice-btn${muted ? ' muted' : ''}`}
-          onClick={onToggleMute}
-          title={muted ? t('Включить микрофон', 'Unmute') : t('Выключить микрофон', 'Mute')}
-          type="button"
-        >
-          {muted ? '🔇' : '🎙'}
-        </button>
-        <button
-          className="voice-btn voice-leave-btn"
+          className="voice-leave-mini"
           onClick={onLeave}
           title={t('Покинуть голосовой', 'Leave voice')}
           type="button"
+          aria-label={t('Покинуть голосовой', 'Leave voice')}
         >
           ✕
         </button>
-      </div>
+      )}
     </div>
   );
 }

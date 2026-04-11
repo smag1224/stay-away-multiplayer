@@ -1073,155 +1073,109 @@ img {
 }
 
 /* ── Voice Chat ─────────────────────────────────────────────────── */
-.voice-join-btn {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  z-index: 200;
-  background: rgba(20, 10, 4, 0.88);
-  color: #d4b483;
-  border: 1px solid rgba(180, 120, 50, 0.45);
-  border-radius: 8px;
-  padding: 7px 14px;
-  font-family: var(--font-display, serif);
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.voice-join-btn:hover {
-  background: rgba(40, 22, 6, 0.96);
-  border-color: rgba(220, 150, 60, 0.7);
-}
 
-.voice-panel {
+/* Widget wrapper — fixed in top-right on desktop, repositioned on mobile */
+.voice-widget {
   position: fixed;
-  bottom: 16px;
-  right: 16px;
+  top: 100px;
+  right: 18px;
   z-index: 200;
-  background: rgba(14, 8, 2, 0.92);
-  border: 1px solid rgba(160, 100, 30, 0.45);
-  border-radius: 10px;
-  padding: 10px 12px 8px;
-  min-width: 150px;
-  max-width: 220px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.voice-panel-participants {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.voice-participant {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 5px;
-  border-radius: 5px;
-  transition: background 0.15s;
-}
-.voice-participant.speaking {
-  background: rgba(80, 200, 80, 0.12);
+  gap: 4px;
 }
 
-.voice-avatar {
-  font-size: 0.9rem;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.voice-name {
-  color: #c8a87a;
-  font-family: var(--font-display, serif);
-  font-size: 0.82rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.voice-participant.speaking .voice-name {
-  color: #a0e0a0;
-}
-
-.voice-speaking-dot {
-  width: 7px;
-  height: 7px;
+/* Main mic button */
+.voice-mic-btn {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: #5dd85d;
-  flex-shrink: 0;
-  animation: voice-pulse 0.6s ease-in-out infinite alternate;
-}
-@keyframes voice-pulse {
-  from { opacity: 0.6; transform: scale(0.85); }
-  to   { opacity: 1;   transform: scale(1.15); }
-}
-
-.voice-panel-controls {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.voice-btn {
-  background: rgba(40, 20, 5, 0.8);
-  border: 1px solid rgba(160, 100, 30, 0.4);
-  border-radius: 6px;
-  color: #d4b483;
-  font-size: 1rem;
-  width: 34px;
-  height: 30px;
+  border: 2px solid rgba(160, 100, 30, 0.5);
+  background: rgba(14, 8, 2, 0.82);
+  color: #c8a060;
+  font-size: 1.15rem;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
   padding: 0;
   line-height: 1;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  backdrop-filter: blur(4px);
 }
-.voice-btn:hover {
-  background: rgba(70, 35, 8, 0.9);
-  border-color: rgba(220, 140, 50, 0.7);
+.voice-mic-btn:hover {
+  background: rgba(40, 22, 6, 0.92);
+  border-color: rgba(220, 140, 50, 0.75);
 }
-.voice-btn.muted {
+
+/* Idle — not in voice */
+.voice-mic-idle {
+  opacity: 0.55;
+  border-color: rgba(140, 90, 20, 0.35);
+}
+.voice-mic-idle:hover {
+  opacity: 0.85;
+}
+
+/* Active — in voice, mic on */
+.voice-mic-active {
+  border-color: rgba(80, 200, 80, 0.65);
+  box-shadow: 0 0 8px rgba(80, 200, 80, 0.25);
+}
+
+/* Speaking pulse */
+.voice-mic-speaking {
+  animation: voice-speaking-ring 0.55s ease-in-out infinite alternate;
+}
+@keyframes voice-speaking-ring {
+  from { box-shadow: 0 0 6px rgba(80, 200, 80, 0.3); }
+  to   { box-shadow: 0 0 16px rgba(80, 200, 80, 0.7); }
+}
+
+/* Muted — in voice, mic off */
+.voice-mic-muted {
+  border-color: rgba(220, 60, 60, 0.6);
   color: #e06060;
-  border-color: rgba(200, 60, 60, 0.5);
 }
-.voice-leave-btn {
-  color: #e06060;
-  border-color: rgba(200, 60, 60, 0.4);
-  font-size: 0.75rem;
+
+/* Small leave (✕) button — appears below mic when in voice */
+.voice-leave-mini {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 60, 60, 0.4);
+  background: rgba(14, 8, 2, 0.75);
+  color: #c05050;
+  font-size: 0.6rem;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+  opacity: 0.7;
 }
-.voice-leave-btn:hover {
-  background: rgba(80, 20, 20, 0.9);
+.voice-leave-mini:hover {
+  opacity: 1;
+  background: rgba(60, 15, 15, 0.9);
   border-color: rgba(220, 80, 80, 0.7);
 }
 
-/* On mobile the hand strip occupies the bottom — move voice chat to top-right */
+/* Mobile: move widget to sit just below the top-bar status line */
 @media (max-width: 767px) {
-  .voice-join-btn {
-    bottom: auto;
-    top: calc(max(52px, env(safe-area-inset-top)) + 8px);
+  .voice-widget {
+    /* Below the top bar (~52px) + the "СЕЙЧАС ХОДИТ / ФАЗА КОЛОДЫ" row (~44px) */
+    top: calc(max(52px, env(safe-area-inset-top)) + 52px);
     right: 10px;
-    padding: 5px 10px;
-    font-size: 0.78rem;
   }
 
-  .voice-panel {
-    bottom: auto;
-    top: calc(max(52px, env(safe-area-inset-top)) + 8px);
-    right: 10px;
-    max-width: 180px;
-    padding: 8px 10px 6px;
-  }
-
-  .voice-name {
-    font-size: 0.76rem;
+  .voice-mic-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
   }
 }
 
