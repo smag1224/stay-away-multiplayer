@@ -1,0 +1,2370 @@
+{
+  "generatedAt": "2026-04-03T23:56:06.805Z",
+  "options": {
+    "games": 50,
+    "players": [
+      4
+    ],
+    "maxActions": 4000,
+    "jsonOut": "reports/sim_4p.json",
+    "markdownOut": "reports/sim_4p.md",
+    "verbose": false
+  },
+  "summary": {
+    "totalGames": 50,
+    "totalSteps": 4388,
+    "averageSteps": 87.76,
+    "byWinner": {
+      "humans": {
+        "wins": 16,
+        "rate": 0.32
+      },
+      "thing": {
+        "wins": 31,
+        "rate": 0.62
+      },
+      "thing_solo": {
+        "wins": 3,
+        "rate": 0.06
+      }
+    },
+    "byPlayerCount": {
+      "4": {
+        "humans": 16,
+        "thing": 31,
+        "thing_solo": 3
+      }
+    },
+    "roleWinRates": {
+      "human": {
+        "wins": 27,
+        "total": 53,
+        "rate": 0.5094339622641509
+      },
+      "thing": {
+        "wins": 34,
+        "total": 50,
+        "rate": 0.68
+      },
+      "infected": {
+        "wins": 67,
+        "total": 97,
+        "rate": 0.6907216494845361
+      }
+    }
+  },
+  "results": [
+    {
+      "gameIndex": 0,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 90,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        3
+      ]
+    },
+    {
+      "gameIndex": 1,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 188,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "gameIndex": 2,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 75,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "gameIndex": 3,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 101,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        1,
+        2
+      ]
+    },
+    {
+      "gameIndex": 4,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 50,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 5,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 67,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1
+      ]
+    },
+    {
+      "gameIndex": 6,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 150,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        0
+      ]
+    },
+    {
+      "gameIndex": 7,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 99,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        1,
+        3
+      ]
+    },
+    {
+      "gameIndex": 8,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 162,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        0
+      ]
+    },
+    {
+      "gameIndex": 9,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 34,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 10,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 91,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "gameIndex": 11,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 93,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        1,
+        3
+      ]
+    },
+    {
+      "gameIndex": 12,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 102,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 13,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 7,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        2
+      ]
+    },
+    {
+      "gameIndex": 14,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 39,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        0,
+        1
+      ]
+    },
+    {
+      "gameIndex": 15,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 159,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2
+      ]
+    },
+    {
+      "gameIndex": 16,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 68,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        0,
+        3
+      ]
+    },
+    {
+      "gameIndex": 17,
+      "playerCount": 4,
+      "winner": "thing_solo",
+      "steps": 146,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        0
+      ]
+    },
+    {
+      "gameIndex": 18,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 69,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        3
+      ]
+    },
+    {
+      "gameIndex": 19,
+      "playerCount": 4,
+      "winner": "thing_solo",
+      "steps": 155,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1
+      ]
+    },
+    {
+      "gameIndex": 20,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 70,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        0
+      ]
+    },
+    {
+      "gameIndex": 21,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 53,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 22,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 62,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        1,
+        3
+      ]
+    },
+    {
+      "gameIndex": 23,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 103,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        1,
+        2
+      ]
+    },
+    {
+      "gameIndex": 24,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 114,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        3
+      ]
+    },
+    {
+      "gameIndex": 25,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 15,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 26,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 103,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        0,
+        1
+      ]
+    },
+    {
+      "gameIndex": 27,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 60,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        0,
+        3
+      ]
+    },
+    {
+      "gameIndex": 28,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 59,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        3
+      ]
+    },
+    {
+      "gameIndex": 29,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 45,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "gameIndex": 30,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 96,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        0,
+        3
+      ]
+    },
+    {
+      "gameIndex": 31,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 41,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        0,
+        2
+      ]
+    },
+    {
+      "gameIndex": 32,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 78,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        1,
+        3
+      ]
+    },
+    {
+      "gameIndex": 33,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 193,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        1
+      ]
+    },
+    {
+      "gameIndex": 34,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 16,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        0,
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 35,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 121,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        3
+      ]
+    },
+    {
+      "gameIndex": 36,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 90,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        0,
+        1
+      ]
+    },
+    {
+      "gameIndex": 37,
+      "playerCount": 4,
+      "winner": "thing_solo",
+      "steps": 70,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        0
+      ]
+    },
+    {
+      "gameIndex": 38,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 91,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 39,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 59,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        0,
+        1
+      ]
+    },
+    {
+      "gameIndex": 40,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 34,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "thing"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        3
+      ]
+    },
+    {
+      "gameIndex": 41,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 139,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 42,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 116,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 43,
+      "playerCount": 4,
+      "winner": "humans",
+      "steps": 47,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        0,
+        1
+      ]
+    },
+    {
+      "gameIndex": 44,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 163,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        0
+      ]
+    },
+    {
+      "gameIndex": 45,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 66,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        2
+      ]
+    },
+    {
+      "gameIndex": 46,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 85,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "thing"
+        }
+      ],
+      "winnerPlayerIds": [
+        3,
+        0,
+        1
+      ]
+    },
+    {
+      "gameIndex": 47,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 146,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        0
+      ]
+    },
+    {
+      "gameIndex": 48,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 30,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "human"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "thing"
+        },
+        {
+          "playerId": 2,
+          "role": "infected"
+        },
+        {
+          "playerId": 3,
+          "role": "infected"
+        }
+      ],
+      "winnerPlayerIds": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "gameIndex": 49,
+      "playerCount": 4,
+      "winner": "thing",
+      "steps": 78,
+      "initialRoles": [
+        {
+          "playerId": 0,
+          "role": "human"
+        },
+        {
+          "playerId": 1,
+          "role": "human"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "finalRoles": [
+        {
+          "playerId": 0,
+          "role": "infected"
+        },
+        {
+          "playerId": 1,
+          "role": "infected"
+        },
+        {
+          "playerId": 2,
+          "role": "thing"
+        },
+        {
+          "playerId": 3,
+          "role": "human"
+        }
+      ],
+      "winnerPlayerIds": [
+        2,
+        0,
+        1
+      ]
+    }
+  ]
+}
